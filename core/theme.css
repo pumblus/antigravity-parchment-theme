@@ -16,7 +16,7 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextRegular'), local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans');
+  src: local('AnthropicSansWebVariable-TextRegular'), local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular'), local('Anthropic Sans');
   font-weight: 300 599;
   font-style: normal;
   font-display: swap;
@@ -24,7 +24,24 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextSemibold'), local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web Display Light'), local('AnthropicSansWebVariable-TextRegular');
+  src: local('AnthropicSansWebVariable-TextSemibold'), local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold'), local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web Display Light'), local('AnthropicSansWebVariable-TextRegular');
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* PR #2 的静态 Display 别名；正文/UI 仍优先使用上游 Windows 可变 Web 字体。 */
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display'), local('Anthropic Sans Display Regular'), local('AnthropicSansDisplay-Regular');
+  font-weight: 300 599;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold');
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -50,9 +67,9 @@ body[data-agy-font],
 body[data-agy-font="google-sans"],
 body[data-agy-font="inter"],
 body[data-agy-font] :where(.font-sans) {
-  --vscode-font-family: 'Anthropic Sans', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
+  --vscode-font-family: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Display', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
   --editor-font-family: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
-  --font-sans: 'Anthropic Sans', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
+  --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Display', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
   --font-mono: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
   --default-font-family: var(--font-sans) !important;
   --default-mono-font-family: var(--font-mono) !important;
@@ -143,6 +160,64 @@ html[data-ag-custom-font-size="true"] :is([data-markdown-root], [data-testid="us
 /* 3. 代码、终端、diff 查看器、文件名、文件路径：Anthropic Mono + Sarasa Mono（移除 .tabular-nums 避免误劫持 UI 控件） */
 code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, pre *, [class*="group/file-title"], [class*="group/file-title"] *, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], :is([data-markdown-root], .select-text) :is(code, pre, kbd, samp, .font-mono) {
   font-family: var(--font-mono) !important;
+}
+
+/* 首页欢迎语独立使用 Display，不覆盖 Markdown 的 h1/h2。 */
+[data-testid="home-greeting"]:not(:where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+), :where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+) *) {
+  font-family: 'Anthropic Sans Display', var(--font-sans) !important;
+  letter-spacing: -0.015em;
+}
+
+/* 3.5 仅思考/工具的标题标签使用 Sans，不匹配整个 thought/thinking 容器。
+ * 标题自身或 span/b/strong 标签上的 .font-mono 可纠正；代码、路径、正文、公式与编辑区均保留。
+ * 新版本如变更 DOM，补充明确标题选择器，不使用 [class*="thought"] 或全局 .font-mono 覆盖。 */
+:is(
+  .thought-header, .thinking-header, .step-title, .step-header, .tool-call-header,
+  [data-testid="thought-header"], [data-testid="thinking-header"],
+  [data-testid="step-title"], [data-testid="step-header"], [data-testid="tool-call-header"]
+):not(:where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+), :where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+) *),
+:is(
+  .thought-header, .thinking-header, .step-title, .step-header, .tool-call-header,
+  [data-testid="thought-header"], [data-testid="thinking-header"],
+  [data-testid="step-title"], [data-testid="step-header"], [data-testid="tool-call-header"]
+) :is(span, b, strong):not(:where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+), :where(
+  code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
+  [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
+  [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article,
+  .katex, .MathJax, math, .codicon, .google-symbols,
+  [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
+) *) {
+  font-family: var(--font-sans) !important;
 }
 
 /* 4. 输入框编辑区与 Lexical 占位符：Codex 同款等距更纱黑体 SLAB (Sarasa Mono Slab SC) */

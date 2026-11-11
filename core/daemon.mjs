@@ -20,7 +20,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { execFile, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -140,7 +140,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261112-v5.1.5';
+const BASE_VERSION = '20261112-v5.1.5-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -991,98 +991,7 @@ function attachTarget(target, endpoint) {
 
 let isSyncing = false;
 let syncTickCount = 0;
-let lastZhPatchSig = '';
-let isZhPatchRunning = false;
-let cachedWorkingPython = undefined;
-let zhPatchFailedSig = '';
-let zhPatchFailCount = 0;
-
-function resolveWorkingPython3() {
-  if (cachedWorkingPython !== undefined) return cachedWorkingPython;
-  const candidates = [
-    '/opt/homebrew/bin/python3',
-    '/Library/Frameworks/Python.framework/Versions/Current/bin/python3',
-    '/usr/local/bin/python3',
-    'python3'
-  ];
-  for (const bin of candidates) {
-    if (bin.startsWith('/') && !fs.existsSync(bin)) continue;
-    try {
-      const res = spawnSync(bin, ['-c', 'import sys; sys.exit(0)'], {
-        timeout: 3000,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true
-      });
-      if (res.status === 0) {
-        cachedWorkingPython = bin;
-        return bin;
-      }
-    } catch {}
-  }
-  cachedWorkingPython = null;
-  return null;
-}
-
-function ensureZhTitlePatchIfPresent() {
-  if (SAFE_MODE || process.platform !== 'darwin' || isZhPatchRunning) return;
-  const scriptPath = path.join(os.homedir(), '.gemini/antigravity/scripts/antigravity-zh-title-patch.py');
-  if (!fs.existsSync(scriptPath)) return;
-  const disabledMarkerPath = path.join(os.homedir(), '.gemini/antigravity/scripts/backups/zh-title/DISABLED');
-  const lsBins = [
-    '/Applications/Antigravity.app/Contents/Resources/bin/language_server',
-    '/Applications/Antigravity - Insiders.app/Contents/Resources/bin/language_server'
-  ];
-  const computeZhSig = () => {
-    const scriptSig = getFileMtimeSig(scriptPath);
-    const disabledSig = getFileMtimeSig(disabledMarkerPath);
-    const binSig = lsBins
-      .map((p) => {
-        const st = fs.statSync(p, { throwIfNoEntry: false });
-        return st ? `${p}:${st.mtimeMs}:${st.size}` : '';
-      })
-      .join('|');
-    return binSig ? `script:${scriptSig}|disabled:${disabledSig}|${binSig}` : '';
-  };
-  const sig = computeZhSig();
-  if (!sig || sig === lastZhPatchSig) return;
-  if (sig === zhPatchFailedSig && zhPatchFailCount >= 3) return;
-
-  const pyBin = resolveWorkingPython3();
-  if (!pyBin) {
-    zhPatchFailedSig = sig;
-    zhPatchFailCount = 3;
-    console.error('[Daemon] No working python3 interpreter found (Xcode license or PATH issue); skipping zh-title auto-patch.');
-    return;
-  }
-
-  isZhPatchRunning = true;
-  const child = execFile(pyBin, [scriptPath, 'patch', '--auto'], { timeout: 25000 }, (err, stdout, stderr) => {
-    isZhPatchRunning = false;
-    if (err) {
-      if (zhPatchFailedSig !== sig) {
-        zhPatchFailedSig = sig;
-        zhPatchFailCount = 1;
-      } else {
-        zhPatchFailCount += 1;
-      }
-      console.error(
-        `[Daemon] zh-title auto-patch failed (${zhPatchFailCount}/3): ${err.message} ${String(stderr || '').trim()}`
-      );
-      return;
-    }
-    zhPatchFailedSig = '';
-    zhPatchFailCount = 0;
-    lastZhPatchSig = computeZhSig();
-    if (stdout && stdout.includes('中文标题补丁注入成功')) {
-      console.log('[Daemon] Auto-applied zh-title patch:', stdout.trim().split('\n')[0]);
-    } else if (stdout && stdout.includes('DISABLED')) {
-      console.log('[Daemon] zh-title auto-patch skipped (DISABLED marker present).');
-    }
-  });
-  try {
-    child.stdin?.end();
-  } catch {}
-}
+// This fork is runtime-only: never execute an unversioned external binary-patch script.
 
 const fallbackBackoffUntil = new Map();
 
@@ -1091,7 +1000,6 @@ async function sync() {
   isSyncing = true;
   syncTickCount = (syncTickCount + 1) % 6000;
   try {
-    if (syncTickCount % 12 === 1) ensureZhTitlePatchIfPresent();
     const bundleChanged = rebuildBundleIfNeeded();
     const shouldHeartbeatCheck = bundleChanged || syncTickCount % 6 === 1;
 

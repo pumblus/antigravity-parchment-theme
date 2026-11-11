@@ -34,7 +34,7 @@ process.emitWarning = function (warning, ...rest) {
 
 const GOOGLE_DRIVE_URL = 'https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC';
 const NOTION_GUIDE_URL = 'https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554';
-const GITHUB_REPO_URL = 'https://github.com/Anarcadia/chuanban-antigravity-theme-patch';
+const GITHUB_REPO_URL = 'https://github.com/pumblus/chuanban-antigravity-theme-patch';
 
 const ALLOWED_ORIGINS = [
   'http://127.0.0.1',
@@ -88,7 +88,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.1.5',
+    version: '5.1.5-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -114,6 +114,7 @@ function buildDistZip(baseDir = __dirname) {
   const includeItems = [
     'SKILL.md',
     'README.md',
+    'FORK.md',
     'install.mjs',
     '.gitattributes',
     '.gitignore',
@@ -920,7 +921,7 @@ async function runInstall() {
       }
     }
 
-    for (const docFile of ['install.mjs', 'SKILL.md', 'README.md']) {
+    for (const docFile of ['install.mjs', 'SKILL.md', 'README.md', 'FORK.md']) {
       const s = path.join(__dirname, docFile);
       const d = path.join(targetDir, docFile);
       if (fs.existsSync(s)) fs.copyFileSync(s, d);
@@ -943,23 +944,14 @@ async function runInstall() {
   } else if (!currentCfg.preset) {
     currentCfg.preset = 'high-contrast';
   }
-  // 自动清理早期版本遗留在 user/config.json 中的出厂默认 selectors，确保后续升级由 core/runtime.js 统一托管
-  if (currentCfg.selectors && typeof currentCfg.selectors === 'object') {
-    if (currentCfg.selectors.inputBoxId === 'antigravity.agentSidePanelInputBox') {
-      delete currentCfg.selectors;
-    } else if (
-      typeof currentCfg.selectors.excludeI18n === 'string' &&
-      (!currentCfg.selectors.excludeI18n.includes('.monaco-editor') ||
-        (currentCfg.selectors.excludeI18n.startsWith('code, pre, kbd, samp') &&
-          !currentCfg.selectors.excludeI18n.includes('[data-markdown-root]')))
-    ) {
-      delete currentCfg.selectors.excludeI18n;
-      if (Object.keys(currentCfg.selectors).length === 0) {
-        delete currentCfg.selectors;
-      }
-    }
+  // Preserve user selectors and file formatting. Runtime compatibility normalization
+  // happens in memory; installing a theme must not discard custom selectors.
+  const originalCfg = fs.existsSync(userConfigPath)
+    ? fs.readFileSync(userConfigPath, 'utf8')
+    : null;
+  if (originalCfg === null || JSON.stringify(JSON.parse(originalCfg)) !== JSON.stringify(currentCfg)) {
+    fs.writeFileSync(userConfigPath, JSON.stringify(currentCfg, null, 2) + '\n', 'utf8');
   }
-  fs.writeFileSync(userConfigPath, JSON.stringify(currentCfg, null, 2) + '\n', 'utf8');
 
   // 自动检查并修补 ~/.antigravity/argv.json (remote-debugging-port)
   const argvStatus = ensureArgvRemoteDebugging(currentCfg.channel);

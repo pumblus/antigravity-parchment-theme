@@ -3,6 +3,8 @@ name: chuanban-antigravity-theme-patch
 description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.1.5 模块化架构 · 完整适配 Antigravity 2.31.1 双端全量演进 + 昼夜双模式独立解耦 + 1094条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测与 WeakMap 热路径隔离缓存）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 沙箱排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
 ---
 
+> **融合分支说明（5.1.5-eric.1）**：此源码包基于上游 v5.1.5 / Antigravity 2.31.1，开发与安装差异见 [FORK.md](FORK.md)。远端发布待确认；发布后的目标分支为 `feat/integrated-v5.1.4`，默认 `main` 未更新。本分支保留用户文件与自定义 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。
+
 # 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.1.5 · 昼夜双模式解耦 & Antigravity 2.31.1 双端全量适配）
 
 > **前置概括（致用户与执行端 AI Agent）**：
@@ -22,7 +24,7 @@ description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成�
    - 链接：<https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC>
    - 包含：**v5.1.5 完整项目成品包 + 全套必备字体包（Anthropic 官方字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc` 超集）**。
 2. **GitHub 权威代码库（成品补丁仓库与 `SKILL.md` 本体）**
-   - 仓库：<https://github.com/Anarcadia/chuanban-antigravity-theme-patch>
+   - 仓库：<https://github.com/pumblus/chuanban-antigravity-theme-patch>
    - 包含：全部 `core/` 黄金内核、`user/` 改装模板、`install.mjs` CLI 与本 `SKILL.md`（字体文件请从上方 Google Drive 链接下载）。
 3. **Notion 引导主页**
    - 链接：<https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554>
@@ -90,7 +92,7 @@ node install.mjs install --channel stable
 `install.mjs install` 会自动完成：
 1. 生成并校验 `core/manifest.json` SHA-256 完整性；
 2. 当检测到已安装的 `core/` 与新版本哈希不同时，自动将旧版备份至 `backups/<timestamp>/` 与 `core.prev/`；
-3. 原子更新 `core/` 内核，**初始化或无损保留已有的 `user/` 改装文件**（并自动清理旧版遗留在 `user/config.json` 中的出厂默认 `selectors`，确保新版 DOM 选择器由 `core/runtime.js` 统一托管）；
+3. 原子更新 `core/` 内核，**初始化或无损保留已有的 `user/` 改装文件**（保留自定义 `selectors`，兼容处理仅在守护进程内存中进行）；
 4. 优先读取 Antigravity `2.31.x+` 原生写入的 `DevToolsActivePort` 动态调试端口（macOS: `~/Library/Application Support/Antigravity/DevToolsActivePort`，Windows: `%APPDATA%\Antigravity\DevToolsActivePort`），无需重启客户端即可零延迟挂载；同时通过 JSONC 安全解析器维护 `~/.antigravity/argv.json`（`9222`）及 `~/.antigravity-insiders/argv.json`（`9223`）作为无 `DevToolsActivePort` 旧版本的回退兜底；
 5. 自动生成 `~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs` 兼容包装入口，并注册单一权威系统后台自启服务（macOS `LaunchAgent` / Linux `systemd --user` / Windows `schtasks` 计划任务）。
 
@@ -98,7 +100,7 @@ node install.mjs install --channel stable
 ```bash
 node install.mjs verify
 ```
-当终端输出 `"ok": true` 且显示 `"version": "20261112-v5.1.5-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，即代表昼夜双模式主题、字体、汉化与指标胶囊已 100% 注入成功。
+当终端输出 `"ok": true` 且显示 `"version": "20261112-v5.1.5-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
 
 ---
 
