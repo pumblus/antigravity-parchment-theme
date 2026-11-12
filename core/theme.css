@@ -317,6 +317,18 @@ body[data-agy-font] :where(.font-sans) {
   --color-clay: #D97757;
   --color-clay-deep: #C6613F;
 
+  /* macOS Human Interface Guidelines — Concentric Radius Scale */
+  --ag-radius-sheet: 12px;
+  --ag-radius-dialog: 12px;
+  --ag-radius-composer-outer: 12px;
+  --ag-radius-composer-inner: 11px;
+  --ag-radius-card: 10px;
+  --ag-radius-menu: 10px;
+  --ag-radius-menu-inset: 4px;
+  --ag-radius-menu-item: 6px;
+  --ag-radius-control: 6px;
+  --ag-radius-inline: 4px;
+
   --ag-chat-font-size: 16px;
   --ag-wax-seal-hover: #3D3D3A;
   --ag-dark-wax-seal-hover: #87867F;
@@ -497,7 +509,15 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
   letter-spacing: -0.005em !important;
 }
 
-/* 5. Anthropic 扁平纸张层叠几何（Zero Box-Shadow，纯靠暖纸色阶 + 1px 石色/暖墨细线区分层级） */
+/* 5. Anthropic 扁平纸张层叠几何 + macOS HIG 同心连续曲率圆角（Zero Box-Shadow + Concentric Continuous Corners） */
+body[data-agy-theme][data-newux-theme] {
+  --nux-composer-frame-radius: var(--ag-radius-composer-outer, 12px) !important;
+  --nux-composer-radius: var(--ag-radius-composer-inner, 11px) !important;
+  --nux-radius-lg: var(--ag-radius-card, 10px) !important;
+  --nux-radius-md: var(--ag-radius-menu, 10px) !important;
+  --nux-overlay-inset: var(--ag-radius-menu-inset, 4px) !important;
+}
+
 .surface-glass,
 .agy-fastpick.surface-glass,
 .quick-input-widget.surface-glass,
@@ -507,13 +527,29 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
   box-shadow: none !important;
 }
 
+.agy-user-bubble-frame {
+  border-radius: var(--ag-radius-composer-inner, 11px) !important;
+}
+
 .agy-user-bubble {
   background-color: var(--ag-user-bubble-bg, #F0EEE6) !important;
   border: 1px solid var(--ag-user-bubble-border, #E3DACC) !important;
+  border-radius: var(--ag-radius-card, 10px) !important;
   color: var(--foreground, #141413) !important;
 }
 
+.agy-user-bubble > .agy-user-bubble-header {
+  border-radius: var(--ag-radius-menu-item, 6px) !important;
+}
+
+.agy-callout,
+.agy-card,
+.artifact-card {
+  border-radius: var(--ag-radius-card, 10px) !important;
+}
+
 .agy-inset-shell {
+  --card-radius: var(--ag-radius-sheet, 12px) !important;
   --card-edge: var(--card-border, #CCCBC8) !important;
   --sash-line: var(--card-border, #CCCBC8) !important;
 }
@@ -539,10 +575,14 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
   text-decoration-color: var(--foreground, #141413) !important;
 }
 
+:is([data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code,
+kbd {
+  border-radius: var(--ag-radius-inline, 4px) !important;
+}
+
 :is([data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
   background-color: var(--ag-inline-code-bg, #F0EEE6) !important;
   border: 1px solid var(--ag-inline-code-border, #E3DACC) !important;
-  border-radius: 4px;
   padding: 0.1em 0.35em;
   color: var(--code-foreground, #141413) !important;
 }
@@ -550,6 +590,7 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
 :is([data-markdown-root], .select-text, .prose, .markdown) pre {
   background-color: var(--ag-code-block-bg, #F0EEE6) !important;
   border: 1px solid var(--ag-code-block-border, #E3DACC) !important;
+  border-radius: var(--ag-radius-card, 10px) !important;
   box-shadow: none !important;
 }
 
@@ -562,9 +603,10 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
   border-color: var(--border, #CCCBC8) !important;
 }
 
-/* 输入框外托盘与内卡片：去暗红蜡封、去悬浮投影，改为暖纸色差 + 1px 石色/墨色细边过渡 */
-:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border) {
+/* 输入框外托盘与内卡片：去暗红蜡封、去悬浮投影，macOS 同心圆角（12px 外框 - 1px 边距 = 11px 内卡） */
+:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer, .surface-composer.bg-card-border) {
   background-color: var(--ag-composer-tray-bg, #F0EEE6) !important;
+  border-radius: var(--ag-radius-composer-outer, 12px) !important;
   box-shadow: none !important;
   outline: none !important;
   transition: border-color 180ms ease, background-color 180ms ease !important;
@@ -612,13 +654,15 @@ html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="anti
   box-shadow: none !important;
 }
 
-/* 输入框内部卡片（Ivory Light / Warm Slate 抬升一层，零阴影） */
+/* 输入框内部卡片（Ivory Light / Warm Slate 抬升一层，11px 同心内圆角，零阴影） */
 body[data-agy-theme][data-newux-theme="onyx"] .surface-composer > .surface-composer-card,
+.surface-composer > .surface-composer-card,
 .surface-composer-card.bg-card,
 [id="antigravity.agentSidePanelInputBox"] .surface-composer-card,
 [id="antigravity.agentSidePanelInputBox"] > div.bg-card {
   background-color: var(--ag-composer-card-bg, #FAF9F5) !important;
   border: 1px solid var(--ag-composer-card-border, rgba(20, 20, 19, 0.08)) !important;
+  border-radius: var(--ag-radius-composer-inner, 11px) !important;
   box-shadow: none !important;
   outline: none !important;
   transition: border-color 180ms ease !important;
@@ -833,6 +877,98 @@ button, [role="button"], select {
 
 [role="menu"], [role="listbox"], [data-select-popup], .agy-overlay, [data-radix-menu-content], [role="dialog"] {
   box-shadow: none !important;
+}
+
+/* 7. macOS HIG 同心圆角梯度与 Apple Continuous Corner 超椭圆连续曲率（豁免 rounded-full 胶囊/正圆） */
+[role="dialog"],
+.agy-fastpick,
+.quick-input-widget {
+  border-radius: var(--ag-radius-dialog, 12px) !important;
+}
+
+[role="menu"],
+[role="listbox"],
+[data-select-popup],
+.agy-overlay,
+[data-radix-menu-content] {
+  border-radius: var(--ag-radius-menu, 10px) !important;
+}
+
+.agy-overlay .agy-overlay-item,
+[role="menu"] [role="menuitem"],
+[role="listbox"] [role="option"] {
+  border-radius: var(--ag-radius-menu-item, 6px) !important;
+}
+
+.agy-sidebar-row,
+[data-testid="conversation-row-sidebar"],
+[data-testid="conversation-row-history"],
+button[data-testid="project-header"],
+button[data-project-card="true"],
+input[placeholder*="Search"]:not(.rounded-full):not([class*="rounded-full"]),
+input[data-ag-orig-placeholder*="Search"]:not(.rounded-full):not([class*="rounded-full"]),
+[data-testid="new-tab-search-input"]:not(.rounded-full):not([class*="rounded-full"]) {
+  border-radius: var(--ag-radius-control, 6px) !important;
+}
+
+@supports (corner-shape: superellipse(1.5)) {
+  .agy-sheet[data-sheet-inset] [data-main-content-body],
+  .agy-inset-shell [data-side-panel-body],
+  [data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane],
+  [role="dialog"],
+  .agy-fastpick,
+  .quick-input-widget,
+  #antigravity\.agentSidePanelInputBox,
+  [id="antigravity.agentSidePanelInputBox"],
+  .surface-composer,
+  .surface-composer-card,
+  .agy-user-bubble-frame,
+  .agy-user-bubble,
+  .agy-user-bubble > .agy-user-bubble-header,
+  .agy-callout,
+  .agy-card,
+  .artifact-card,
+  :is([data-markdown-root], .select-text, .prose, .markdown) pre,
+  :is([data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code,
+  kbd,
+  [role="menu"],
+  [role="listbox"],
+  [data-select-popup],
+  .agy-overlay,
+  [data-radix-menu-content],
+  .agy-overlay .agy-overlay-item,
+  [role="menu"] [role="menuitem"],
+  [role="listbox"] [role="option"],
+  #ag-live-metrics-tooltip,
+  .agy-sidebar-row,
+  [data-testid="conversation-row-sidebar"],
+  [data-testid="conversation-row-history"],
+  button[data-testid="project-header"],
+  button[data-project-card="true"],
+  input[placeholder*="Search"]:not(.rounded-full):not([class*="rounded-full"]),
+  input[data-ag-orig-placeholder*="Search"]:not(.rounded-full):not([class*="rounded-full"]),
+  [data-testid="new-tab-search-input"]:not(.rounded-full):not([class*="rounded-full"]) {
+    corner-shape: superellipse(1.5);
+  }
+
+  .agy-sheet[data-sheet-inset] [data-main-content-body]::before,
+  .agy-sheet[data-sheet-inset] [data-main-content-body]::after,
+  .agy-inset-shell [data-side-panel-body]::before,
+  .agy-inset-shell [data-side-panel-body]::after,
+  [data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]::before,
+  [data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]::after {
+    corner-shape: inherit;
+  }
+
+  /* 严格保护 rounded-full 胶囊下拉与圆形发送/语音/停止按钮，维持纯正几何胶囊与正圆 */
+  .rounded-full,
+  [class*="rounded-full"],
+  button[data-testid="send-button"],
+  .agy-send-button,
+  button[data-testid="voice-start-button"],
+  button[data-testid="input-cancel-button"] {
+    corner-shape: round !important;
+  }
 }
 
 [role="dialog"] {
@@ -1315,7 +1451,7 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   min-width: 340px;
   max-width: 450px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--ag-radius-menu, 10px);
   background-color: var(--card, #FAF9F5) !important;
   border: 1px solid var(--border, #CCCBC8) !important;
   box-shadow: none !important;

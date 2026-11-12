@@ -154,11 +154,15 @@ for (const mode of ['light', 'dark']) {
         <pre id="markdown-pre"><code>const ok = true;</code></pre>
       </div>
       <div class="agy-user-bubble" id="user-bubble">User prompt</div>
+      <div role="dialog" id="modal-dialog"><div class="agy-card" id="dialog-card"><span class="text-sm">Card</span></div></div>
+      <div class="agy-overlay" role="menu" id="context-menu"><div class="agy-overlay-item" role="menuitem" id="menu-item">Item</div></div>
+      <div class="agy-sidebar-row" id="sidebar-row"><span class="truncate">Session</span></div>
       <div id="antigravity.agentSidePanelInputBox" class="surface-composer bg-card-border">
         <div class="surface-composer-card bg-card" id="composer-card">
           <div data-lexical-editor="true" id="lexical-box"><span data-lexical-text="true" id="lexical-span">Prompt</span></div>
           <p class="pointer-events-none" id="placeholder">Placeholder</p>
-          <button data-testid="send-button" id="send-btn">Send</button>
+          <button data-testid="model-selector-trigger" class="rounded-full" id="model-pill" style="border-radius: 9999px">Model</button>
+          <button data-testid="send-button" class="rounded-full" id="send-btn" style="border-radius: 9999px">Send</button>
         </div>
       </div>
       <div class="tool-call-header">
@@ -312,6 +316,31 @@ for (const mode of ['light', 'dark']) {
       assert.equal(await styleOf('markdown-pre', 'boxShadow'), 'none');
       assert.equal(await styleOf('user-bubble', 'boxShadow'), 'none');
       assert.equal(await styleOf('ag-live-metrics-tooltip', 'boxShadow'), 'none');
+
+      // macOS HIG concentric border-radius hierarchy & continuous corner curvature (preserving rounded-full pills).
+      assert.equal(await styleOf('modal-dialog', 'borderRadius'), '12px');
+      assert.equal(await composerTray.evaluate(el => getComputedStyle(el).borderRadius), '12px');
+      assert.equal(await styleOf('composer-card', 'borderRadius'), '11px');
+      assert.equal(await styleOf('user-bubble', 'borderRadius'), '10px');
+      assert.equal(await styleOf('dialog-card', 'borderRadius'), '10px');
+      assert.equal(await styleOf('markdown-pre', 'borderRadius'), '10px');
+      assert.equal(await styleOf('context-menu', 'borderRadius'), '10px');
+      assert.equal(await styleOf('ag-live-metrics-tooltip', 'borderRadius'), '10px');
+      assert.equal(await styleOf('menu-item', 'borderRadius'), '6px');
+      assert.equal(await styleOf('sidebar-row', 'borderRadius'), '6px');
+      assert.equal(await styleOf('text-input', 'borderRadius'), '6px');
+      assert.equal(await styleOf('markdown-code', 'borderRadius'), '4px');
+      assert.equal(await styleOf('markdown-kbd', 'borderRadius'), '4px');
+      assert.equal(await styleOf('model-pill', 'borderRadius'), '9999px');
+      assert.equal(await styleOf('send-btn', 'borderRadius'), '9999px');
+
+      const supportsContinuous = await page.evaluate(() => CSS.supports('corner-shape', 'superellipse(1.5)'));
+      if (supportsContinuous) {
+        assert.equal(await styleOf('composer-card', 'cornerShape'), 'superellipse(1.5)');
+        assert.equal(await styleOf('context-menu', 'cornerShape'), 'superellipse(1.5)');
+        assert.equal(await styleOf('model-pill', 'cornerShape'), 'superellipse(1)');
+        assert.equal(await styleOf('send-btn', 'cornerShape'), 'superellipse(1)');
+      }
     });
   });
 }
