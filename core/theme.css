@@ -304,9 +304,22 @@ body[data-agy-font] :where(.font-sans) {
 }
 
 :root {
+  /* Anthropic Official Design Tokens (Refero Spec) */
+  --color-slate-dark: #141413;
+  --color-ivory-medium: #F0EEE6;
+  --color-ivory-light: #FAF9F5;
+  --color-cloud-medium: #B0AEA5;
+  --color-cloud-dark: #87867F;
+  --color-stone: #CCCBC8;
+  --color-slate-medium: #3D3D3A;
+  --color-oat-warm: #E3DACC;
+  --color-manilla: #F5E3C7;
+  --color-clay: #D97757;
+  --color-clay-deep: #C6613F;
+
   --ag-chat-font-size: 16px;
-  --ag-wax-seal-hover: #74221A;
-  --ag-dark-wax-seal-hover: rgba(47, 113, 227, 0.72);
+  --ag-wax-seal-hover: #3D3D3A;
+  --ag-dark-wax-seal-hover: #87867F;
   --ag-ink-shadow-xs: none;
   --ag-ink-shadow-sm: none;
   --ag-ink-shadow-md: none;
@@ -484,93 +497,149 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
   letter-spacing: -0.005em !important;
 }
 
-/* 5. 共享 UI 几何形状、输入框三态 1.5px 过渡与 GPU 性能优化 */
+/* 5. Anthropic 扁平纸张层叠几何（Zero Box-Shadow，纯靠暖纸色阶 + 1px 石色/暖墨细线区分层级） */
 .surface-glass,
 .agy-fastpick.surface-glass,
 .quick-input-widget.surface-glass,
 .agy-user-bubble {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.agy-user-bubble {
+  background-color: var(--ag-user-bubble-bg, #F0EEE6) !important;
+  border: 1px solid var(--ag-user-bubble-border, #E3DACC) !important;
+  color: var(--foreground, #141413) !important;
 }
 
 .agy-inset-shell {
-  --card-edge: var(--card-border, rgba(0, 0, 0, 0.35)) !important;
-  --sash-line: var(--card-border, rgba(0, 0, 0, 0.35)) !important;
+  --card-edge: var(--card-border, #CCCBC8) !important;
+  --sash-line: var(--card-border, #CCCBC8) !important;
 }
 
 .agy-sheet[data-sheet-inset] [data-main-content-body]::after,
 .agy-inset-shell [data-side-panel-body]::after {
-  box-shadow: inset 0 0 0 1px var(--card-edge, rgba(0, 0, 0, 0.35)) !important;
+  box-shadow: inset 0 0 0 1px var(--card-edge, #CCCBC8) !important;
 }
 
-/* 输入框外托盘与内卡片几何（色彩由 Part II 白天 / Part III 黑夜变量驱动） */
-:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border) {
-  background-color: var(--ag-composer-tray-bg, #F7EFE6) !important;
-  outline: none !important;
-  transition: border-color 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+/* 对话与 Markdown 印刷级细节：常驻 1px 细下划线链接、暖纸代码块与引用线 */
+:is([data-markdown-root], .prose, .markdown) a:not([class*="bg-"]):not([class*="border"]):not([role="button"]) {
+  color: var(--foreground, #141413) !important;
+  text-decoration-line: underline !important;
+  text-decoration-style: solid !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 3px !important;
+  text-decoration-color: var(--ag-prose-link-underline, #87867F) !important;
+  transition: text-decoration-color 150ms ease;
 }
 
-/* 场景 2.1：首页新建对话日常常态（设计 C） */
-html:not([data-ag-wax-seal="off"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"]),
-html:not([data-ag-wax-seal="off"])[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border) {
-  border: 1.5px solid var(--ag-seal-home-border, transparent) !important;
-  box-shadow: var(--ag-seal-home-shadow, none) !important;
+:is([data-markdown-root], .prose, .markdown) a:not([class*="bg-"]):not([class*="border"]):not([role="button"]):hover {
+  color: var(--foreground, #141413) !important;
+  text-decoration-color: var(--foreground, #141413) !important;
 }
 
-/* 场景 2.2：首页新建对话悬停 / 聚焦（设计 A） */
-html:not([data-ag-wax-seal="off"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"]):is(:hover, :focus-within),
-html:not([data-ag-wax-seal="off"])[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):is(:hover, :focus-within) {
-  border: 1.5px solid var(--ag-seal-home-focus-border, rgba(116, 34, 26, 0.36)) !important;
-  box-shadow: var(--ag-seal-home-focus-shadow, 0 1px 3px rgba(116, 34, 26, 0.04)) !important;
+:is([data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
+  background-color: var(--ag-inline-code-bg, #F0EEE6) !important;
+  border: 1px solid var(--ag-inline-code-border, #E3DACC) !important;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  color: var(--code-foreground, #141413) !important;
 }
 
-/* 场景 1.1：具体会话日常常态（设计 A） */
-html:not([data-ag-wax-seal="off"]):not([data-ag-page-type="home"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):not(:has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"])) {
-  border: 1.5px solid var(--ag-seal-chat-border, rgba(116, 34, 26, 0.36)) !important;
-  box-shadow: var(--ag-seal-chat-shadow, 0 1px 3px rgba(116, 34, 26, 0.03)) !important;
-}
-
-/* 场景 1.2：具体会话悬停 / 聚焦（设计 B） */
-html:not([data-ag-wax-seal="off"]):not([data-ag-page-type="home"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):not(:has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"])):is(:hover, :focus-within) {
-  border: 1.5px solid var(--ag-seal-chat-focus-border, #74221A) !important;
-  box-shadow: var(--ag-seal-chat-focus-shadow, 0 1px 4px rgba(116, 34, 26, 0.12)) !important;
-}
-
-/* 显式关闭蜡封模块时回退 1px 标准描边 */
-html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border),
-html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):is(:hover, :focus-within) {
-  border: 1px solid var(--ag-seal-off-border, rgba(31, 30, 29, 0.15)) !important;
+:is([data-markdown-root], .select-text, .prose, .markdown) pre {
+  background-color: var(--ag-code-block-bg, #F0EEE6) !important;
+  border: 1px solid var(--ag-code-block-border, #E3DACC) !important;
   box-shadow: none !important;
 }
 
-/* 输入框内部卡片 */
+:is([data-markdown-root], .select-text, .prose, .markdown) blockquote {
+  border-left: 2px solid var(--border, #CCCBC8) !important;
+  color: var(--secondary-foreground, #3D3D3A) !important;
+}
+
+:is([data-markdown-root], .select-text, .prose, .markdown) hr {
+  border-color: var(--border, #CCCBC8) !important;
+}
+
+/* 输入框外托盘与内卡片：去暗红蜡封、去悬浮投影，改为暖纸色差 + 1px 石色/墨色细边过渡 */
+:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border) {
+  background-color: var(--ag-composer-tray-bg, #F0EEE6) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color 180ms ease, background-color 180ms ease !important;
+}
+
+/* 首页新建对话：常态柔和石色细线 -> 悬停 Cloud Dark -> 聚焦 Slate 暖墨细线 */
+html:not([data-ag-wax-seal="off"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"]),
+html:not([data-ag-wax-seal="off"])[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border) {
+  border: 1px solid var(--ag-seal-home-border, #CCCBC8) !important;
+  box-shadow: none !important;
+}
+
+html:not([data-ag-wax-seal="off"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"]):hover,
+html:not([data-ag-wax-seal="off"])[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):hover {
+  border: 1px solid var(--ag-seal-chat-hover-border, #87867F) !important;
+  box-shadow: none !important;
+}
+
+html:not([data-ag-wax-seal="off"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"]):focus-within,
+html:not([data-ag-wax-seal="off"])[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):focus-within {
+  border: 1px solid var(--ag-seal-home-focus-border, #3D3D3A) !important;
+  box-shadow: none !important;
+}
+
+/* 具体会话：常态 1px Stone -> 悬停 1px Cloud Dark -> 聚焦 1px Slate 暖墨细线 */
+html:not([data-ag-wax-seal="off"]):not([data-ag-page-type="home"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):not(:has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"])) {
+  border: 1px solid var(--ag-seal-chat-border, #CCCBC8) !important;
+  box-shadow: none !important;
+}
+
+html:not([data-ag-wax-seal="off"]):not([data-ag-page-type="home"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):not(:has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"])):hover {
+  border: 1px solid var(--ag-seal-chat-hover-border, #87867F) !important;
+  box-shadow: none !important;
+}
+
+html:not([data-ag-wax-seal="off"]):not([data-ag-page-type="home"]) :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):not(:has([data-testid="branch-pill-trigger"], [data-testid="project-branch-picker"], [data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [aria-label^="Select project"], [aria-label^="选择项目"])):focus-within {
+  border: 1px solid var(--ag-seal-chat-focus-border, #3D3D3A) !important;
+  box-shadow: none !important;
+}
+
+/* 显式关闭外框三态模块时固定 1px 石色细边 */
+html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border),
+html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer.bg-card-border):is(:hover, :focus-within) {
+  border: 1px solid var(--ag-seal-off-border, #CCCBC8) !important;
+  box-shadow: none !important;
+}
+
+/* 输入框内部卡片（Ivory Light / Warm Slate 抬升一层，零阴影） */
 body[data-agy-theme][data-newux-theme="onyx"] .surface-composer > .surface-composer-card,
 .surface-composer-card.bg-card,
 [id="antigravity.agentSidePanelInputBox"] .surface-composer-card,
 [id="antigravity.agentSidePanelInputBox"] > div.bg-card {
-  background-color: var(--ag-composer-card-bg, #FFFFFF) !important;
-  border: 1px solid var(--ag-composer-card-border, transparent) !important;
-  box-shadow: var(--ag-composer-card-shadow, 0 1px 2px rgba(0, 0, 0, 0.02)) !important;
+  background-color: var(--ag-composer-card-bg, #FAF9F5) !important;
+  border: 1px solid var(--ag-composer-card-border, rgba(20, 20, 19, 0.08)) !important;
+  box-shadow: none !important;
   outline: none !important;
-  transition: box-shadow 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms ease !important;
+  transition: border-color 180ms ease !important;
 }
 
 body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .surface-composer-card,
 .surface-composer:focus-within > .surface-composer-card,
 .surface-composer-card:focus-within,
 [id="antigravity.agentSidePanelInputBox"]:focus-within .surface-composer-card {
-  border-color: var(--ag-composer-card-focus-border, transparent) !important;
-  box-shadow: var(--ag-composer-card-focus-shadow, 0 6px 20px -2px rgba(60, 20, 15, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.04)) !important;
+  border-color: var(--ag-composer-card-focus-border, #CCCBC8) !important;
+  box-shadow: none !important;
 }
 
-/* 输入框顶部工具栏（排除 .surface-composer-card 本身）、底部按钮与发送/取消按钮 */
+/* 输入框顶部工具栏、底部普通控件与唯一主行动按钮（Clay Filled Button） */
 [id="antigravity.agentSidePanelInputBox"] > div:first-child:not(.surface-composer-card) :is(button, span, svg) {
-  color: var(--ag-composer-top-fg, #383431) !important;
+  color: var(--ag-composer-top-fg, #3D3D3A) !important;
 }
 
 [id="antigravity.agentSidePanelInputBox"] > div:first-child:not(.surface-composer-card) button:hover {
-  background-color: var(--ag-composer-top-hover-bg, rgba(217, 119, 87, 0.08)) !important;
-  color: var(--ag-composer-top-hover-fg, #1F1E1D) !important;
+  background-color: var(--ag-composer-top-hover-bg, rgba(20, 20, 19, 0.06)) !important;
+  color: var(--ag-composer-top-hover-fg, #141413) !important;
 }
 
 #antigravity\.agentSidePanelInputBox :is([class*="text-secondary-foreground"], button, span):not([data-lexical-editor="true"]):not([data-lexical-editor="true"] *) {
@@ -580,50 +649,58 @@ body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .
 }
 
 #antigravity\.agentSidePanelInputBox :is([class*="text-secondary-foreground"]:not(#ag-live-metrics-pill *), button:not([data-testid="send-button"]):not(.agy-send-button):not([data-testid="voice-start-button"]):not([data-testid="input-cancel-button"]), span:not([data-testid="voice-live-pill"]):not([data-testid="voice-live-pill"] *):not(.agy-send-button):not(.agy-send-button *):not([data-testid="input-cancel-button"] *):not(#ag-live-metrics-pill):not(#ag-live-metrics-pill *), svg:not([data-testid="voice-live-pill"] *):not([data-testid="send-button"] *):not(.agy-send-button *):not([data-testid="input-cancel-button"] *)):not([data-lexical-editor="true"]):not([data-lexical-editor="true"] *) {
-  color: var(--ag-composer-ctrl-fg, #0A0A0A) !important;
+  color: var(--ag-composer-ctrl-fg, #3D3D3A) !important;
   opacity: 1 !important;
 }
 
+#antigravity\.agentSidePanelInputBox button:not([data-testid="send-button"]):not(.agy-send-button):not([data-testid="voice-start-button"]):not([data-testid="input-cancel-button"]):hover,
+#antigravity\.agentSidePanelInputBox button:not([data-testid="send-button"]):not(.agy-send-button):not([data-testid="voice-start-button"]):not([data-testid="input-cancel-button"]):hover :is(span, svg) {
+  color: var(--foreground, #141413) !important;
+}
+
 html:not([data-ag-theme-mode="dark"]) body:not(.dark):not(.theme-dark) #antigravity\.agentSidePanelInputBox button[data-testid="input-cancel-button"] {
-  background-color: rgba(31, 30, 29, 0.09) !important;
-  color: #1F1E1D !important;
+  background-color: #E3DACC !important;
+  color: #141413 !important;
+  box-shadow: none !important;
 }
 
 html:not([data-ag-theme-mode="dark"]) body:not(.dark):not(.theme-dark) #antigravity\.agentSidePanelInputBox button[data-testid="input-cancel-button"]:hover {
-  background-color: rgba(31, 30, 29, 0.15) !important;
-  color: #0A0A0A !important;
+  background-color: #D5CBB9 !important;
+  color: #141413 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) #antigravity\.agentSidePanelInputBox button[data-testid="input-cancel-button"] {
-  background-color: rgba(255, 255, 255, 0.11) !important;
-  color: #EAEBF1 !important;
+  background-color: #2E2D2A !important;
+  color: #FAF9F5 !important;
+  box-shadow: none !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) #antigravity\.agentSidePanelInputBox button[data-testid="input-cancel-button"]:hover {
-  background-color: rgba(255, 255, 255, 0.18) !important;
-  color: #FFFFFF !important;
+  background-color: #3D3D3A !important;
+  color: #FAF9F5 !important;
 }
 
+/* 全场唯一彩色 CTA：Clay Filled Button (#D97757 -> #C6613F，扁平无投影无描边) */
 #antigravity\.agentSidePanelInputBox :is([data-testid="voice-live-pill"], button[data-testid="send-button"], .agy-send-button),
 :is([data-testid="voice-live-pill"], button[data-testid="send-button"], .agy-send-button) {
   background-color: var(--ag-send-btn-bg, #D97757) !important;
-  color: #FFFFFF !important;
-  border: 1px solid var(--ag-send-btn-border, #C45F40) !important;
-  box-shadow: var(--ag-send-btn-shadow, 0 1px 2px rgba(217, 119, 87, 0.25)) !important;
+  color: #FAF9F5 !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
 }
 
 #antigravity\.agentSidePanelInputBox :is([data-testid="voice-live-pill"], button[data-testid="send-button"], .agy-send-button):hover,
 :is([data-testid="voice-live-pill"], button[data-testid="send-button"], .agy-send-button):hover {
-  background-color: var(--ag-send-btn-hover-bg, #C86646) !important;
+  background-color: var(--ag-send-btn-hover-bg, #C6613F) !important;
   opacity: 1 !important;
 }
 
 #antigravity\.agentSidePanelInputBox :is([data-testid="voice-live-pill"], button[data-testid="send-button"], .agy-send-button) * {
-  color: #FFFFFF !important;
-  fill: #FFFFFF !important;
+  color: #FAF9F5 !important;
+  fill: #FAF9F5 !important;
 }
 
-/* 搜索栏聚焦单圈几何（显式排除 checkbox/radio/range，兼容已汉化 placeholder，保护无障碍键盘焦点可见性） */
+/* 搜索栏与普通输入框聚焦：单圈 1px 暖墨/石色细边（严禁滥用 Clay 作为聚焦装饰色） */
 input[placeholder*="Search"],
 input[data-ag-orig-placeholder*="Search"],
 [data-testid="new-tab-search-input"],
@@ -639,7 +716,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"])[class*="foc
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"])[class*="focus:border-ring"]:is(:focus, :focus-visible) {
   outline: none !important;
   outline-offset: 0 !important;
-  border-color: var(--primary, #D97757) !important;
+  border-color: var(--ag-input-focus-border, #3D3D3A) !important;
   box-shadow: none !important;
 }
 
@@ -663,7 +740,7 @@ html[data-ag-preset] #antigravity\.agentSidePanelInputBox [data-testid="voice-li
 aside :is(a, button) {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-sidebar-fg, #262422) !important;
+  color: var(--ag-sidebar-fg, #3D3D3A) !important;
   text-shadow: var(--ag-ink-shadow-sm);
 }
 
@@ -673,7 +750,7 @@ aside :is(a, button) {
 aside [data-testid="conversation-row-sidebar"]:not([data-selected="true"]) span {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-sidebar-row-fg, #262422) !important;
+  color: var(--ag-sidebar-row-fg, #3D3D3A) !important;
   text-shadow: none !important;
 }
 
@@ -683,7 +760,7 @@ button[data-project-card="true"],
 [data-subtext] span[class*="text-muted"],
 .bg-sidebar span:has(> svg) + span {
   font-weight: 500 !important;
-  color: var(--ag-sidebar-header-fg, #383533) !important;
+  color: var(--ag-sidebar-header-fg, #3D3D3A) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
 
@@ -691,7 +768,7 @@ button[data-testid="project-header"] span,
 button[data-project-card="true"] span {
   font-weight: 500 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-sidebar-header-title-fg, #2C2B29) !important;
+  color: var(--ag-sidebar-header-title-fg, #141413) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
 
@@ -702,14 +779,14 @@ button[data-project-card="true"] span {
 .bg-sidebar :is([data-active="true"], [data-active=""]) span,
 .bg-sidebar [aria-selected="true"] {
   font-weight: 600 !important;
-  color: var(--ag-sidebar-selected-fg, #0A0A0A) !important;
+  color: var(--ag-sidebar-selected-fg, #141413) !important;
   text-shadow: var(--ag-ink-shadow-md) !important;
 }
 
 .bg-sidebar :is([class*="text-muted"], [class*="text-[11px]"], [class*="uppercase"]) {
   font-weight: 500 !important;
   letter-spacing: -0.02em !important;
-  color: var(--ag-sidebar-muted-fg, #7A7670) !important;
+  color: var(--ag-sidebar-muted-fg, #73726C) !important;
 }
 
 .bg-sidebar [class*="uppercase"] {
@@ -728,14 +805,14 @@ button, [role="button"], select {
 [data-testid="title-menu-bar-option"] {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-menu-item-fg, #1F1E1D) !important;
+  color: var(--ag-menu-item-fg, #141413) !important;
 }
 
 [role="menu"] :is([role="menuitem"], .agy-overlay-item, [class*="truncate"], [class*="text-xs"], [class*="text-[13px]"], span),
 .agy-overlay .agy-overlay-item {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-menu-item-fg, #1F1E1D) !important;
+  color: var(--ag-menu-item-fg, #141413) !important;
 }
 
 [role="menu"] :is([role="menuitem"], .agy-overlay-item) > span,
@@ -744,14 +821,18 @@ button, [role="button"], select {
 .agy-overlay .agy-overlay-item :is(span[class*="flex-1"], span.truncate) {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-menu-item-fg, #1F1E1D) !important;
+  color: var(--ag-menu-item-fg, #141413) !important;
 }
 
 [role="menu"] :is([class*="font-medium"], [class*="text-muted-foreground"], h2, h3, h4),
 .agy-overlay :is([class*="font-medium"], [class*="text-muted-foreground"]) {
   font-weight: 500 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-menu-header-fg, #1A1A1A) !important;
+  color: var(--ag-menu-header-fg, #3D3D3A) !important;
+}
+
+[role="menu"], [role="listbox"], [data-select-popup], .agy-overlay, [data-radix-menu-content], [role="dialog"] {
+  box-shadow: none !important;
 }
 
 [role="dialog"] {
@@ -761,181 +842,220 @@ button, [role="button"], select {
 [role="dialog"] :is(h2, h3) {
   font-weight: 600 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-dialog-title-fg, #1F1E1D) !important;
+  color: var(--ag-dialog-title-fg, #141413) !important;
 }
 
 [role="dialog"] :is(.agy-card, [class*="agy-card"], [class*="divide-border"]) span.text-sm {
   font-weight: 400 !important;
   letter-spacing: -0.005em !important;
-  color: var(--ag-dialog-item-fg, #1F1E1D) !important;
+  color: var(--ag-dialog-item-fg, #141413) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
 
 
 /* ============================================================================
- * PART II. 白天模式（Light Mode · 非 .dark 状态：三套暖纸护眼预设 + 古朴暗红蜡封）
+ * PART II. 白天模式（Light Mode · 纯正 Anthropic 官方暖羊皮纸色阶）
+ * 严格遵循规范：零 #FFFFFF 纯冷白、零 box-shadow、1px #CCCBC8 石色细边、单一 #D97757 陶土色主按钮
  * ============================================================================ */
 
 /* 白天模式通用组件变量默认值 */
 html:not([data-ag-theme-mode="dark"]):not(:has(> body.dark)),
 html:not([data-ag-theme-mode="dark"]) body:not(.dark) {
-  --ag-composer-tray-bg: #F7EFE6;
-  --ag-composer-card-bg: #FFFFFF;
-  --ag-composer-card-border: transparent;
-  --ag-composer-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  --ag-composer-card-focus-border: transparent;
-  --ag-composer-card-focus-shadow: 0 6px 20px -2px rgba(60, 20, 15, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-  --ag-seal-home-border: transparent;
+  --ag-composer-tray-bg: #F0EEE6;
+  --ag-composer-card-bg: #FAF9F5;
+  --ag-composer-card-border: rgba(20, 20, 19, 0.08);
+  --ag-composer-card-shadow: none;
+  --ag-composer-card-focus-border: #CCCBC8;
+  --ag-composer-card-focus-shadow: none;
+  --ag-seal-home-border: #CCCBC8;
   --ag-seal-home-shadow: none;
-  --ag-seal-home-focus-border: rgba(116, 34, 26, 0.36);
-  --ag-seal-home-focus-shadow: 0 1px 3px rgba(116, 34, 26, 0.04);
-  --ag-seal-chat-border: rgba(116, 34, 26, 0.36);
-  --ag-seal-chat-shadow: 0 1px 3px rgba(116, 34, 26, 0.03);
-  --ag-seal-chat-focus-border: var(--ag-wax-seal-hover, #74221A);
-  --ag-seal-chat-focus-shadow: 0 1px 4px rgba(116, 34, 26, 0.12);
-  --ag-seal-off-border: rgba(31, 30, 29, 0.15);
-  --ag-composer-top-fg: #383431;
-  --ag-composer-top-hover-bg: rgba(217, 119, 87, 0.08);
-  --ag-composer-top-hover-fg: #1F1E1D;
-  --ag-composer-ctrl-fg: #0A0A0A;
+  --ag-seal-home-focus-border: var(--ag-wax-seal-hover, #3D3D3A);
+  --ag-seal-home-focus-shadow: none;
+  --ag-seal-chat-border: #CCCBC8;
+  --ag-seal-chat-hover-border: #87867F;
+  --ag-seal-chat-shadow: none;
+  --ag-seal-chat-focus-border: var(--ag-wax-seal-hover, #3D3D3A);
+  --ag-seal-chat-focus-shadow: none;
+  --ag-seal-off-border: #CCCBC8;
+  --ag-input-focus-border: #3D3D3A;
+  --ag-composer-top-fg: #3D3D3A;
+  --ag-composer-top-hover-bg: rgba(20, 20, 19, 0.06);
+  --ag-composer-top-hover-fg: #141413;
+  --ag-composer-ctrl-fg: #3D3D3A;
   --ag-send-btn-bg: #D97757;
-  --ag-send-btn-hover-bg: #C86646;
-  --ag-send-btn-border: #C45F40;
-  --ag-send-btn-shadow: 0 1px 2px rgba(217, 119, 87, 0.25);
-  --ag-sidebar-fg: #262422;
-  --ag-sidebar-row-fg: #262422;
-  --ag-sidebar-header-fg: #383533;
-  --ag-sidebar-header-title-fg: #2C2B29;
-  --ag-sidebar-selected-fg: #0A0A0A;
-  --ag-sidebar-muted-fg: #7A7670;
-  --ag-menu-item-fg: #1F1E1D;
-  --ag-menu-header-fg: #1A1A1A;
-  --ag-dialog-title-fg: #1F1E1D;
-  --ag-dialog-item-fg: #1F1E1D;
-  --code-foreground: #262422 !important;
+  --ag-send-btn-hover-bg: #C6613F;
+  --ag-send-btn-border: transparent;
+  --ag-send-btn-shadow: none;
+  --ag-sidebar-fg: #3D3D3A;
+  --ag-sidebar-row-fg: #3D3D3A;
+  --ag-sidebar-header-fg: #3D3D3A;
+  --ag-sidebar-header-title-fg: #141413;
+  --ag-sidebar-selected-fg: #141413;
+  --ag-sidebar-muted-fg: #73726C;
+  --ag-menu-item-fg: #141413;
+  --ag-menu-header-fg: #73726C;
+  --ag-dialog-title-fg: #141413;
+  --ag-dialog-item-fg: #141413;
+  --ag-user-bubble-bg: #F0EEE6;
+  --ag-user-bubble-border: #E3DACC;
+  --ag-prose-link-underline: #87867F;
+  --ag-inline-code-bg: #F0EEE6;
+  --ag-inline-code-border: #E3DACC;
+  --ag-code-block-bg: #F0EEE6;
+  --ag-code-block-border: #E3DACC;
+  --code-foreground: #141413 !important;
 }
 
-/* 白天预设 1（默认首选）：高对比暖白 (high-contrast) */
+/* 白天预设 1（默认首选）：Anthropic 官方标准暖纸 (high-contrast -> Official Parchment) */
 html:not([data-ag-theme-mode="dark"]):not(:has(> body.dark))[data-ag-preset="high-contrast"],
 html:not([data-ag-theme-mode="dark"]):not(:has(> body.dark)):not([data-ag-preset]),
 html:not([data-ag-theme-mode="dark"])[data-ag-preset="high-contrast"] body:not(.dark),
 html:not([data-ag-theme-mode="dark"]):not([data-ag-preset]) body:not(.dark) {
   --primary: #D97757 !important;
-  --editor-selection-background: rgba(217, 119, 87, 0.34) !important;
-  --background: #FCFCFB !important;
-  --content: #FCFCFB !important;
-  --foreground: #1F1E1D !important;
-  --sidebar: #F7F5F0 !important;
-  --shell: #F7F5F0 !important;
-  --sidebar-secondary: #ECE9E1 !important;
-  --sidebar-muted: #F2EFE7 !important;
-  --sidebar-border: rgba(0, 0, 0, 0.35) !important;
-  --border: rgba(0, 0, 0, 0.38) !important;
-  --vscode-sideBar-background: #F7F5F0 !important;
-  --card: #FFFFFF !important;
-  --card-border: rgba(0, 0, 0, 0.35) !important;
-  --card-edge: rgba(0, 0, 0, 0.35) !important;
-  --sash-line: rgba(0, 0, 0, 0.35) !important;
-  --secondary-foreground: #0A0A0A !important;
-  --muted-foreground: #1A1A1A !important;
-  --onyx-frame: #ECE9E1 !important;
-  --onyx-well: #F7F5F0 !important;
-  --onyx-raised: #FFFFFF !important;
-  --onyx-selected: #ECE9E1 !important;
-  --onyx-key: #FFFFFF !important;
-  --glass: #F9F7F2 !important;
-  --glass-border: rgba(0, 0, 0, 0.35) !important;
+  --primary-foreground: #FAF9F5 !important;
+  --editor-selection-background: rgba(217, 119, 87, 0.22) !important;
+  --editor-comment-selection-background: rgba(217, 119, 87, 0.14) !important;
+  --background: #FAF9F5 !important;
+  --content: #FAF9F5 !important;
+  --foreground: #141413 !important;
+  --sidebar: #F0EEE6 !important;
+  --shell: #F0EEE6 !important;
+  --sidebar-secondary: #E3DACC !important;
+  --sidebar-muted: #EAE6DC !important;
+  --sidebar-border: #CCCBC8 !important;
+  --border: #CCCBC8 !important;
+  --vscode-sideBar-background: #F0EEE6 !important;
+  --card: #FAF9F5 !important;
+  --card-border: #CCCBC8 !important;
+  --card-edge: #CCCBC8 !important;
+  --sash-line: #CCCBC8 !important;
+  --secondary: #F0EEE6 !important;
+  --secondary-foreground: #3D3D3A !important;
+  --muted: #F0EEE6 !important;
+  --muted-foreground: #73726C !important;
+  --placeholder: #87867F !important;
+  --link: #141413 !important;
+  --error: #B84239 !important;
+  --warning: #9F6B19 !important;
+  --success: #4F7A3E !important;
+  --onyx-frame: #E8E4DA !important;
+  --onyx-well: #F0EEE6 !important;
+  --onyx-raised: #FAF9F5 !important;
+  --onyx-selected: #E3DACC !important;
+  --onyx-key: #F0EEE6 !important;
+  --glass: #FAF9F5 !important;
+  --glass-border: #CCCBC8 !important;
   --glass-highlight: transparent !important;
   --home-glow: transparent !important;
 }
 
-/* 白天预设 2：ClaudeDesktop 净白 (claude-desktop-purewhite) */
+/* 白天预设 2：轻浅象牙纸 (claude-desktop-purewhite · 同样严守零 #FFFFFF 纯冷白红线) */
 html:not([data-ag-theme-mode="dark"]):not(:has(> body.dark))[data-ag-preset="claude-desktop-purewhite"],
 html:not([data-ag-theme-mode="dark"])[data-ag-preset="claude-desktop-purewhite"] body:not(.dark) {
   --primary: #D97757 !important;
-  --editor-selection-background: rgba(217, 119, 87, 0.34) !important;
-  --background: #FCFCFB !important;
-  --content: #FCFCFB !important;
-  --foreground: #1F1E1D !important;
-  --sidebar: #FBFBF9 !important;
-  --shell: #FBFBF9 !important;
-  --sidebar-secondary: #EDECE9 !important;
-  --sidebar-muted: #F3F2EF !important;
-  --sidebar-border: #F0F0EE !important;
-  --border: rgba(44, 43, 41, 0.15) !important;
-  --secondary-foreground: #1F1E1D !important;
-  --muted-foreground: #57534E !important;
-  --vscode-sideBar-background: #FBFBF9 !important;
-  --card: color-mix(in srgb, #FBF9F5 70%, #ffffff) !important;
-  --card-border: color-mix(in srgb, #2C2B29 12%, color-mix(in srgb, #FBF9F5 70%, #ffffff)) !important;
-  --card-edge: rgba(44, 43, 41, 0.14) !important;
-  --sash-line: rgba(44, 43, 41, 0.14) !important;
-  --onyx-frame: #EDECE9 !important;
-  --onyx-well: #FBFBF9 !important;
-  --onyx-raised: #FFFFFF !important;
-  --onyx-selected: #EDECE9 !important;
-  --onyx-key: #FFFFFF !important;
-  --glass: #FFFFFF !important;
-  --glass-border: #F0F0EE !important;
+  --primary-foreground: #FAF9F5 !important;
+  --editor-selection-background: rgba(217, 119, 87, 0.22) !important;
+  --background: #FAF9F5 !important;
+  --content: #FAF9F5 !important;
+  --foreground: #141413 !important;
+  --sidebar: #F5F3EC !important;
+  --shell: #F5F3EC !important;
+  --sidebar-secondary: #E8E4DA !important;
+  --sidebar-muted: #EFECE4 !important;
+  --sidebar-border: #DCDAD3 !important;
+  --border: #DCDAD3 !important;
+  --secondary: #F0EEE6 !important;
+  --secondary-foreground: #3D3D3A !important;
+  --muted: #F0EEE6 !important;
+  --muted-foreground: #73726C !important;
+  --placeholder: #87867F !important;
+  --link: #141413 !important;
+  --vscode-sideBar-background: #F5F3EC !important;
+  --card: #FAF9F5 !important;
+  --card-border: #DCDAD3 !important;
+  --card-edge: #DCDAD3 !important;
+  --sash-line: #DCDAD3 !important;
+  --onyx-frame: #ECE9E0 !important;
+  --onyx-well: #F5F3EC !important;
+  --onyx-raised: #FAF9F5 !important;
+  --onyx-selected: #E8E4DA !important;
+  --onyx-key: #F0EEE6 !important;
+  --glass: #FAF9F5 !important;
+  --glass-border: #DCDAD3 !important;
   --glass-highlight: transparent !important;
   --home-glow: transparent !important;
-  --ag-composer-tray-bg: #F5F4F0;
+  --ag-composer-tray-bg: #F3F1E9;
 }
 
-/* 白天预设 3：复古深色羊皮纸 (vintage-deep) */
+/* 白天预设 3：深暖燕麦羊皮纸 (vintage-deep · Oat Warm / Manilla 色阶强化) */
 html:not([data-ag-theme-mode="dark"]):not(:has(> body.dark))[data-ag-preset="vintage-deep"],
 html:not([data-ag-theme-mode="dark"])[data-ag-preset="vintage-deep"] body:not(.dark) {
   --primary: #D97757 !important;
-  --editor-selection-background: rgba(217, 119, 87, 0.34) !important;
-  --background: #FBF9F5 !important;
-  --content: #FBF9F5 !important;
-  --foreground: #26231E !important;
-  --secondary-foreground: #4A443C !important;
-  --muted-foreground: #6E665C !important;
-  --sidebar: #F1E8DC !important;
-  --shell: #F1E8DC !important;
-  --sidebar-secondary: #E6DCCE !important;
-  --sidebar-muted: #E8DFD1 !important;
-  --sidebar-border: #E0D4C3 !important;
-  --border: rgba(60, 45, 25, 0.18) !important;
-  --vscode-sideBar-background: #F1E8DC !important;
-  --card: #F8F3EC !important;
-  --card-border: rgba(60, 45, 25, 0.22) !important;
-  --card-edge: rgba(60, 45, 25, 0.22) !important;
-  --sash-line: rgba(60, 45, 25, 0.22) !important;
-  --onyx-frame: #E6DCCE !important;
-  --onyx-well: #F1E8DC !important;
-  --onyx-raised: #F8F3EC !important;
-  --onyx-selected: #E6DCCE !important;
-  --onyx-key: #F8F3EC !important;
-  --glass: #F8F3EC !important;
-  --glass-border: #E0D4C3 !important;
+  --primary-foreground: #FAF9F5 !important;
+  --editor-selection-background: rgba(217, 119, 87, 0.24) !important;
+  --background: #F6F3EB !important;
+  --content: #F6F3EB !important;
+  --foreground: #141413 !important;
+  --secondary: #EAE3D5 !important;
+  --secondary-foreground: #3D3D3A !important;
+  --muted: #EAE3D5 !important;
+  --muted-foreground: #6E6A61 !important;
+  --placeholder: #87867F !important;
+  --link: #141413 !important;
+  --sidebar: #EAE2D3 !important;
+  --shell: #EAE2D3 !important;
+  --sidebar-secondary: #DDD2BF !important;
+  --sidebar-muted: #E3DAC9 !important;
+  --sidebar-border: #C9BFA9 !important;
+  --border: #C9BFA9 !important;
+  --vscode-sideBar-background: #EAE2D3 !important;
+  --card: #FAF9F5 !important;
+  --card-border: #C9BFA9 !important;
+  --card-edge: #C9BFA9 !important;
+  --sash-line: #C9BFA9 !important;
+  --onyx-frame: #E0D6C4 !important;
+  --onyx-well: #EAE2D3 !important;
+  --onyx-raised: #FAF9F5 !important;
+  --onyx-selected: #DDD2BF !important;
+  --onyx-key: #EAE2D3 !important;
+  --glass: #FAF9F5 !important;
+  --glass-border: #C9BFA9 !important;
   --glass-highlight: transparent !important;
   --home-glow: transparent !important;
-  --ag-composer-tray-bg: #EAE0CE;
-  --ag-composer-card-bg: #F8F3EC;
-  --code-foreground: #332D25 !important;
+  --ag-composer-tray-bg: #E3DACC;
+  --ag-composer-card-bg: #FAF9F5;
+  --ag-user-bubble-bg: #EAE2D3;
+  --ag-user-bubble-border: #D8CEBC;
+  --ag-inline-code-bg: #EAE2D3;
+  --ag-inline-code-border: #D8CEBC;
+  --ag-code-block-bg: #EAE2D3;
+  --ag-code-block-border: #D8CEBC;
+  --code-foreground: #141413 !important;
 }
 
-/* 白天模式侧栏选中项与高对比边框细节 */
+/* 白天模式侧栏选中项与 1px 石色分割细节 */
 body[data-agy-theme][data-newux-theme="onyx"]:not(.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--sidebar-secondary) !important;
   --row-bg: var(--sidebar-secondary) !important;
   box-shadow: none !important;
 }
 
-html[data-ag-preset="high-contrast"] body:not(.dark) :is(a[class*="inline-flex items-center"], .bg-sidebar a, .bg-sidebar button) {
-  border-color: rgba(0, 0, 0, 0.32) !important;
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="conversation-row-sidebar"], .agy-sidebar-row):not([data-selected="true"]):hover span.truncate {
+  color: #141413 !important;
 }
 
-html[data-ag-preset="high-contrast"] body:not(.dark) .bg-border {
-  background-color: rgba(0, 0, 0, 0.28) !important;
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is(.bg-sidebar a[class*="border"], .bg-sidebar button[class*="border"], a[class*="inline-flex items-center"][class*="border"]) {
+  border-color: var(--border, #CCCBC8) !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .bg-border {
+  background-color: var(--border, #CCCBC8) !important;
 }
 
 
 /* ============================================================================
- * PART III. 独立黑夜模式（Dark Mode · 切换深色按钮时自动激活）
- * 还原 Antigravity 2.30.0 / 2.31.0 官方 onyx Default Dark 基准色系，并专项强化深色可读性与边界可见性
+ * PART III. 黑夜模式（Dark Mode · Anthropic / Claude 暖墨黑反色体系）
+ * 基于官方 Inversion Surface (#141413 Slate Dark) + #3D3D3A 1px 细边 + #FAF9F5 象牙亮字 + #D97757 陶土主按钮
  * ============================================================================ */
 html[data-ag-theme-mode="dark"],
 html[data-ag-theme-mode="dark"] body,
@@ -945,129 +1065,129 @@ body.theme-dark,
 body[data-agy-theme].dark,
 html[data-ag-preset] body.dark,
 html[data-ag-preset] body[data-agy-theme].dark {
-  --background: #070708 !important;
-  --content: #070708 !important;
-  --foreground: #FFFFFF !important;
-  --primary: #2F71E3 !important;
-  --primary-foreground: #FFFFFF !important;
-  --editor-selection-background: rgba(47, 113, 227, 0.40) !important;
-  --editor-comment-selection-background: rgba(47, 113, 227, 0.24) !important;
-  --shell: #111114 !important;
-  --sidebar: #111114 !important;
-  --vscode-sideBar-background: #111114 !important;
-  --sidebar-secondary: rgba(255, 255, 255, 0.105) !important;
-  --sidebar-muted: rgba(255, 255, 255, 0.06) !important;
-  --sidebar-border: rgba(255, 255, 255, 0.11) !important;
-  --secondary: rgba(255, 255, 255, 0.09) !important;
-  --secondary-foreground: #D8DAE3 !important;
-  --muted: rgba(255, 255, 255, 0.055) !important;
-  --muted-foreground: #9EA0AC !important;
-  --placeholder: #7C7E8C !important;
-  --card: #131317 !important;
-  --card-border: rgba(255, 255, 255, 0.115) !important;
-  --card-edge: rgba(255, 255, 255, 0.115) !important;
-  --sash-line: rgba(255, 255, 255, 0.15) !important;
-  --border: rgba(255, 255, 255, 0.10) !important;
-  --glass: #16161C !important;
-  --glass-border: rgba(255, 255, 255, 0.11) !important;
-  --glass-highlight: rgba(255, 255, 255, 0.085) !important;
-  --scrim: rgba(0, 0, 0, 0.68) !important;
-  --onyx-frame: #0D0D11 !important;
-  --onyx-well: #111115 !important;
-  --onyx-raised: #15151A !important;
-  --onyx-selected: #1F1F24 !important;
-  --onyx-key: #24252A !important;
-  --home-glow: color-mix(in srgb, #2F71E3 11%, transparent) !important;
-  --error: #de5555 !important;
-  --warning: #f3c949 !important;
-  --link: #6a9fcb !important;
-  --success: #7aae66 !important;
-  /* 深色背景下禁用黑色润墨阴影，消除亮字边缘发乌光晕 */
+  --background: #141413 !important;
+  --content: #141413 !important;
+  --foreground: #FAF9F5 !important;
+  --primary: #D97757 !important;
+  --primary-foreground: #FAF9F5 !important;
+  --editor-selection-background: rgba(217, 119, 87, 0.30) !important;
+  --editor-comment-selection-background: rgba(217, 119, 87, 0.18) !important;
+  --shell: #191917 !important;
+  --sidebar: #191917 !important;
+  --vscode-sideBar-background: #191917 !important;
+  --sidebar-secondary: #2A2926 !important;
+  --sidebar-muted: rgba(250, 249, 245, 0.05) !important;
+  --sidebar-border: #3D3D3A !important;
+  --secondary: #262522 !important;
+  --secondary-foreground: #D5D3CA !important;
+  --muted: #1C1B19 !important;
+  --muted-foreground: #B0AEA5 !important;
+  --placeholder: #87867F !important;
+  --card: #1F1E1C !important;
+  --card-border: #3D3D3A !important;
+  --card-edge: #3D3D3A !important;
+  --sash-line: #3D3D3A !important;
+  --border: #3D3D3A !important;
+  --glass: #1F1E1C !important;
+  --glass-border: #3D3D3A !important;
+  --glass-highlight: transparent !important;
+  --scrim: rgba(12, 12, 11, 0.72) !important;
+  --onyx-frame: #111110 !important;
+  --onyx-well: #191917 !important;
+  --onyx-raised: #1F1E1C !important;
+  --onyx-selected: #2A2926 !important;
+  --onyx-key: #262522 !important;
+  --home-glow: transparent !important;
+  --error: #D96055 !important;
+  --warning: #D9A441 !important;
+  --link: #FAF9F5 !important;
+  --success: #78A562 !important;
   --ag-ink-shadow-xs: none !important;
   --ag-ink-shadow-sm: none !important;
   --ag-ink-shadow-md: none !important;
-  /* 黑夜模式组件级色彩变量绑定 */
-  --ag-composer-tray-bg: #0D0D11;
-  --ag-composer-card-bg: #15151A;
-  --ag-composer-card-border: rgba(255, 255, 255, 0.075);
-  --ag-composer-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 3px 10px -2px rgba(0, 0, 0, 0.35);
-  --ag-composer-card-focus-border: rgba(255, 255, 255, 0.11);
-  --ag-composer-card-focus-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 18px -3px rgba(0, 0, 0, 0.45);
-  --ag-seal-home-border: rgba(255, 255, 255, 0.085);
-  --ag-seal-home-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.45);
-  --ag-seal-home-focus-border: rgba(255, 255, 255, 0.18);
-  --ag-seal-home-focus-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.55);
-  --ag-seal-chat-border: rgba(255, 255, 255, 0.14);
-  --ag-seal-chat-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.5);
-  --ag-seal-chat-focus-border: var(--ag-dark-wax-seal-hover, rgba(47, 113, 227, 0.72));
-  --ag-seal-chat-focus-shadow: 0 0 0 1px rgba(47, 113, 227, 0.18), 0 18px 40px -12px rgba(0, 0, 0, 0.55);
-  --ag-seal-off-border: rgba(255, 255, 255, 0.12);
-  --ag-composer-top-fg: #D8DAE3;
-  --ag-composer-top-hover-bg: rgba(255, 255, 255, 0.08);
-  --ag-composer-top-hover-fg: #FFFFFF;
-  --ag-composer-ctrl-fg: #D8DAE3;
-  --ag-send-btn-bg: var(--primary, #2F71E3);
-  --ag-send-btn-hover-bg: #3B7EEF;
-  --ag-send-btn-border: rgba(255, 255, 255, 0.18);
-  --ag-send-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1.5px 0 rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --ag-sidebar-fg: #E4E5EC;
-  --ag-sidebar-row-fg: #D4D6DF;
-  --ag-sidebar-header-fg: #C8CAD4;
-  --ag-sidebar-header-title-fg: #EAEBF1;
-  --ag-sidebar-selected-fg: #FFFFFF;
-  --ag-sidebar-muted-fg: #989AA6;
-  --ag-menu-item-fg: #EAEBF1;
-  --ag-menu-header-fg: #9EA0AC;
-  --ag-dialog-title-fg: #FFFFFF;
-  --ag-dialog-item-fg: #EAEBF1;
-  --code-foreground: #EAEBF1 !important;
+  /* 黑夜模式组件级色彩变量绑定（扁平无投影，昼夜统一） */
+  --ag-composer-tray-bg: #1B1A18;
+  --ag-composer-card-bg: #23221F;
+  --ag-composer-card-border: rgba(250, 249, 245, 0.07);
+  --ag-composer-card-shadow: none;
+  --ag-composer-card-focus-border: #3D3D3A;
+  --ag-composer-card-focus-shadow: none;
+  --ag-seal-home-border: #3D3D3A;
+  --ag-seal-home-shadow: none;
+  --ag-seal-home-focus-border: var(--ag-dark-wax-seal-hover, #87867F);
+  --ag-seal-home-focus-shadow: none;
+  --ag-seal-chat-border: #3D3D3A;
+  --ag-seal-chat-hover-border: #5E5D58;
+  --ag-seal-chat-shadow: none;
+  --ag-seal-chat-focus-border: var(--ag-dark-wax-seal-hover, #87867F);
+  --ag-seal-chat-focus-shadow: none;
+  --ag-seal-off-border: #3D3D3A;
+  --ag-input-focus-border: #87867F;
+  --ag-composer-top-fg: #B0AEA5;
+  --ag-composer-top-hover-bg: rgba(250, 249, 245, 0.07);
+  --ag-composer-top-hover-fg: #FAF9F5;
+  --ag-composer-ctrl-fg: #CBC9C0;
+  --ag-send-btn-bg: #D97757;
+  --ag-send-btn-hover-bg: #C6613F;
+  --ag-send-btn-border: transparent;
+  --ag-send-btn-shadow: none;
+  --ag-sidebar-fg: #D5D3CA;
+  --ag-sidebar-row-fg: #CBC9C0;
+  --ag-sidebar-header-fg: #B0AEA5;
+  --ag-sidebar-header-title-fg: #FAF9F5;
+  --ag-sidebar-selected-fg: #FAF9F5;
+  --ag-sidebar-muted-fg: #87867F;
+  --ag-menu-item-fg: #FAF9F5;
+  --ag-menu-header-fg: #B0AEA5;
+  --ag-dialog-title-fg: #FAF9F5;
+  --ag-dialog-item-fg: #FAF9F5;
+  --ag-user-bubble-bg: #21201E;
+  --ag-user-bubble-border: #3D3D3A;
+  --ag-prose-link-underline: #87867F;
+  --ag-inline-code-bg: #21201E;
+  --ag-inline-code-border: #3D3D3A;
+  --ag-code-block-bg: #191917;
+  --ag-code-block-border: #3D3D3A;
+  --code-foreground: #FAF9F5 !important;
 }
 
-/* 黑夜模式侧栏选中态：还原官方 onyx.dark 立体微高光胶囊 (#1F1F24) */
+/* 黑夜模式侧栏选中态：扁平暖石板填充，移除立体内发光投影 */
 body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selected="true"],
 :is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-sidebar-row[data-selected="true"] {
-  background-color: var(--onyx-selected, #1F1F24) !important;
-  --row-bg: var(--onyx-selected, #1F1F24) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.07) !important;
+  background-color: var(--onyx-selected, #2A2926) !important;
+  --row-bg: var(--onyx-selected, #2A2926) !important;
+  box-shadow: none !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox button:not([data-testid="send-button"]):not([data-testid="voice-start-button"]):not([data-testid="input-cancel-button"]):hover,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox button:not([data-testid="send-button"]):not([data-testid="voice-start-button"]):not([data-testid="input-cancel-button"]):hover :is(span, svg) {
-  color: #FFFFFF !important;
+  color: #FAF9F5 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) :is([data-testid="conversation-row-sidebar"], .agy-sidebar-row):not([data-selected="true"]):hover span.truncate {
-  color: #FFFFFF !important;
+  color: #FAF9F5 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) :is(.bg-sidebar a[class*="border"], .bg-sidebar button[class*="border"], a[class*="inline-flex items-center"][class*="border"]) {
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--border, #3D3D3A) !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) .bg-border {
-  background-color: rgba(255, 255, 255, 0.10) !important;
+  background-color: var(--border, #3D3D3A) !important;
 }
 
-/* 黑夜模式正文阅读与行内代码可读性微调 */
+/* 黑夜模式正文阅读色阶（暖象牙亮字，不刺眼） */
 :is(html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) :is([data-markdown-root], [data-testid="user-message-content"], .prose, .markdown) {
-  color: #ECEEF4;
+  color: #EDEBE4;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) :is([data-markdown-root], [data-testid="user-message-content"], .select-text, .prose, .markdown) :is(h1, h2, h3, h4, h5, h6, strong, b) {
-  color: #FFFFFF;
-}
-
-:is(html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) :is([data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
-  background-color: rgba(255, 255, 255, 0.085);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 5px;
-  padding: 0.12em 0.36em;
-  color: #EAEBF1 !important;
+  color: #FAF9F5;
 }
 
 
 /* ============================================================================
- * PART IV. 模型名称同行实时指标胶囊与悬浮详情卡（结构共用 + 白天/黑夜色彩自适应）
+ * PART IV. 模型名称同行实时指标胶囊与悬浮详情卡（扁平无阴影 + 1px 石色/暖墨细边）
  * ============================================================================ */
 #antigravity\.agentSidePanelInputBox div[data-ag-row-mode] > div:first-child {
   overflow: hidden !important;
@@ -1093,14 +1213,14 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   height: 22px;
   margin-left: 2px;
   margin-right: 0;
-  padding: 0 2px 0 5px;
-  border-left: 1px solid rgba(0, 0, 0, 0.22);
+  padding: 0 2px 0 6px;
+  border-left: 1px solid #CCCBC8;
   font-family: var(--font-sans) !important;
   font-variant-numeric: tabular-nums !important;
   font-size: 11px !important;
   font-weight: 500 !important;
   letter-spacing: -0.02em !important;
-  color: #262422 !important;
+  color: #3D3D3A !important;
   opacity: 0.92 !important;
   line-height: 1 !important;
   white-space: nowrap;
@@ -1113,7 +1233,7 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
 #ag-live-metrics-pill:hover,
 #ag-live-metrics-pill:hover #ag-live-metrics-text {
   opacity: 1 !important;
-  color: #0A0A0A !important;
+  color: #141413 !important;
 }
 
 #ag-live-metrics-pill[data-ag-row-mode="bottom"] {
@@ -1128,7 +1248,7 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   margin: 2px 4px 1px 4px !important;
   padding: 2px 4px 0 6px !important;
   border-left: none !important;
-  border-top: 1px dashed rgba(0, 0, 0, 0.14) !important;
+  border-top: 1px solid #E3DACC !important;
 }
 
 #ag-live-metrics-pill #ag-live-metrics-text {
@@ -1154,39 +1274,39 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
 
 #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-warn,
 #ag-live-metrics-pill .ag-ctx-warn {
-  color: #B45309 !important;
+  color: #9F6B19 !important;
   font-weight: 600 !important;
 }
 
 #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-crit,
 #ag-live-metrics-pill .ag-ctx-crit {
-  color: #DC2626 !important;
+  color: #B84239 !important;
   font-weight: 700 !important;
 }
 
-/* 黑夜模式指标胶囊配色与高可见预警色 */
+/* 黑夜模式指标胶囊配色 */
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill {
-  color: #C8CAD4 !important;
-  border-left-color: rgba(255, 255, 255, 0.18) !important;
+  color: #B0AEA5 !important;
+  border-left-color: #3D3D3A !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill:hover,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill:hover #ag-live-metrics-text {
-  color: #FFFFFF !important;
+  color: #FAF9F5 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill[data-ag-row-mode="bottom"] {
-  border-top-color: rgba(255, 255, 255, 0.14) !important;
+  border-top-color: #3D3D3A !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-warn,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill .ag-ctx-warn {
-  color: #FBBF24 !important;
+  color: #D9A441 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-crit,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill .ag-ctx-crit {
-  color: #F87171 !important;
+  color: #D96055 !important;
 }
 
 #ag-live-metrics-tooltip {
@@ -1196,15 +1316,15 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   max-width: 450px;
   padding: 10px 12px;
   border-radius: 8px;
-  background-color: var(--card, #F9F7F2) !important;
-  border: 1px solid var(--card-border, rgba(0, 0, 0, 0.35)) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+  background-color: var(--card, #FAF9F5) !important;
+  border: 1px solid var(--border, #CCCBC8) !important;
+  box-shadow: none !important;
   font-family: var(--font-sans) !important;
   font-variant-numeric: tabular-nums;
   font-size: 12px !important;
   line-height: 1.55 !important;
   letter-spacing: -0.01em !important;
-  color: var(--foreground, #1F1E1D) !important;
+  color: var(--foreground, #141413) !important;
   text-align: left;
   white-space: normal;
   opacity: 0;
@@ -1227,8 +1347,8 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   font-weight: 600 !important;
   font-size: 12px !important;
   letter-spacing: -0.005em !important;
-  color: #0A0A0A !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.14);
+  color: #141413 !important;
+  border-bottom: 1px solid #E3DACC;
   padding-bottom: 4px;
   margin-bottom: 6px;
 }
@@ -1246,34 +1366,34 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
 }
 
 #ag-live-metrics-tooltip .ag-tt-lbl {
-  color: #57534E !important;
+  color: #73726C !important;
   flex-shrink: 0;
 }
 
 #ag-live-metrics-tooltip .ag-tt-val {
-  color: #0A0A0A !important;
+  color: #141413 !important;
   font-weight: 500 !important;
   font-variant-numeric: tabular-nums !important;
   text-align: right;
 }
 
-/* 黑夜模式悬浮指标详情卡配色 */
+/* 黑夜模式悬浮指标详情卡配色（扁平无阴影） */
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-tooltip {
-  background-color: var(--onyx-raised, #18181E) !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4) !important;
-  color: #EAEBF1 !important;
+  background-color: var(--card, #1F1E1C) !important;
+  border-color: var(--border, #3D3D3A) !important;
+  box-shadow: none !important;
+  color: #FAF9F5 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-tooltip .ag-tt-hdr {
-  color: #FFFFFF !important;
-  border-bottom-color: rgba(255, 255, 255, 0.12) !important;
+  color: #FAF9F5 !important;
+  border-bottom-color: #3D3D3A !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-tooltip .ag-tt-lbl {
-  color: #9EA0AC !important;
+  color: #B0AEA5 !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-tooltip .ag-tt-val {
-  color: #FFFFFF !important;
+  color: #FAF9F5 !important;
 }

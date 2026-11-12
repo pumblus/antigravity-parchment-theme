@@ -475,8 +475,8 @@
         document.documentElement.setAttribute('data-ag-theme-mode', targetMode);
         try {
           const cs = getComputedStyle(document.body || document.documentElement);
-          const sidebarBg = cs.getPropertyValue('--sidebar').trim() || (isDark ? '#111114' : '#F7F5F0');
-          const fgColor = cs.getPropertyValue('--foreground').trim() || (isDark ? '#FAFAFA' : '#1F1E1D');
+          const sidebarBg = cs.getPropertyValue('--sidebar').trim() || (isDark ? '#191917' : '#F0EEE6');
+          const fgColor = cs.getPropertyValue('--foreground').trim() || (isDark ? '#FAF9F5' : '#141413');
           window.electronNative?.setTitleBarOverlay?.({
             color: sidebarBg,
             symbolColor: fgColor

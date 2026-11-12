@@ -102,6 +102,28 @@ test('Anthropic font aliases, PingFang CJK fallback order, and discrete weights 
   assert.doesNotMatch(css, /font-weight:\s*(?:450|520)\b/);
 });
 
+test('Anthropic UI specification tokens: zero pure #FFFFFF, zero drop shadows, warm parchment & Slate Dark', () => {
+  // Strip comments before checking hex tokens so documentation notes about "零 #FFFFFF" do not trigger false positives.
+  const uncommented = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(uncommented, /#ffffff\b/i, 'No pure #FFFFFF cold white surfaces or text');
+  assert.doesNotMatch(uncommented, /#74221a\b/i, 'Legacy dark-red wax-seal border removed');
+  assert.doesNotMatch(uncommented, /#2f71e3\b/i, 'Legacy cold Google blue dark-mode primary removed');
+  assert.doesNotMatch(uncommented, /#070708\b/i, 'Legacy cold onyx black background removed');
+
+  for (const token of [
+    '--color-slate-dark: #141413',
+    '--color-slate-medium: #3D3D3A',
+    '--color-stone: #CCCBC8',
+    '--color-ivory-light: #FAF9F5',
+    '--color-ivory-medium: #F0EEE6',
+    '--color-oat-warm: #E3DACC',
+    '--color-clay: #D97757',
+    '--color-clay-deep: #C6613F',
+  ]) {
+    assert.ok(uncommented.includes(token), token);
+  }
+});
+
 for (const mode of ['light', 'dark']) {
   test(`typography computed styles (${mode})`, async t => {
     const { chromium } = require('playwright');
@@ -128,7 +150,16 @@ for (const mode of ['light', 'dark']) {
         <h1 id="markdown-h1">Heading</h1>
         <h2 id="markdown-h2">Subheading</h2>
         <h2 data-testid="home-greeting" id="protected-greeting">Prose greeting</h2>
-        <p>Press <kbd id="markdown-kbd">⌘K</kbd> or run <code id="markdown-code">npm test</code></p>
+        <p>Press <kbd id="markdown-kbd">⌘K</kbd>, visit <a href="https://anthropic.com" id="markdown-link">Anthropic</a>, or run <code id="markdown-code">npm test</code></p>
+        <pre id="markdown-pre"><code>const ok = true;</code></pre>
+      </div>
+      <div class="agy-user-bubble" id="user-bubble">User prompt</div>
+      <div id="antigravity.agentSidePanelInputBox" class="surface-composer bg-card-border">
+        <div class="surface-composer-card bg-card" id="composer-card">
+          <div data-lexical-editor="true" id="lexical-box"><span data-lexical-text="true" id="lexical-span">Prompt</span></div>
+          <p class="pointer-events-none" id="placeholder">Placeholder</p>
+          <button data-testid="send-button" id="send-btn">Send</button>
+        </div>
       </div>
       <div class="tool-call-header">
         <code class="thought-header" id="self-code">Code header</code>
@@ -137,9 +168,7 @@ for (const mode of ['light', 'dark']) {
         <span class="codicon" id="icon" style="font-family: codicon">Icon</span>
       </div>
       <textarea id="textarea">Typing</textarea>
-      <input id="text-input" value="Search query">
-      <div data-lexical-editor="true" id="lexical-box"><span data-lexical-text="true" id="lexical-span">Prompt</span></div>
-      <p class="pointer-events-none" id="placeholder">Placeholder</p>
+      <input id="text-input" placeholder="Search conversations" value="Search query">
       <div contenteditable="true"><code id="code-in-editable">const a = 1;</code></div>
       <div class="monaco-editor"><textarea id="monaco-textarea"></textarea></div>
       <div class="xterm"><textarea id="xterm-textarea"></textarea></div>
@@ -239,6 +268,50 @@ for (const mode of ['light', 'dark']) {
       assert.ok(faces.some(f => f.family === '"Anthropic Serif"' && f.style === 'italic' && f.src.includes('AnthropicSerifText-Italic')));
       assert.ok(faces.some(f => f.family === '"Anthropic Sans"' && f.style === 'italic' && f.src.includes('AnthropicSansText-Italic')));
       assert.ok(faces.some(f => f.family === '"Anthropic Mono"' && f.style === 'italic' && f.src.includes('AnthropicMonoWebWeb-RegularItalic')));
+    });
+
+    await t.test('UI surfaces, 1px hairline borders, zero drop-shadow, Clay CTA & underlined links follow Anthropic spec', async () => {
+      const bodyVars = await page.evaluate(() => {
+        const cs = getComputedStyle(document.body);
+        return {
+          bg: cs.getPropertyValue('--background').trim(),
+          sidebar: cs.getPropertyValue('--sidebar').trim(),
+          fg: cs.getPropertyValue('--foreground').trim(),
+          border: cs.getPropertyValue('--border').trim(),
+          primary: cs.getPropertyValue('--primary').trim(),
+        };
+      });
+      if (mode === 'light') {
+        assert.equal(bodyVars.bg, '#FAF9F5');
+        assert.equal(bodyVars.sidebar, '#F0EEE6');
+        assert.equal(bodyVars.fg, '#141413');
+        assert.equal(bodyVars.border, '#CCCBC8');
+        assert.equal(bodyVars.primary, '#D97757');
+      } else {
+        assert.equal(bodyVars.bg, '#141413');
+        assert.equal(bodyVars.sidebar, '#191917');
+        assert.equal(bodyVars.fg, '#FAF9F5');
+        assert.equal(bodyVars.border, '#3D3D3A');
+        assert.equal(bodyVars.primary, '#D97757');
+      }
+
+      const composerTray = page.locator('[id="antigravity.agentSidePanelInputBox"]');
+      assert.equal(await composerTray.evaluate(el => getComputedStyle(el).boxShadow), 'none');
+      assert.equal(await composerTray.evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
+      assert.equal(await styleOf('composer-card', 'boxShadow'), 'none');
+      assert.equal(await styleOf('composer-card', 'borderTopWidth'), '1px');
+
+      // Primary Send CTA uses Anthropic Clay (#D97757 -> rgb(217, 119, 87)) with #FAF9F5 text and zero shadow.
+      assert.equal(await styleOf('send-btn', 'backgroundColor'), 'rgb(217, 119, 87)');
+      assert.equal(await styleOf('send-btn', 'color'), 'rgb(250, 249, 245)');
+      assert.equal(await styleOf('send-btn', 'boxShadow'), 'none');
+
+      // Prose links keep a persistent 1px editorial underline; code blocks, bubbles & tooltips stay flat.
+      assert.equal(await styleOf('markdown-link', 'textDecorationLine'), 'underline');
+      assert.equal(await styleOf('markdown-link', 'textDecorationThickness'), '1px');
+      assert.equal(await styleOf('markdown-pre', 'boxShadow'), 'none');
+      assert.equal(await styleOf('user-bubble', 'boxShadow'), 'none');
+      assert.equal(await styleOf('ag-live-metrics-tooltip', 'boxShadow'), 'none');
     });
   });
 }
