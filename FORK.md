@@ -11,7 +11,7 @@
 
 1. 保留上游 2.31.1 的新增行为：大小写兜底词典查找（精确匹配优先、避免误译小写标识符）、对话轮次跳转/历史加载动态标签、侧栏 `data-active=""` 状态、Node 22 SQLite 实验性警告处理。
 2. 保留上游昼夜主题、输入框/指标胶囊布局、SQLite 增量指标、翻译隔离与热重载清理机制。
-3. 在上游 Windows/macOS Web 字体别名之后补入 Text/Display 本地字体别名。Display 只用于明确的首页欢迎语；思考/工具标题只匹配明确的 header 类名和 test ID，不全局覆盖 `.font-mono`、`h1` 或 `h2`。代码、路径、终端、编辑器、数学公式和 Markdown 保持原字体策略。
+3. 严格对齐 Anthropic 设计规范重构字体体系：补齐 `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Sans` / `Anthropic Sans Display` / `Anthropic Mono` 的 `300/400/500/600/700` 静态字重与真斜体（`italic`）映射（保留上游可变 Web 字体优先）；西文与数字严格遵循 Anthropic 三族及纯西文回退，中文统一优先回退 `PingFang SC`；打字输入框（Lexical / `textarea` / `input` / 占位符）、快捷键 `<kbd>`、实时指标胶囊与悬浮面板统一回归 `Anthropic Sans`（指标配 `tabular-nums` 等宽数字），首页欢迎语采用 `Anthropic Serif Display`（`400`），代码、路径、Monaco 编辑器与终端严格保留 `Anthropic Mono`，清理非标 `450`/`520` 字重与人工 `text-shadow`。
 4. 保留上游全部 1094 个词条，词典扩至 1123 条（忽略大小写也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式 (Turbo)”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更且默认字段齐全时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
 

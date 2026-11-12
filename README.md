@@ -1,6 +1,6 @@
 # Antigravity 主题融合分支 · 5.1.5-eric.1
 
-基于 [Anarcadia 上游 v5.1.5](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/b348d3b790fa65bb4f9e86b1ae02a5c894c62109)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2)。保留上游昼夜主题、2.31.1 兼容、实时指标与生命周期清理，补齐 Text/Display 字体别名，收窄思考/工具标题字体规则，改善权限文案与常用汉化。词典共 1123 条，保留上游全部 1094 个词条与新的大小写兜底查找。
+基于 [Anarcadia 上游 v5.1.5](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/b348d3b790fa65bb4f9e86b1ae02a5c894c62109)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.1 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1123 条，保留上游全部 1094 个词条与新的大小写兜底查找。
 
 **本分支为独立集成版，不是上游发布。** 移除了自动调用仓库外 Python 二进制补丁的行为；不引入 `--sync-user`，安装保留已有用户文件及自定义选择器。变更边界、验证方法与限制见 [FORK.md](FORK.md)。下方截图为上游参考，不代表本分支已完成 Antigravity 实机验收。
 
@@ -50,7 +50,7 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 - **🌓 昼夜双模式独立解耦（暖纸白天 + 官方碳黑黑夜）**：
   - **白天模式（Light）**：内置 **高对比暖白**（默认，暖燕麦侧栏 `#F7F5F0` + 微暖亮白主区 `#FCFCFB` + 深墨文字 `#0A0A0A`）、**ClaudeDesktop 净白** 与 **复古深色羊皮纸** 三套护眼预设；
   - **黑夜模式（Dark）**：当你点击设置中的「深色 / Dark」按钮（或跟随系统深色）时，**100% 保持四层字体与 UI 形状要素不变**，同时 `0ms` 自动还原 **Antigravity `2.30.0 ~ 2.31.1` 官方无补丁时的 `onyx` Default Dark 碳黑配色方案**（`#070708` 主背景 / `#111114` 侧栏 / `#15151A` 悬浮输入卡 / `#2F71E3` 官方品牌蓝），并专项提升深色下的文字对比度、卡片边界与指标可读性。
-- **🔤 四层字体排版（昼夜完全共用 · 原生适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：UI 控件采用 `Anthropic Sans` + `Sarasa UI SC`，阅读正文采用 `Anthropic Serif` 古典衬线 + `Sarasa Mono Slab SC`，代码与终端采用严格 1:2 等宽，主输入框独立配置 Codex 同款打字机板状粗衬线。
+- **🔤 Anthropic 规范三族排版（昼夜完全共用 · 原生适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字严格按角色分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）统一采用 `Anthropic Sans`，阅读散文采用 `Anthropic Serif`（首页欢迎语采用 `Anthropic Serif Display`），代码块、文件路径、Monaco 编辑器与终端严格限定 `Anthropic Mono`；中文统一优先采用 `PingFang SC`（跨平台自动回退更纱/雅黑）。
 - **🕯️ 输入框三态 `1.5px` 交互结构**：区分「新建对话首页」与「日常聊天会话」自动切换外框呼吸感与聚焦反馈（白天为古朴暗红蜡封，黑夜为官方微亮边与 `#2F71E3` 品牌蓝聚焦光环）。
 - **🇨🇳 1,094 条零大小写冲突深度汉化 + 首字母大写不敏感兜底索引（`DICT_CI`） + ⚡ `O(1)` 增量实时指标胶囊**：全覆盖 `2.31.1` 新增的 Fork / Best of N / 定时任务（Scheduled Tasks）/ 快捷键编辑器 / 远程控制二维码 / 沙箱与浏览器执行权限 / 插件主题外观及全部命令面板标签（基于 `WeakMap` `O(1)` 隔离保护代码块、Monaco 编辑器、终端与对话正文不误伤），并在输入框底部同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、`256k` 上下文水位及缓存命中率详情面板。
 

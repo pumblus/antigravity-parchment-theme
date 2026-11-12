@@ -1,52 +1,257 @@
+/* 1. Anthropic Serif（Text 光学字号：正文散文、引用、列表、Markdown 小标题）
+ * 优先保留上游 Windows/macOS 可变 Web 字体别名，紧接静态 OTF 精确字重与真斜体映射。 */
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextRegular'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif');
-  font-weight: 300 599;
+  src: local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Light'), local('AnthropicSerifText-Light'), local('Anthropic Serif');
+  font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextSemibold'), local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Web Display Light'), local('AnthropicSerifWebWeb-TextRegular');
+  src: local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Web'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular'), local('Anthropic Serif');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextMedium'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Medium'), local('AnthropicSerifText-Medium'), local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextSemibold'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Semibold'), local('AnthropicSerifText-Semibold'), local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold'), local('Anthropic Serif Text Extrabold'), local('AnthropicSerifText-Extrabold');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextItalic'), local('Anthropic Serif Web Italic'), local('Anthropic Serif Text Italic'), local('AnthropicSerifText-Italic'), local('Anthropic Serif Italic');
+  font-weight: 300 499;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextMediumItalic'), local('Anthropic Serif Text Medium Italic'), local('AnthropicSerifText-MediumItalic'), local('Anthropic Serif Text Italic'), local('AnthropicSerifText-Italic');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextSemiboldItalic'), local('Anthropic Serif Text Semibold Italic'), local('AnthropicSerifText-SemiboldItalic'), local('Anthropic Serif Text Bold Italic'), local('AnthropicSerifText-BoldItalic');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif';
+  src: local('AnthropicSerifWebWeb-TextBoldItalic'), local('Anthropic Serif Web Bold Italic'), local('Anthropic Serif Text Bold Italic'), local('AnthropicSerifText-BoldItalic'), local('Anthropic Serif Text Extrabold Italic'), local('AnthropicSerifText-ExtraboldItalic');
+  font-weight: 700 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* 2. Anthropic Serif Display（Display 光学字号：首页迎宾欢迎语与社论感大标题） */
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Light'), local('AnthropicSerifDisplay-Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Web');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display'), local('Anthropic Serif Display Regular'), local('AnthropicSerifDisplay-Regular'), local('Anthropic Serif Web Display Regular'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextRegular');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Medium'), local('AnthropicSerifDisplay-Medium'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Web');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Semibold'), local('Anthropic Serif Display Smbold'), local('AnthropicSerifDisplay-Semibold'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextSemibold');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Bold'), local('AnthropicSerifDisplay-Bold'), local('Anthropic Serif Display Extrabold'), local('AnthropicSerifDisplay-Extrabold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Web Display Light');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Italic'), local('AnthropicSerifDisplay-Italic'), local('Anthropic Serif Display Medium Italic'), local('AnthropicSerifDisplay-MediumItalic'), local('Anthropic Serif Web Italic');
+  font-weight: 300 599;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Serif Display';
+  src: local('Anthropic Serif Display Semibold Italic'), local('AnthropicSerifDisplay-SemiboldItalic'), local('Anthropic Serif Display Bold Italic'), local('AnthropicSerifDisplay-BoldItalic');
   font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* 3. Anthropic Sans（Text 光学字号：全局 UI 骨架、输入框、按钮、菜单、指标胶囊） */
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Light'), local('AnthropicSansText-Light'), local('Anthropic Sans');
+  font-weight: 300;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextRegular'), local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular'), local('Anthropic Sans');
-  font-weight: 300 599;
+  src: local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular'), local('Anthropic Sans');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextSemibold'), local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold'), local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web Display Light'), local('AnthropicSansWebVariable-TextRegular');
-  font-weight: 600 900;
+  src: local('AnthropicSansWebVariable-TextMedium'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Medium'), local('AnthropicSansText-Medium'), local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular');
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
-/* PR #2 的静态 Display 别名；正文/UI 仍优先使用上游 Windows 可变 Web 字体。 */
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextSemibold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Semibold'), local('AnthropicSansText-Semibold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold'), local('Anthropic Sans Text Extrabold'), local('AnthropicSansText-Extrabold');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextItalic'), local('Anthropic Sans Web Italic'), local('Anthropic Sans Text Italic'), local('AnthropicSansText-Italic'), local('Anthropic Sans Italic');
+  font-weight: 300 499;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextMediumItalic'), local('Anthropic Sans Text Medium Italic'), local('AnthropicSansText-MediumItalic'), local('Anthropic Sans Text Italic'), local('AnthropicSansText-Italic');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans';
+  src: local('AnthropicSansWebVariable-TextBoldItalic'), local('Anthropic Sans Web Bold Italic'), local('Anthropic Sans Text Bold Italic'), local('AnthropicSansText-BoldItalic'), local('Anthropic Sans Text Extrabold Italic'), local('AnthropicSansText-ExtraboldItalic');
+  font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* 4. Anthropic Sans Display（供宣言式大标题或用户自定义显式调用，不混入默认小字 UI 栈） */
 @font-face {
   font-family: 'Anthropic Sans Display';
-  src: local('Anthropic Sans Display'), local('Anthropic Sans Display Regular'), local('AnthropicSansDisplay-Regular');
+  src: local('Anthropic Sans Display Light'), local('AnthropicSansDisplay-Light'), local('Anthropic Sans Web Display Light');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display'), local('Anthropic Sans Display Regular'), local('AnthropicSansDisplay-Regular'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Web');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display Medium'), local('AnthropicSansDisplay-Medium'), local('Anthropic Sans Web Display Light');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display Semibold'), local('AnthropicSansDisplay-Semibold'), local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold'), local('Anthropic Sans Display Extrabold'), local('AnthropicSansDisplay-Extrabold'), local('Anthropic Sans Web Bold');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anthropic Sans Display';
+  src: local('Anthropic Sans Display Italic'), local('AnthropicSansDisplay-Italic'), local('Anthropic Sans Display Medium Italic'), local('AnthropicSansDisplay-MediumItalic');
   font-weight: 300 599;
-  font-style: normal;
+  font-style: italic;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Anthropic Sans Display';
-  src: local('Anthropic Sans Display Bold'), local('AnthropicSansDisplay-Bold');
+  src: local('Anthropic Sans Display Bold Italic'), local('AnthropicSansDisplay-BoldItalic'), local('Anthropic Sans Display Extrabold Italic'), local('AnthropicSansDisplay-ExtraboldItalic');
   font-weight: 600 900;
-  font-style: normal;
+  font-style: italic;
   font-display: swap;
 }
 
+/* 5. Anthropic Mono（严格仅用于代码块、终端、编辑器与文件路径） */
 @font-face {
   font-family: 'Anthropic Mono';
   src: local('AnthropicMonoWebWeb-Regular'), local('Anthropic Mono Web Regular'), local('Anthropic Mono Web'), local('Anthropic Mono');
@@ -55,8 +260,18 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Anthropic Mono';
+  src: local('AnthropicMonoWebWeb-RegularItalic'), local('Anthropic Mono Web Regular Italic'), local('Anthropic Mono Italic');
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* ============================================================================
- * PART I. 全局共享层：四层字体栈、字重级阶与 UI 几何形状（白天与黑夜模式 100% 共用）
+ * PART I. 全局共享层：Anthropic 规范字体体系、字重级阶与 UI 几何形状（昼夜 100% 共用）
+ * 西文与数字严格遵循 Anthropic 官方三族（Sans / Serif / Mono）及纯西文回退；
+ * 中文统一优先回退 PingFang SC（跨平台依次回退 Hiragino / 更纱 / 雅黑）。
  * ============================================================================ */
 :root,
 html,
@@ -67,10 +282,12 @@ body[data-agy-font],
 body[data-agy-font="google-sans"],
 body[data-agy-font="inter"],
 body[data-agy-font] :where(.font-sans) {
-  --vscode-font-family: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Display', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
-  --editor-font-family: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
-  --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Display', 'Anthropic Sans Web Display Light', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'anthropic-sans', 'Styrene B', 'Styrene', 'Sarasa UI SC', '更纱黑体 UI SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif !important;
-  --font-mono: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
+  --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'Anthropic Sans Web Display Light', 'anthropic-sans', 'Styrene B', 'Styrene', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  --font-serif: 'Anthropic Serif', 'Anthropic Serif Text', 'Anthropic Serif Web', 'Anthropic Serif Web Text Light', 'Anthropic Serif Web Display Light', 'anthropic-serif', 'Tiempos Text', 'Tiempos', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
+  --font-serif-display: 'Anthropic Serif Display', 'Anthropic Serif', 'Anthropic Serif Web Display Light', 'Anthropic Serif Web', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
+  --font-mono: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'PingFang SC', 'Sarasa Mono SC', '等距更纱黑体 SC', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', 'Maple Mono NF CN', 'Microsoft YaHei UI', monospace !important;
+  --vscode-font-family: var(--font-sans) !important;
+  --editor-font-family: var(--font-mono) !important;
   --default-font-family: var(--font-sans) !important;
   --default-mono-font-family: var(--font-mono) !important;
   --font-weight-light: 300 !important;
@@ -90,9 +307,9 @@ body[data-agy-font] :where(.font-sans) {
   --ag-chat-font-size: 16px;
   --ag-wax-seal-hover: #74221A;
   --ag-dark-wax-seal-hover: rgba(47, 113, 227, 0.72);
-  --ag-ink-shadow-xs: 0 0 0.15px rgba(38, 36, 34, 0.25);
-  --ag-ink-shadow-sm: 0 0 0.2px rgba(38, 36, 34, 0.35);
-  --ag-ink-shadow-md: 0 0 0.25px rgba(10, 10, 10, 0.4);
+  --ag-ink-shadow-xs: none;
+  --ag-ink-shadow-sm: none;
+  --ag-ink-shadow-md: none;
 }
 
 html[data-ag-os="win32"] {
@@ -129,13 +346,24 @@ body[data-agy-font] :where(i, em, .italic):not(.codicon, .google-symbols) {
   font-style: italic !important;
 }
 
-/* 1. UI 控件与全局界面：Anthropic Sans + 更纱 UI */
+/* 1. UI 控件与全局界面骨架：Anthropic Sans（西文/数字）+ PingFang SC（中文） */
 html, body, body[data-agy-font], button, select, nav, header, aside {
   font-family: var(--font-sans) !important;
   -webkit-font-smoothing: antialiased;
 }
 
-/* 2. 对话正文与 Markdown 内容：Anthropic Serif + 更纱粗衬线/黑体（容器继承，不强绑泛化 span/div 以保护代码与公式继承） */
+/* 1.5 键盘快捷键胶囊：使用 Anthropic Sans 等宽数字对齐系统修饰符（⌘ ⇧ ⌥ ⌃） */
+kbd,
+[class*="onyx-key"],
+:is([data-markdown-root], .select-text, .prose, .markdown, article) kbd {
+  font-family: var(--font-sans) !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: 0em;
+}
+
+/* 2. 对话正文与 Markdown 内容：Anthropic Serif（西文/数字）+ PingFang SC（中文）
+ * 严格遵循 Anthropic 规范：正文散文 400 字重、0 字距；容器继承以保护行内代码与公式。 */
 [data-markdown-root],
 [data-testid="user-message-content"],
 .agy-user-bubble,
@@ -144,9 +372,13 @@ html, body, body[data-agy-font], button, select, nav, header, aside {
 .markdown,
 article,
 :is([data-markdown-root], .select-text, .prose, .markdown, article) :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, td, th) {
-  font-family: 'Anthropic Serif', 'Anthropic Serif Web Display Light', 'Anthropic Serif Web', 'Anthropic Serif Web Text Light', 'anthropic-serif', 'Tiempos Text', 'Tiempos', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', 'Sarasa Gothic SC', '更纱黑体 SC', 'PingFang SC', Georgia, Cambria, 'Times New Roman', serif;
+  font-family: var(--font-serif);
   font-variant-numeric: lining-nums;
-  letter-spacing: -0.003em;
+  letter-spacing: 0em;
+}
+
+:is([data-markdown-root], .select-text, .prose, .markdown, article) :is(h1, h2, h3, h4, h5, h6, strong, b, th) {
+  font-weight: 600;
 }
 
 :is([data-markdown-root], .select-text, .prose, .markdown) :is(p, li, blockquote) {
@@ -157,12 +389,13 @@ html[data-ag-custom-font-size="true"] :is([data-markdown-root], [data-testid="us
   font-size: var(--ag-chat-font-size) !important;
 }
 
-/* 3. 代码、终端、diff 查看器、文件名、文件路径：Anthropic Mono + Sarasa Mono（移除 .tabular-nums 避免误劫持 UI 控件） */
-code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, pre *, [class*="group/file-title"], [class*="group/file-title"] *, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], :is([data-markdown-root], .select-text) :is(code, pre, kbd, samp, .font-mono) {
+/* 3. 代码、终端、编辑器、文件名与文件路径：严格限定使用 Anthropic Mono */
+code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.monaco-editor, .xterm) textarea, pre *, [class*="group/file-title"], [class*="group/file-title"] *, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], :is([data-markdown-root], .select-text, .prose, .markdown, article) :is(code, pre, samp, .font-mono) {
   font-family: var(--font-mono) !important;
+  letter-spacing: 0em;
 }
 
-/* 首页欢迎语独立使用 Display，不覆盖 Markdown 的 h1/h2。 */
+/* 3.2 首页欢迎语：遵循规范 Display Serif 使用 Anthropic Serif Display（400 字重、0 字距），不覆盖 Markdown 内标题 */
 [data-testid="home-greeting"]:not(:where(
   code, pre, kbd, samp, [class*="language-"], .monaco-editor, .xterm,
   [class*="file-title"], [class*="file-path"], [data-path], [data-file-path],
@@ -176,13 +409,13 @@ code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, 
   .katex, .MathJax, math, .codicon, .google-symbols,
   [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror
 ) *) {
-  font-family: 'Anthropic Sans Display', var(--font-sans) !important;
-  letter-spacing: -0.015em;
+  font-family: var(--font-serif-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0em;
 }
 
 /* 3.5 仅思考/工具的标题标签使用 Sans，不匹配整个 thought/thinking 容器。
- * 标题自身或 span/b/strong 标签上的 .font-mono 可纠正；代码、路径、正文、公式与编辑区均保留。
- * 新版本如变更 DOM，补充明确标题选择器，不使用 [class*="thought"] 或全局 .font-mono 覆盖。 */
+ * 标题自身或 span/b/strong 标签上的 .font-mono 可纠正；代码、路径、正文、公式与编辑区均保留。 */
 :is(
   .thought-header, .thinking-header, .step-title, .step-header, .tool-call-header,
   [data-testid="thought-header"], [data-testid="thinking-header"],
@@ -220,24 +453,35 @@ code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, 
   font-family: var(--font-sans) !important;
 }
 
-/* 4. 输入框编辑区与 Lexical 占位符：Codex 同款等距更纱黑体 SLAB (Sarasa Mono Slab SC) */
-div[contenteditable="true"],
-textarea,
-div[contenteditable="true"] :is(p, span, div),
-[data-lexical-editor="true"],
-[data-lexical-editor="true"] :is(p, span, div),
-[data-lexical-editor="true"] ~ p.pointer-events-none,
-#antigravity\.agentSidePanelInputBox div:has(> [data-lexical-editor="true"]) > p.pointer-events-none,
-[data-composer],
-.ProseMirror,
-.ProseMirror :is(p, span) {
-  font-family: 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', 'Anthropic Mono', 'Anthropic Mono Web', ui-monospace, monospace !important;
+/* 4. 自然语言输入框、表单输入与 Lexical 占位符：遵循规范 body-sm Inputs 使用 Anthropic Sans（排除代码与终端） */
+:is(
+  div[contenteditable="true"],
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  div[contenteditable="true"] :is(p, span, div),
+  [data-lexical-editor="true"],
+  [data-lexical-editor="true"] :is(p, span, div),
+  [data-lexical-editor="true"] ~ p.pointer-events-none,
+  #antigravity\.agentSidePanelInputBox div:has(> [data-lexical-editor="true"]) > p.pointer-events-none,
+  [data-composer],
+  .ProseMirror,
+  .ProseMirror :is(p, span)
+):not(:where(
+  code, pre, samp, [class*="language-"], .monaco-editor, .xterm,
+  .katex, .MathJax, math, .codicon, .google-symbols
+), :where(
+  code, pre, samp, [class*="language-"], .monaco-editor, .xterm,
+  .katex, .MathJax, math, .codicon, .google-symbols
+) *) {
+  font-family: var(--font-sans) !important;
 }
 
 #antigravity\.agentSidePanelInputBox [data-lexical-editor="true"],
-#antigravity\.agentSidePanelInputBox [data-lexical-editor="true"] span[data-lexical-text="true"] {
+#antigravity\.agentSidePanelInputBox [data-lexical-editor="true"] span[data-lexical-text="true"],
+[data-lexical-editor="true"] ~ p.pointer-events-none,
+#antigravity\.agentSidePanelInputBox div:has(> [data-lexical-editor="true"]) > p.pointer-events-none {
   font-weight: 400 !important;
-  letter-spacing: normal !important;
+  letter-spacing: -0.005em !important;
 }
 
 /* 5. 共享 UI 几何形状、输入框三态 1.5px 过渡与 GPU 性能优化 */
@@ -331,7 +575,7 @@ body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .
 
 #antigravity\.agentSidePanelInputBox :is([class*="text-secondary-foreground"], button, span):not([data-lexical-editor="true"]):not([data-lexical-editor="true"] *) {
   font-weight: 500 !important;
-  letter-spacing: -0.012em !important;
+  letter-spacing: -0.005em !important;
   text-shadow: var(--ag-ink-shadow-md);
 }
 
@@ -414,11 +658,11 @@ html[data-ag-preset] #antigravity\.agentSidePanelInputBox [data-testid="voice-li
   display: flex !important;
 }
 
-/* 6. 侧边栏、对话列表、下拉菜单与设置弹窗统一排版与色彩变量绑定 */
+/* 6. 侧边栏、对话列表、下拉菜单与设置弹窗统一排版（遵循规范 400/500/600 离散字重与字号分级字距） */
 .bg-sidebar :is(a, button, [class*="truncate"], [class*="text-sm"], [class*="text-xs"]),
 aside :is(a, button) {
-  font-weight: 450 !important;
-  letter-spacing: -0.012em !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-sidebar-fg, #262422) !important;
   text-shadow: var(--ag-ink-shadow-sm);
 }
@@ -438,15 +682,15 @@ button[data-project-card="true"],
 [data-project-label],
 [data-subtext] span[class*="text-muted"],
 .bg-sidebar span:has(> svg) + span {
-  font-weight: 450 !important;
+  font-weight: 500 !important;
   color: var(--ag-sidebar-header-fg, #383533) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
 
 button[data-testid="project-header"] span,
 button[data-project-card="true"] span {
-  font-weight: 450 !important;
-  letter-spacing: -0.01em !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-sidebar-header-title-fg, #2C2B29) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
@@ -457,19 +701,23 @@ button[data-project-card="true"] span {
 .bg-sidebar :is([data-active="true"], [data-active=""]),
 .bg-sidebar :is([data-active="true"], [data-active=""]) span,
 .bg-sidebar [aria-selected="true"] {
-  font-weight: 520 !important;
+  font-weight: 600 !important;
   color: var(--ag-sidebar-selected-fg, #0A0A0A) !important;
   text-shadow: var(--ag-ink-shadow-md) !important;
 }
 
 .bg-sidebar :is([class*="text-muted"], [class*="text-[11px]"], [class*="uppercase"]) {
   font-weight: 500 !important;
-  letter-spacing: -0.005em !important;
+  letter-spacing: -0.02em !important;
   color: var(--ag-sidebar-muted-fg, #7A7670) !important;
 }
 
+.bg-sidebar [class*="uppercase"] {
+  letter-spacing: 0.02em !important;
+}
+
 button, [role="button"], select {
-  letter-spacing: -0.012em;
+  letter-spacing: -0.005em;
 }
 
 [role="menu"], [role="menuitem"], [role="listbox"], [role="option"], [data-select-popup], [data-testid="title-menu-bar"], [data-testid="title-menu-bar-item"], [data-testid="title-menu-bar-option"], .agy-overlay, .agy-overlay-item, [data-radix-menu-content], [data-radix-popper-content-wrapper], [data-side] {
@@ -478,15 +726,15 @@ button, [role="button"], select {
 
 [role="option"]:not([data-disabled]),
 [data-testid="title-menu-bar-option"] {
-  font-weight: 450 !important;
-  letter-spacing: -0.01em !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-menu-item-fg, #1F1E1D) !important;
 }
 
 [role="menu"] :is([role="menuitem"], .agy-overlay-item, [class*="truncate"], [class*="text-xs"], [class*="text-[13px]"], span),
 .agy-overlay .agy-overlay-item {
   font-weight: 400 !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-menu-item-fg, #1F1E1D) !important;
 }
 
@@ -494,15 +742,15 @@ button, [role="button"], select {
 [role="menu"] :is([role="menuitem"], .agy-overlay-item) :is(span[class*="flex-1"], span.truncate),
 .agy-overlay .agy-overlay-item > span,
 .agy-overlay .agy-overlay-item :is(span[class*="flex-1"], span.truncate) {
-  font-weight: 450 !important;
-  letter-spacing: -0.01em !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-menu-item-fg, #1F1E1D) !important;
 }
 
 [role="menu"] :is([class*="font-medium"], [class*="text-muted-foreground"], h2, h3, h4),
 .agy-overlay :is([class*="font-medium"], [class*="text-muted-foreground"]) {
   font-weight: 500 !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-menu-header-fg, #1A1A1A) !important;
 }
 
@@ -511,14 +759,14 @@ button, [role="button"], select {
 }
 
 [role="dialog"] :is(h2, h3) {
-  font-weight: 500 !important;
-  letter-spacing: -0.01em !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-dialog-title-fg, #1F1E1D) !important;
 }
 
 [role="dialog"] :is(.agy-card, [class*="agy-card"], [class*="divide-border"]) span.text-sm {
-  font-weight: 450 !important;
-  letter-spacing: -0.01em !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.005em !important;
   color: var(--ag-dialog-item-fg, #1F1E1D) !important;
   text-shadow: var(--ag-ink-shadow-xs) !important;
 }
@@ -847,11 +1095,11 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   margin-right: 0;
   padding: 0 2px 0 5px;
   border-left: 1px solid rgba(0, 0, 0, 0.22);
-  font-family: var(--font-mono) !important;
-  font-variant-numeric: tabular-nums;
-  font-size: 10.5px !important;
+  font-family: var(--font-sans) !important;
+  font-variant-numeric: tabular-nums !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
-  letter-spacing: -0.025em !important;
+  letter-spacing: -0.02em !important;
   color: #262422 !important;
   opacity: 0.92 !important;
   line-height: 1 !important;
@@ -890,10 +1138,11 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono) !important;
-  font-size: 10.5px !important;
+  font-family: var(--font-sans) !important;
+  font-variant-numeric: tabular-nums !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
-  letter-spacing: -0.025em !important;
+  letter-spacing: -0.02em !important;
   color: inherit !important;
 }
 
@@ -950,10 +1199,11 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   background-color: var(--card, #F9F7F2) !important;
   border: 1px solid var(--card-border, rgba(0, 0, 0, 0.35)) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
-  font-family: var(--font-mono) !important;
+  font-family: var(--font-sans) !important;
   font-variant-numeric: tabular-nums;
-  font-size: 11px !important;
+  font-size: 12px !important;
   line-height: 1.55 !important;
+  letter-spacing: -0.01em !important;
   color: var(--foreground, #1F1E1D) !important;
   text-align: left;
   white-space: normal;
@@ -975,7 +1225,8 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   justify-content: space-between;
   align-items: center;
   font-weight: 600 !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
+  letter-spacing: -0.005em !important;
   color: #0A0A0A !important;
   border-bottom: 1px solid rgba(0, 0, 0, 0.14);
   padding-bottom: 4px;
@@ -990,8 +1241,8 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px !important;
-  font-weight: 450 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
 }
 
 #ag-live-metrics-tooltip .ag-tt-lbl {
@@ -1002,6 +1253,7 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
 #ag-live-metrics-tooltip .ag-tt-val {
   color: #0A0A0A !important;
   font-weight: 500 !important;
+  font-variant-numeric: tabular-nums !important;
   text-align: right;
 }
 
