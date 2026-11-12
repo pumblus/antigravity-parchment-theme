@@ -8,10 +8,10 @@ description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成�
 # 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.1.5 · 昼夜双模式解耦 & Antigravity 2.31.1 双端全量适配）
 
 > **前置概括（致用户与执行端 AI Agent）**：
-> - **设计目的**：以纯运行时 CDP 非侵入式注入，为 Google Antigravity 提供**白天/黑夜双模式物理隔离**：
->   - **白天模式（`body:not(.dark)`）**：提供三套 Anthropic 暖纸护眼配色预设（默认高对比暖白）与输入框「古朴暗红蜡封」三态交互；
->   - **黑夜模式（`body.dark`）**：当点击客户端「深色 / Dark」按钮（或跟随系统深色）切换时，**100% 保持四层字体排版与 UI 几何形状（`1.5px` 三态边框厚度、单圈搜索聚焦、指标胶囊布局）不变**，同时 `0ms` 还原 Antigravity `2.30.0 ~ 2.31.1` 原版无补丁时的官方 `onyx` Default Dark 碳黑配色方案（`#070708` 主背景 / `#111114` 侧栏 / `#15151A` 悬浮输入卡 / `#2F71E3` 官方品牌蓝），自动关闭深色下发乌的黑色润墨阴影并专项提升深色文字对比度与边界可见性；
->   - **全局共享能力**：四层中西文精密排版（`Anthropic` 官方字体族 + `Sarasa` 更纱黑体超集，完美适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,094 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底，完整覆盖 `2.31.1` Fork / Best of N / Worktree / 定时任务 / 快捷键编辑器 / 权限模式与努力程度动态无障碍标签 / 模型用量明细与右侧边栏启动面板）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`）。
+> - **设计目的**：以纯运行时 CDP 非侵入式注入，严格遵循 Anthropic 设计规范为 Google Antigravity 提供**昼夜同源暖调主题与精密排版**：
+>   - **白天模式（`body:not(.dark)`）**：提供三套 Anthropic 官方暖羊皮纸配色预设（默认 `high-contrast`：`#F0EEE6` 侧栏 + `#FAF9F5` 阅读区 + `#141413` 暖墨字 + `1px solid #CCCBC8` 石色细边，严守零 `#FFFFFF` 纯冷白与零悬浮投影），输入框采用扁平暖纸层叠 + `1px` 细边三态过渡，仅发送主按钮使用 `#D97757` 陶土色；
+>   - **黑夜模式（`body.dark`）**：当点击客户端「深色 / Dark」按钮（或跟随系统深色）切换时，**100% 保持三族字体排版与扁平几何结构不变**，同时 `0ms` 切换至 Anthropic / Claude 暖墨黑反色体系（`#141413` Slate Dark 主背景 / `#191917` 侧栏 / `#1F1E1C` 卡片 / `1px solid #3D3D3A` 暖墨细边 / `#FAF9F5` 象牙亮字 / `#D97757` 陶土色主按钮）；
+>   - **全局共享能力**：Anthropic 三族中西文精密排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，完美适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,123 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`，统一采用 `Anthropic Sans` + `tabular-nums`）。
 > - **v5.1.5 核心执行铁律**：
 >   1. **Agent 一键部署，内核已预封装无需构建**：全部样式、词典、DOM 引擎与守护进程已封装在 `core/` 只读黄金内核中，**严禁 Agent 从头手写或重生成守护代码**，直接运行 `node install.mjs` 即可 3 秒完成部署；
 >   2. **个性化修改永远只在 `user/` 改装层进行（2.5 秒可逆热重载）**：`user/` 目录在升级时 100% 永不覆盖，保存后 2.5 秒自动热更新生效。
@@ -126,12 +126,12 @@ node install.mjs verify
   },
   "themeVars": {
     "--ag-chat-font-size": "16px",
-    "--ag-wax-seal-hover": "#74221A",
-    "--ag-dark-wax-seal-hover": "rgba(47, 113, 227, 0.72)"
+    "--ag-wax-seal-hover": "#3D3D3A",
+    "--ag-dark-wax-seal-hover": "#87867F"
   }
 }
 ```
-- **`preset`（白天模式暖纸预设）**：支持 `"high-contrast"`（默认高对比暖白）、`"claude-desktop-purewhite"`（ClaudeDesktop 净白）、`"vintage-deep"`（复古深色羊皮纸），修改保存后 2.5 秒内自动热切换；当用户在客户端点击切换为深色（Dark）模式时，自动进入官方 `onyx` 独立黑夜模式。
+- **`preset`（白天模式暖纸预设）**：支持 `"high-contrast"`（默认 Anthropic 官方标准暖纸）、`"claude-desktop-purewhite"`（轻浅象牙纸，严守零 `#FFFFFF` 纯冷白）、`"vintage-deep"`（深暖燕麦羊皮纸），修改保存后 2.5 秒内自动热切换；当用户在客户端点击切换为深色（Dark）模式时，自动进入 Anthropic 暖墨黑（Slate Dark）深色模式。
 - **`modules`**：支持单独开关任意子模块（含 `zoomShortcuts` 独立开关）；若将顶层 `"enabled": false` 保存，页面将在 2.5 秒内无损卸载全部样式并将已汉化的界面文字还原为英文原貌。
 - **`themeVars`**：由 `runtime.js` 自动编译注入到独立的 `<style id="ag-user-theme-vars">` 节点（排在 `#ag-custom-fonts` 之后、`#antigravity-user-custom-style` 之前；`--ag-dark-*` 作用于黑夜模式，`--ag-*` 全局排版变量作用于 `:root, body`，普通色彩变量如 `--sidebar` 仅作用于白天模式，绝不污染黑夜模式）。
 
