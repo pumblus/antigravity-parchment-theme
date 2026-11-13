@@ -1,19 +1,21 @@
-# Antigravity 主题融合分支 · 5.1.5-eric.1
+# Antigravity 主题融合分支 · 5.1.6-eric.1
 
-基于 [Anarcadia 上游 v5.1.5](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/b348d3b790fa65bb4f9e86b1ae02a5c894c62109)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.1 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1123 条，保留上游全部 1094 个词条与新的大小写兜底查找。
+基于 [Anarcadia 上游 v5.1.6](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/2b42fbf4641d120d43de59dcbcbf76dc88948920)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.2 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1524 条，保留上游全部 1500 个词条与新的大小写兜底查找。
 
 **本分支为独立集成版，不是上游发布。** 移除了自动调用仓库外 Python 二进制补丁的行为；不引入 `--sync-user`，安装保留已有用户文件及自定义选择器。变更边界、验证方法与限制见 [FORK.md](FORK.md)。下方截图为上游参考，不代表本分支已完成 Antigravity 实机验收。
 
-该版本目前作为源码包交付，远端发布待确认。若后续发布，目标分支仍为 `feat/integrated-v5.1.4`（为避免变更既定发布目标，保留原分支名），内容版本为 `5.1.5-eric.1`；默认 `main` 没有更新。发布前请直接使用此源码包，不要按下方克隆提示获取旧版。
+本次更新保存在本机仓库的 `main` 分支，版本 `5.1.6-eric.1`，尚未推送远端。安装请使用已同步的本地源码；不要假定远端 `main` 已包含本次更新。
+
+5.1.6 合入 2.31.2 的 Swarm 子帧隔离、原生缩放去重、抽屉浏览器透明保护及新增动态翻译，保留本分支的 Anthropic/PingFang 字体、暖调配色与 macOS 连续圆角。
 
 安装前请阅读 `SKILL.md`。安装会配置本地调试端口和系统自启服务，不能把 `doctor` 的完整性通过等同于客户端实机生效。
 
 ---
 
-# 船板的 Antigravity 书卷暖纸 × 官方碳黑昼夜双模式主题、字体优化与深度汉化全栈补丁 (v5.1.5 · 完整适配 Antigravity 2.31.1)
+# 船板的 Antigravity 书卷暖纸 × 官方碳黑昼夜双模式主题、字体优化与深度汉化全栈补丁 (v5.1.6 · 完整适配 Antigravity 2.31.2)
 
-[![Version](https://img.shields.io/badge/version-5.1.5-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
-[![Antigravity](https://img.shields.io/badge/Antigravity-2.31.1%2B-D97757.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
+[![Version](https://img.shields.io/badge/version-5.1.6-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
+[![Antigravity](https://img.shields.io/badge/Antigravity-2.31.2%2B-D97757.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0%20(22.13%2B%20Full)-339933.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 
@@ -42,7 +44,7 @@
 
 ---
 
-## ✨ 补丁简介：核心定位与五大亮点（v5.1.5）
+## ✨ 补丁简介：核心定位与五大亮点（v5.1.6）
 
 ### 1. 设计目的
 Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬线字体，长时间高强度阅读与编码容易视觉疲劳。本补丁以**纯运行时非侵入注入**的方式，严格遵循 **Anthropic 设计规范**，将 Antigravity 重塑为兼具 **暖羊皮纸扁平纸张美学、暖墨黑深色模式、三族中西文精密排版、全界面母语级汉化与实时模型遥测** 的主力工作台：
@@ -50,9 +52,9 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 - **🌓 昼夜双模式同源暖调体系（官方暖羊皮纸白天 + 暖墨黑反色黑夜，零 `#FFFFFF` / 零悬浮投影）**：
   - **白天模式（Light）**：内置 **Anthropic 官方标准暖纸**（默认 `high-contrast`：暖羊皮纸侧栏 `#F0EEE6` + 象牙纸主阅读区 `#FAF9F5` + 暖墨文字 `#141413` + `1px` 石色细边 `#CCCBC8`，严守零 `#FFFFFF` 纯冷白）、**轻浅象牙纸**（`claude-desktop-purewhite`）与 **深暖燕麦羊皮纸**（`vintage-deep`）三套护眼预设；
   - **黑夜模式（Dark）**：当你点击设置中的「深色 / Dark」按钮（或跟随系统深色）时，**100% 保持三族字体与扁平几何要素不变**，同时 `0ms` 切换至 **Anthropic / Claude 暖墨黑反色体系**（`#141413` Slate Dark 主背景 / `#191917` 侧栏 / `#1F1E1C` 扁平卡片 / `1px solid #3D3D3A` 暖墨细边 / `#FAF9F5` 象牙亮字 / `#D97757` 陶土色主按钮），昼夜气质完全统一。
-- **🔤 Anthropic 规范三族排版（昼夜完全共用 · 原生适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字严格按角色分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）统一采用 `Anthropic Sans`，阅读散文采用 `Anthropic Serif`（首页欢迎语采用 `Anthropic Serif Display`，正文链接常驻 `1px` 细下划线），代码块、文件路径、Monaco 编辑器与终端严格限定 `Anthropic Mono`；中文统一优先采用 `PingFang SC`（跨平台自动回退更纱/雅黑）。
+- **🔤 Anthropic 规范三族排版（昼夜完全共用 · 原生适配 `2.31.2` `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字严格按角色分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）统一采用 `Anthropic Sans`，阅读散文采用 `Anthropic Serif`（首页欢迎语采用 `Anthropic Serif Display`，正文链接常驻 `1px` 细下划线），代码块、文件路径、Monaco 编辑器与终端严格限定 `Anthropic Mono`；中文统一优先采用 `PingFang SC`（跨平台自动回退更纱/雅黑）。
 - **📐 扁平纸张层叠、macOS 同心连续圆角与单一陶土主色纪律**：移除全部悬浮投影（`box-shadow: none`），输入框采用「暖纸外托盘 `12px` + 抬升内卡片 `11px` + `1px` 细边三态过渡（常态 `#CCCBC8` → 悬停 `#87867F` → 聚焦 `#3D3D3A`）」，全界面矩形容器对齐 macOS HIG 同心梯度（主画布/弹窗 `12px`、气泡/代码块/菜单 `10px`、菜单项与侧栏行 `6px`）与 `superellipse(1.5)` 连续曲率；全场仅将 `#D97757`（悬停 `#C6613F`）陶土色保留给唯一发送主按钮。
-- **🇨🇳 1,094 条零大小写冲突深度汉化 + 首字母大写不敏感兜底索引（`DICT_CI`） + ⚡ `O(1)` 增量实时指标胶囊**：全覆盖 `2.31.1` 新增的 Fork / Best of N / 定时任务（Scheduled Tasks）/ 快捷键编辑器 / 远程控制二维码 / 沙箱与浏览器执行权限 / 插件主题外观及全部命令面板标签（基于 `WeakMap` `O(1)` 隔离保护代码块、Monaco 编辑器、终端与对话正文不误伤），并在输入框底部同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、`256k` 上下文水位及缓存命中率详情面板。
+- **🇨🇳 1,524 条零大小写冲突深度汉化 + 首字母大写不敏感兜底索引（`DICT_CI`） + ⚡ `O(1)` 增量实时指标胶囊**：全覆盖 `2.31.2` 新增的 Fork / Best of N / 定时任务（Scheduled Tasks）/ 快捷键编辑器 / 远程控制二维码 / 沙箱与浏览器执行权限 / 插件主题外观及全部命令面板标签（基于 `WeakMap` `O(1)` 隔离保护代码块、Monaco 编辑器、终端与对话正文不误伤），并在输入框底部同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、`256k` 上下文水位及缓存命中率详情面板。
 
 ### 2. 五大工程亮点
 1. **🤖 Agent 3 秒一键部署，零构建零依赖**：所有 CSS、词典、DOM 引擎与守护进程已预封装在 `core/` 只读内核中，无需任何 npm 依赖或编译构建，交给你的 Agent 即可 3 秒一键安装。
@@ -70,13 +72,13 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 2. **复制发给你的 AI Agent（Antigravity / Claude Code / Codex / Cursor 等）**：
 
 > **💬 复制发给 Agent（新用户一键安装）**：  
-> 请帮我克隆 `https://github.com/pumblus/chuanban-antigravity-theme-patch.git` 的 `feat/integrated-v5.1.4` 分支（版本 `5.1.5-eric.1`）（或读取我已下载解压的补丁目录），严格按照仓库内的 `SKILL.md` 依次执行 `node install.mjs doctor`（Windows 下若未装字体请先用 `node install.mjs install-fonts` 注册字体）、`node install.mjs install` 和 `node install.mjs verify`，帮我一键部署好船板的 Antigravity 主题补丁并验证实机生效。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.1.6-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
-### 二、老版本用户无缝升级至 v5.1.5
+### 二、老版本用户无缝升级至 v5.1.6
 `node install.mjs install` 会自动备份旧内核、接管旧版常驻服务，并无损保留你在 `~/.gemini/antigravity/theme-patch/user/` 中的个人配置：
 
 > **💬 复制发给 Agent（老用户无缝升级）**：  
-> 请帮我获取 `https://github.com/pumblus/chuanban-antigravity-theme-patch.git` 的 `feat/integrated-v5.1.4` 分支（版本 `5.1.5-eric.1`），先确认工作区无未提交改动，不覆盖已有文件或盲目切换分支，阅读其中的 `SKILL.md`，直接运行 `node install.mjs install` 和 `node install.mjs verify` 将我的环境升级至 `5.1.5-eric.1` 融合版（若我旧脚本里有自定义的配色预设或字号修改，请迁移保留到 `~/.gemini/antigravity/theme-patch/user/` 改装层中）。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.1.6-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
 ### 三、后续与 Agent 对话定制风格或排障
 - **🎨 切换白天预设、调整字号或微调外观**：
@@ -88,9 +90,17 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 
 ---
 
-## 🕒 版本演进简史
+## 🕒 上游版本演进参考（完整变更日志见 [`CHANGELOG.md`](CHANGELOG.md)）
 
-- **2026-11-12（v5.1.5 现行版 · Antigravity `2.31.1` 双端漂移合流、1,094 条零大小写冲突词典与 `DICT_CI` 兜底引擎）**：
+以下保留上游历史记录，并非融合版全部行为或本次验收结果；外部标题脚本执行与默认来源并集策略未合入，具体差异见 [FORK.md](FORK.md)。
+
+- **2026-11-13（v5.1.6 现行版 · Antigravity `2.31.2` 全栈漂移修复、新模型汉化、Swarm 跨域子帧注入、原生幕布底色桥接与 Sonnet 对抗审阅加固）**：
+  面向 Antigravity `2.31.2`（`CL=1019359392`）完成全量静态/实机审计修复与 `Claude Sonnet 5.5` 对抗复核加固：
+  1. **原生缩放防双倍跳变与 `curtainView` 底色同步**：针对 `2.31.2` 新增的原生 `View` 菜单加速器（`hubZoom.js` / `menu.js`）引入 `resize` 缩放水位跟踪与 `80ms/60ms` 双向差值保护，根治 `Cmd/Ctrl + -/=/0` 双倍缩放跳变同时保留数字小键盘与欧式键盘兼容；新增 `electronNative.wcvBrowser.setThemeColor` 主动桥接（兼容 `#hex`、`rgb()`、`color(srgb)`），修复 `preload.js` 漏检导致的 `curtainView` 与 `app_storage.json` 底色失步闪白；移除宿主布尔空属性 `data-agy-theme` 误判依赖；
+  2. **内置浏览器 `WebContentsView` 打孔与 `.agy-titlebar` 透明兼容**：补齐 `data-has-drawer-browser-hole="true"`、`.surface-opaque`、`.browser-hole-ancestor` 与 `[data-browser-hole="true"]` 伪元素内嵌描边豁免，保持 `.agy-sheet .agy-titlebar.bg-sidebar` 原生透明设计；
+  3. **`plugin://swarm--` 蜂群协作 OOP 子帧全量接管与双向昼夜联动**：在严格隔离 HTML/Artifact 预览沙箱的前提下，打通 `plugin://swarm--` 跨域子帧的四层字体（补齐 `--font-family` 映射）、内联 `--background` 亮度双向昼夜同步与中文界面（跳过子帧 SQLite 指标空轮询），同时保护 `.msg-body`、`#raw` 与 `#swarm-title` 用户/Agent 内容零误伤；
+  4. **1,500 条零大小写冲突词典、新模型家族汉化与无障碍翻译加固**：新增 406 条 `2.31.2` 界面与云端新模型词条及动态正则（全覆盖 `Orchestrator (Carbon/Argon)` 编排器与分流说明提示、`Gemini 4 Hydrogen Extra/Extra High/XHigh`、模型下线预告与周期限额标题、Swarm 面板、Automations、Coordinators、Environments、Marketplace、归档筛选与队列快捷键），放开 Lexical `[contenteditable="true"]` 与对话轮次导航点（`conversation-navigator-turn`）无障碍属性翻译并保持正文零干扰；加固 macOS `LaunchAgent` 启停竞态保护与 TCC 拦截日志收敛。
+- **2026-11-12（v5.1.5 · Antigravity `2.31.1` 双端漂移合流、1,094 条零大小写冲突词典与 `DICT_CI` 兜底引擎）**：
   联合 macOS 与 Windows 双端 `2.31.1` 实机审计完成无损合流：`core/runtime.js` 新增首字母大写不敏感兜底索引 `DICT_CI`（自动兼容 `Toggle Sidebar` / `Toggle sidebar`、`Archive Conversation` / `Archive conversation` 等大小写漂移且零误伤小写标识符），补齐 `No more older messages, showing X of Y` 与 `Go to turn X of Y` 动态无障碍翻译；`core/i18n.json` 扩充至 **1,094 条严格零大小写冲突词条**（原生兼容 Windows PowerShell 5.1 `ConvertFrom-Json`，全覆盖 `2.31.1` Fork / Best of N / 定时任务 / 快捷键编辑器 / 沙箱与浏览器权限 / 插件主题外观 / 命令面板标签并统一「置顶」用语）；`core/theme.css` 兼容 `2.31.1` 布尔空属性 `[data-active=""]`；`install.mjs` 屏蔽 Node 22 `node:sqlite` `ExperimentalWarning` 保持 CLI JSON 输出绝对纯净。
 - **2026-11-11（v5.1.4 · 实时指标胶囊运行态同行稳定化与 `flex-col` 越界根治）**：
   修复 `2.31.0` `.surface-composer-card`（`flex-direction: column`）下折行胶囊 `flex-basis: 100%` 纵向撑高溢出输入框底边的 CSS 缺陷；回调常规窗口恒定同行阈值（`< 165px` 窄栏进入、`>= 180px` 滞回恢复），并为 `ResizeObserver` 补齐左右按钮组宽度签名监听与会话路由切换强制重算，彻底消除会话运转时指标行掉出框外及跨会话状态串染。

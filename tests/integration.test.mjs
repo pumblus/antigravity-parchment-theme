@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-const { chromium } = createRequire(import.meta.url)('playwright');
+let chromium;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const dict = JSON.parse(read('core/i18n.json'));
@@ -22,6 +22,7 @@ async function inject(page, boot = payload()) {
   await page.evaluate(runtime.replace('__AG_BOOT_PAYLOAD__', JSON.stringify(boot)));
 }
 async function fixture(t, html) {
+  chromium ||= createRequire(import.meta.url)('playwright').chromium;
   browser ||= await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), headless: true });
   const page = await browser.newPage();
   await page.route('**/*', route => route.fulfill({ contentType: 'text/html', body: html }));
@@ -31,7 +32,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.1.5-eric.1');
+  assert.equal(manifest.version, '5.1.6-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -39,13 +40,14 @@ test('core manifest matches every shipped byte', () => {
   }
 });
 test('dictionary keeps upstream coverage and clear permission labels without case duplicates', () => {
-  assert.equal(Object.keys(dict).length, 1123);
+  assert.equal(Object.keys(dict).length, 1524);
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map(k => k.toLowerCase())).size, keys.length);
   assert.equal(dict.Turbo, '完全模式 (Turbo)');
   assert.equal(dict['Turbo mode'], dict.Turbo);
   assert.equal(dict.Thinking, '正在思考');
+  assert.equal(Object.hasOwn(dict, 'New'), false, 'New must reach contextual translation');
   assert.equal(dict['Good Response'], '回答不错');
   assert.equal(dict['Running command >'], '正在执行命令 >');
   assert.equal(dict['Mark Unread'], '标记为未读');
@@ -78,6 +80,24 @@ test('translation units resolve exact, dynamic and permission labels safely', ()
   assert.equal(ctx.api.resolveAttrTranslation('Permission mode selector, current: Turbo'), '权限模式，当前：完全模式 (Turbo)');
   assert.match(ctx.api.resolveAttrTranslation('Permission mode: Turbo (Cannot be changed mid-conversation)'), /完全模式.*会话中途无法更改/);
   ctx.DICT.literal = '$& $1 中文'; assert.equal(tr(' literal ', null), '$& $1 中文');
+});
+test('translation units support 2.31.2 New context, orchestrators and extra effort', () => {
+  const { api } = translationUnit();
+  const actionButton = { textContent: '+ New', hasAttribute: () => false };
+  const action = { closest: selector => selector === 'button' ? actionButton : null };
+  const modelButton = { textContent: 'New', hasAttribute: name => name === 'data-model-label' };
+  const badge = { closest: selector => selector === 'button' ? modelButton : null };
+  assert.equal(api.computeTextTranslation('New', action), '新建');
+  assert.equal(api.computeTextTranslation('NEW', { closest: () => null }), '新');
+  assert.equal(api.computeTextTranslation('New', badge), '新');
+  assert.equal(api.computeTextTranslation('new', null), null, 'lowercase identifiers are untouched');
+  assert.equal(api.computeTextTranslation('Orchestrator (Neon)', null), '编排器 (Neon)');
+  assert.equal(api.computeTextTranslation('Extra High', null), '超高');
+  assert.equal(api.resolveAttrTranslation('Model selector, current: Gemini 4 Hydrogen Extra High'), '模型，当前：Gemini 4 Hydrogen · 超高');
+  assert.equal(api.resolveAttrTranslation('Model selector, current: Orchestrator (Carbon) (Extra High)'), '模型，当前：编排器 (Carbon) (超高)');
+  assert.equal(api.computeTextTranslation('12 comments', null), '12 条评论');
+  assert.equal(api.computeTextTranslation('Gemini 4 Neon Monthly Limit', null), 'Gemini 4 Neon 每月限额');
+  assert.equal(api.computeTextTranslation('Budget Monthly Limit', null), null, 'ordinary phrases are not model limits');
 });
 test('translation units preserve 2.31.1 case fallback and exact-match priority', () => {
   const ctx = translationUnit({ ...dict, 'Mixed Label': '标准', 'Mixed label': '精确自定义' });
@@ -143,6 +163,22 @@ test('runtime translates UI while isolating user content', async t => {
   await page.locator('#new').evaluate(el => el.textContent = 'Mark Unread');
   await page.waitForFunction(() => document.querySelector('#new').textContent === '标记为未读');
 });
+test('runtime 2.31.2 attributes and New labels preserve editable and user content', async t => {
+  const page = await fixture(t, `<button class="rounded-full" id="new-action">New</button>
+    <button data-model-label id="new-model">New</button><span id="new-badge">New</span>
+    <div contenteditable="true" data-lexical-editor="true" id="lexical" aria-label="Thinking">Thinking</div>
+    <button data-testid="conversation-navigator-turn" id="turn" aria-label="Go to turn 2 of 8"></button>
+    <div class="msg-body" id="swarm-message">Thinking</div><pre id="raw">New</pre>
+    <div data-testid="swarm-raw" id="swarm-raw">Thinking</div><h2 id="swarm-title">Thinking</h2>`);
+  await inject(page);
+  await page.waitForFunction(() => document.querySelector('#new-action').textContent === '新建');
+  for (const id of ['new-model', 'new-badge']) assert.equal(await page.locator('#' + id).textContent(), '新');
+  assert.equal(await page.locator('#lexical').textContent(), 'Thinking');
+  assert.equal(await page.locator('#lexical').getAttribute('aria-label'), '正在思考');
+  assert.equal(await page.locator('#turn').getAttribute('aria-label'), '跳转至第 2 / 8 轮对话');
+  for (const id of ['swarm-message', 'swarm-raw', 'swarm-title']) assert.equal(await page.locator('#' + id).textContent(), 'Thinking');
+  assert.equal(await page.locator('#raw').textContent(), 'New');
+});
 test('runtime hot reload is repeatable and disabling restores UI with cleanup', async t => {
   const page = await fixture(t, '<button id="label" title="Turbo">Turbo</button>');
   const customJs = 'window.testRuns = (window.testRuns || 0) + 1; ctx.onCleanup(() => { window.testCleanups = (window.testCleanups || 0) + 1; });';
@@ -175,7 +211,7 @@ test('installer preserves user bytes/selectors and stable backups across upgrade
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
   const source = path.join(temp, 'source'), target = path.join(temp, 'installed'), home = path.join(temp, 'home');
   fs.mkdirSync(source); fs.mkdirSync(home);
-  for (const name of ['core', 'user', 'install.mjs', 'README.md', 'SKILL.md', 'FORK.md']) fs.cpSync(path.join(root, name), path.join(source, name), { recursive: true });
+  for (const name of ['core', 'user', 'install.mjs', 'README.md', 'SKILL.md', 'FORK.md', 'CHANGELOG.md']) fs.cpSync(path.join(root, name), path.join(source, name), { recursive: true });
   fs.mkdirSync(path.join(target, 'user'), { recursive: true });
   const files = { 'config.json': '{"enabled":false,"channel":"stable","preset":"vintage-deep","selectors":{"inputBoxId":"antigravity.agentSidePanelInputBox","custom":"#mine"},"privateSetting":true}\n',
     'custom.css': '/* user style */\n', 'custom.js': '// user hook\n', 'i18n.override.json': '{"Turbo":"我的权限模式"}\n', 'extra.txt': 'keep me\n' };

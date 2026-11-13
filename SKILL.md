@@ -1,18 +1,18 @@
 ---
 name: chuanban-antigravity-theme-patch
-description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.1.5 模块化架构 · 完整适配 Antigravity 2.31.1 双端全量演进 + 昼夜双模式独立解耦 + 1094条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测与 WeakMap 热路径隔离缓存）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 沙箱排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
+description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.1.6 模块化架构 · 完整适配 Antigravity 2.31.2 全栈演进 + Swarm 协作面板跨域子帧同步 + 原生幕布底色桥接 + 昼夜双模式独立解耦 + 1524条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 沙箱排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
 ---
 
-> **融合分支说明（5.1.5-eric.1）**：此源码包基于上游 v5.1.5 / Antigravity 2.31.1，开发与安装差异见 [FORK.md](FORK.md)。远端发布待确认；发布后的目标分支为 `feat/integrated-v5.1.4`，默认 `main` 未更新。本分支保留用户文件与自定义 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。
+> **融合分支说明（5.1.6-eric.1）**：此源码包基于上游 v5.1.6 / Antigravity 2.31.2，开发与安装差异见 [FORK.md](FORK.md)。本次更新在本机 `main`，未推送远端；请核对实际源码版本。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。2.31.2 的原生幕布颜色桥接会通过客户端 API 持久化主题色到应用配置，不修改应用二进制；部署前需备份相关应用配置。
 
-# 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.1.5 · 昼夜双模式解耦 & Antigravity 2.31.1 双端全量适配）
+# 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.1.6 · 昼夜双模式解耦 & Antigravity 2.31.2 双端全量适配）
 
 > **前置概括（致用户与执行端 AI Agent）**：
 > - **设计目的**：以纯运行时 CDP 非侵入式注入，严格遵循 Anthropic 设计规范为 Google Antigravity 提供**昼夜同源暖调主题与精密排版**：
 >   - **白天模式（`body:not(.dark)`）**：提供三套 Anthropic 官方暖羊皮纸配色预设（默认 `high-contrast`：`#F0EEE6` 侧栏 + `#FAF9F5` 阅读区 + `#141413` 暖墨字 + `1px solid #CCCBC8` 石色细边，严守零 `#FFFFFF` 纯冷白与零悬浮投影），输入框采用扁平暖纸层叠 + `1px` 细边三态过渡，仅发送主按钮使用 `#D97757` 陶土色；
 >   - **黑夜模式（`body.dark`）**：当点击客户端「深色 / Dark」按钮（或跟随系统深色）切换时，**100% 保持三族字体排版与扁平几何结构不变**，同时 `0ms` 切换至 Anthropic / Claude 暖墨黑反色体系（`#141413` Slate Dark 主背景 / `#191917` 侧栏 / `#1F1E1C` 卡片 / `1px solid #3D3D3A` 暖墨细边 / `#FAF9F5` 象牙亮字 / `#D97757` 陶土色主按钮）；
->   - **全局共享能力**：Anthropic 三族中西文精密排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，完美适配 `2.31.1` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,123 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`，统一采用 `Anthropic Sans` + `tabular-nums`）。
-> - **v5.1.5 核心执行铁律**：
+>   - **全局共享能力**：Anthropic 三族中西文精密排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，完美适配 `2.31.2` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,524 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`，统一采用 `Anthropic Sans` + `tabular-nums`）。
+> - **v5.1.6 核心执行铁律**：
 >   1. **Agent 一键部署，内核已预封装无需构建**：全部样式、词典、DOM 引擎与守护进程已封装在 `core/` 只读黄金内核中，**严禁 Agent 从头手写或重生成守护代码**，直接运行 `node install.mjs` 即可 3 秒完成部署；
 >   2. **个性化修改永远只在 `user/` 改装层进行（2.5 秒可逆热重载）**：`user/` 目录在升级时 100% 永不覆盖，保存后 2.5 秒自动热更新生效。
 
@@ -22,14 +22,14 @@ description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成�
 
 1. **Google Drive 完全资源包（全项目成品包 + 全套商业/开源字体库）**
    - 链接：<https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC>
-   - 包含：**v5.1.5 完整项目成品包 + 全套必备字体包（Anthropic 官方字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc` 超集）**。
+   - 包含：**v5.1.6 完整项目成品包 + 全套必备字体包（Anthropic 官方字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc` 超集）**。
 2. **GitHub 权威代码库（成品补丁仓库与 `SKILL.md` 本体）**
    - 仓库：<https://github.com/pumblus/chuanban-antigravity-theme-patch>
    - 包含：全部 `core/` 黄金内核、`user/` 改装模板、`install.mjs` CLI 与本 `SKILL.md`（字体文件请从上方 Google Drive 链接下载）。
 3. **Notion 引导主页**
    - 链接：<https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554>
 
-### 实机样式基准参考
+### 上游历史实机样式参考（非本融合版设计验收）
 - **三栏对话与工件视图（高对比暖白 + 暗红蜡封 + 同行实时指标胶囊）**：[`assets/preview-workspace-chat-and-artifact.png`](assets/preview-workspace-chat-and-artifact.png)
 - **新建对话首页视图（全界面汉化 + 首页蜡封聚焦态）**：[`assets/preview-home-new-conversation.png`](assets/preview-home-new-conversation.png)
 
@@ -39,7 +39,7 @@ description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成�
 
 守护进程（`core/daemon.mjs`）内置**运行时环境动态分级**，绝不因 Node 小版本差异崩溃或无限重启：
 
-| 运行时版本 | 昼夜双模式主题 / 蜡封三态 / 四层字体 | 1,094 条深度汉化 + 原型安全词典 | 死锁自愈 + 缩放快捷键修复 | SQLite 实时会话指标胶囊 (`node:sqlite`) |
+| 运行时版本 | 昼夜双模式主题 / 扁平三态 / Anthropic 三族字体 | 1,524 条深度汉化 + 原型安全词典 | 死锁自愈 + 缩放快捷键修复 | SQLite 实时会话指标胶囊 (`node:sqlite`) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Node.js `>= 22.13.0`**（推荐完全体） | ✅ 全量启用 | ✅ 全量启用 | ✅ 全量启用 | ✅ **自动动态解锁**（精确显示生成速度、耗时、上下文窗口与缓存命中率） |
 | **Node.js `22.0.0 ~ 22.12.x`** | ✅ 全量启用 | ✅ 全量启用 | ✅ 全量启用 | ⚠️ 自动优雅降级关闭（无需 `--experimental-sqlite` 标志，后台零报错） |
@@ -57,11 +57,11 @@ chuanban-antigravity-theme-patch/
 ├── SKILL.md                    # 面向 AI Agent 的极简部署与二次改装指南（本文件）
 ├── README.md                   # 面向用户的项目说明与快速上手指南
 ├── core/                       # 【只读黄金内核】随版本升级整包原子替换，对方 Agent 严禁直接修改
-│   ├── manifest.json           # 版本号（5.1.5）、三端地址与 core/* 文件 SHA-256 校验清单
-│   ├── daemon.mjs              # Node CDP 守护进程（SQLite O(1) 增量遥测、2.5s 热重载感知、PID 精确鉴权、Stable+Insiders 同进程双守护）
-│   ├── runtime.js              # 浏览器端注入引擎（昼夜模式双向联动、DICT_CI 兜底索引、WeakMap O(1) 隔离缓存、早期 head 注入自愈、ctx.onCleanup）
+│   ├── manifest.json           # 版本号（5.1.6）、三端地址与 core/* 文件 SHA-256 校验清单
+│   ├── daemon.mjs              # Node CDP 守护进程（SQLite O(1) 增量遥测、Swarm 跨域子帧注入、2.5s 热重载感知、Stable+Insiders 双守护）
+│   ├── runtime.js              # 浏览器端注入引擎（昼夜模式与 curtainView 底色联动、DICT_CI 兜底索引、防双倍缩放保护、WeakMap O(1) 缓存）
 │   ├── theme.css               # 四段式 CSS 样式表（Part I 共享排版与几何 / Part II 白天暖纸 / Part III 独立黑夜 / Part IV 指标胶囊）
-│   └── i18n.json               # 1,094 条严格零大小写冲突标准 JSON 基准词典（兼容 PowerShell ConvertFrom-Json，挂载至 Object.create(null)）
+│   └── i18n.json               # 1,524 条严格零大小写冲突标准 JSON 基准词典（兼容 PowerShell ConvertFrom-Json，挂载至 Object.create(null)）
 └── user/                       # 【用户改装层】升级时 100% 永不覆盖，守护进程每 2.5s 自动检测 mtimeMs 热重载注入！
     ├── config.json             # 开关配置（enabled / channel / preset / contextLimit / modules / themeVars）
     ├── custom.css              # 用户/对方 Agent 自定义追加 CSS（独立挂载于 #antigravity-user-custom-style）
@@ -100,7 +100,7 @@ node install.mjs install --channel stable
 ```bash
 node install.mjs verify
 ```
-当终端输出 `"ok": true` 且显示 `"version": "20261112-v5.1.5-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
+当终端输出 `"ok": true` 且显示 `"version": "20261113-v5.1.6-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
 
 ---
 

@@ -338,8 +338,10 @@ for (const mode of ['light', 'dark']) {
       if (supportsContinuous) {
         assert.equal(await styleOf('composer-card', 'cornerShape'), 'superellipse(1.5)');
         assert.equal(await styleOf('context-menu', 'cornerShape'), 'superellipse(1.5)');
-        assert.equal(await styleOf('model-pill', 'cornerShape'), 'superellipse(1)');
-        assert.equal(await styleOf('send-btn', 'cornerShape'), 'superellipse(1)');
+        // Chromium may serialize superellipse(1) as its equivalent named shape, round.
+        for (const id of ['model-pill', 'send-btn']) {
+          assert.ok(['superellipse(1)', 'round'].includes(await styleOf(id, 'cornerShape')));
+        }
       }
     });
   });
