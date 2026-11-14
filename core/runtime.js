@@ -13,7 +13,9 @@
   if (window.top !== window && !IS_SWARM_PLUGIN_FRAME) return;
   if (!boot || typeof boot !== 'object') return;
 
-  const PATCH_VERSION = boot.version || '20261113-v5.1.6-eric.1';
+  const PATCH_VERSION = boot.version || '20261114-v5.2.0-eric.1';
+  const DETECTED_OS =
+    boot.platform || (/Win/i.test(navigator.platform || '') ? 'win32' : /Mac/i.test(navigator.platform || '') ? 'darwin' : 'linux');
   const ENABLED = boot.enabled !== false;
   const CSS_TEXT = boot.cssText || '';
   const CUSTOM_CSS_TEXT = boot.customCss || '';
@@ -24,6 +26,7 @@
       metrics: true,
       composerWaxSeal: true,
       deadlockHealer: true,
+      coldBootHealer: false,
       zoomShortcuts: true,
       customCss: true,
       customJs: true
@@ -52,6 +55,13 @@
     window.__ag_zoom_timer = null;
   }
 
+  const coldBootGeneration = Symbol('cold-boot-payload');
+  window.__ag_coldboot_generation = coldBootGeneration;
+  window.__ag_commit_coldboot_reload = null;
+  if (window.__ag_self_zoom_timer != null) clearTimeout(window.__ag_self_zoom_timer);
+  window.__ag_self_zoom_timer = null;
+  window.__ag_self_zooming = false;
+
   // 执行上一轮 user/custom.js 或内部注册的生命周期清理函数（防止热重载或卸载逃逸）
   if (Array.isArray(window.__ag_cleanup_fns) && window.__ag_cleanup_fns.length > 0) {
     const prevCleanups = window.__ag_cleanup_fns.splice(0, window.__ag_cleanup_fns.length);
@@ -73,6 +83,12 @@
       window.__ag_user_231_observer.disconnect();
     } catch (e) {}
     window.__ag_user_231_observer = null;
+  }
+  if (window.__ag_coldboot_timer) {
+    try {
+      clearTimeout(window.__ag_coldboot_timer);
+    } catch (e) {}
+    window.__ag_coldboot_timer = null;
   }
 
   // 全局持久化的原始英文文本映射表（支持 i18n.override.json 热重载增删改与一键还原）
@@ -245,6 +261,89 @@
     return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
   }
 
+  let colorProbeCanvasCtx = null;
+  function parseCssColorViaCanvasHex6(rawColor) {
+    if (!rawColor || typeof document === 'undefined') return null;
+    try {
+      if (!colorProbeCanvasCtx) {
+        const c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        colorProbeCanvasCtx = c.getContext('2d', { willReadFrequently: true });
+      }
+      if (!colorProbeCanvasCtx) return null;
+      colorProbeCanvasCtx.clearRect(0, 0, 1, 1);
+      colorProbeCanvasCtx.fillStyle = 'rgba(0, 0, 0, 0)';
+      colorProbeCanvasCtx.fillStyle = rawColor;
+      colorProbeCanvasCtx.fillRect(0, 0, 1, 1);
+      const d = colorProbeCanvasCtx.getImageData(0, 0, 1, 1).data;
+      if (!d || d[3] < 242) return null;
+      const h2 = (v) => v.toString(16).padStart(2, '0');
+      return ('#' + h2(d[0]) + h2(d[1]) + h2(d[2])).toUpperCase();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function resolveCssColorToHex6(propName, targetEl, fallbackHex) {
+    try {
+      const el = targetEl || document.body || document.documentElement;
+      if (!el || typeof getComputedStyle !== 'function') return fallbackHex;
+      const cs = getComputedStyle(el);
+      let cur = (cs.getPropertyValue(propName) || '').trim();
+      let hex = parseColorToHex6(cur);
+      for (let depth = 0; depth < 4 && !hex && cur && cur.includes('var('); depth++) {
+        cur = cur
+          .replace(/var\(\s*(--[A-Za-z0-9_-]+)(?:\s*,\s*([^)]+))?\s*\)/g, (_, vName, fb) => {
+            return (cs.getPropertyValue(vName) || fb || '').trim();
+          })
+          .trim();
+        hex = parseColorToHex6(cur);
+      }
+      if (!hex && cur && !cur.includes('var(')) {
+        hex = parseCssColorViaCanvasHex6(cur);
+      }
+      if (!hex && cur) {
+        const host = document.head || document.documentElement;
+        if (host) {
+          const probe = document.createElement('span');
+          probe.style.cssText =
+            'position:fixed!important;left:-9999px!important;top:-9999px!important;pointer-events:none!important;display:none!important;';
+          probe.style.setProperty('color', cur.includes('var(') ? `var(${propName})` : cur, 'important');
+          host.appendChild(probe);
+          try {
+            const resolved = getComputedStyle(probe).color;
+            hex = parseColorToHex6(resolved) || parseCssColorViaCanvasHex6(resolved);
+          } finally {
+            probe.remove();
+          }
+        }
+      }
+      return hex || fallbackHex;
+    } catch (e) {
+      return fallbackHex;
+    }
+  }
+
+  function syncWinTitleBarOverlay(isDark, force = false, customFallbacks = null) {
+    if (IS_SWARM_PLUGIN_FRAME || DETECTED_OS !== 'win32') return;
+    try {
+      const setOverlay = window.electronNative?.setTitleBarOverlay;
+      if (typeof setOverlay !== 'function') return;
+      const targetEl = document.body || document.documentElement;
+      if (!targetEl || typeof getComputedStyle !== 'function') return;
+      const fbBg = (customFallbacks && customFallbacks.bg) || (isDark ? '#191917' : '#F0EEE6');
+      const fbFg = (customFallbacks && customFallbacks.fg) || (isDark ? '#FAF9F5' : '#141413');
+      const bgHex = resolveCssColorToHex6('--sidebar', targetEl, fbBg);
+      const fgHex = resolveCssColorToHex6('--foreground', targetEl, fbFg);
+      const sig = bgHex + '|' + fgHex;
+      if (force || window.__ag_last_overlay_sig !== sig) {
+        window.__ag_last_overlay_sig = sig;
+        Promise.resolve(setOverlay({ color: bgHex, symbolColor: fgHex })).catch(() => {});
+      }
+    } catch (e) {}
+  }
+
   function syncCurtainSurfaceColor(force = false) {
     if (IS_SWARM_PLUGIN_FRAME) return;
     try {
@@ -253,14 +352,7 @@
       const targetEl = document.body || document.documentElement;
       if (!targetEl || typeof getComputedStyle !== 'function') return;
       const cs = getComputedStyle(targetEl);
-      let cur = (cs.getPropertyValue('--background') || '').trim();
-      let hex = parseColorToHex6(cur);
-      for (let depth = 0; depth < 3 && !hex && cur; depth++) {
-        const mVar = cur.match(/^var\(\s*(--[A-Za-z0-9_-]+)(?:\s*,\s*([^)]+))?\s*\)$/);
-        if (!mVar) break;
-        cur = (cs.getPropertyValue(mVar[1]) || mVar[2] || '').trim();
-        hex = parseColorToHex6(cur);
-      }
+      let hex = resolveCssColorToHex6('--background', targetEl, null);
       if (!hex) {
         hex = parseColorToHex6(cs.backgroundColor);
       }
@@ -343,6 +435,13 @@
       } catch (e) {}
       window.__ag_zoom_timer = null;
     }
+    if (window.__ag_self_zoom_timer) {
+      try {
+        clearTimeout(window.__ag_self_zoom_timer);
+      } catch (e) {}
+      window.__ag_self_zoom_timer = null;
+    }
+    window.__ag_self_zooming = false;
     window.__ag_zoom_keydown_fn = null;
     window.__ag_zoom_resize_fn = null;
     window.__ag_settings_click_fn = null;
@@ -353,20 +452,66 @@
     document.documentElement.removeAttribute('data-ag-page-type');
     document.documentElement.removeAttribute('data-ag-wax-seal');
     document.documentElement.removeAttribute('data-ag-os');
-    restoreAllTranslations(document.body);
-    syncCurtainSurfaceColor(true);
-    if (!IS_SWARM_PLUGIN_FRAME) {
-      try {
-        const cs = getComputedStyle(document.body || document.documentElement);
-        const sidebarBg = cs.getPropertyValue('--sidebar').trim();
-        const fgColor = cs.getPropertyValue('--foreground').trim();
-        if (sidebarBg && fgColor) {
-          window.electronNative?.setTitleBarOverlay?.({ color: sidebarBg, symbolColor: fgColor });
+    const restoreNativeSurfaces = () => {
+      syncCurtainSurfaceColor(true);
+      if (!IS_SWARM_PLUGIN_FRAME) {
+        const hEl = document.documentElement;
+        const bEl = document.body;
+        const sysDark = !!(
+          typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
+        const hDataTheme = hEl ? hEl.getAttribute('data-theme') : null;
+        const bHydrated = !!(bEl && (bEl.hasAttribute('data-agy-theme') || bEl.hasAttribute('data-newux-theme')));
+        let nativeDark = false;
+        if (
+          hDataTheme === 'dark' ||
+          (bEl && (bEl.classList.contains('dark') || bEl.classList.contains('theme-dark') || bEl.classList.contains('dark-theme')))
+        ) {
+          nativeDark = true;
+        } else if (
+          hDataTheme === 'light' ||
+          (bEl && (bEl.classList.contains('theme-light') || bEl.classList.contains('light-theme') || bEl.classList.contains('light')))
+        ) {
+          nativeDark = false;
+        } else if (hEl && hEl.style.colorScheme === 'dark') {
+          nativeDark = true;
+        } else if (hEl && hEl.style.colorScheme === 'light') {
+          nativeDark = false;
+        } else if (bHydrated) {
+          nativeDark = false;
+        } else if (boot.hostThemeMode === 'dark') {
+          nativeDark = true;
+        } else if (boot.hostThemeMode === 'light') {
+          nativeDark = false;
+        } else {
+          nativeDark = sysDark;
         }
-      } catch (e) {}
+        syncWinTitleBarOverlay(nativeDark, true, {
+          bg: nativeDark ? '#131313' : '#FAFAFA',
+          fg: nativeDark ? '#FAFAFA' : '#383A42'
+        });
+      }
+    };
+    restoreAllTranslations(document.body);
+    restoreNativeSurfaces();
+    if (!document.body && typeof document.addEventListener === 'function') {
+      if (window.__ag_disabled_dcl_fn) {
+        document.removeEventListener('DOMContentLoaded', window.__ag_disabled_dcl_fn);
+      }
+      window.__ag_disabled_dcl_fn = () => {
+        window.__ag_disabled_dcl_fn = null;
+        restoreAllTranslations(document.body);
+        restoreNativeSurfaces();
+      };
+      document.addEventListener('DOMContentLoaded', window.__ag_disabled_dcl_fn, { once: true });
     }
     window.__ag_patch_version = PATCH_VERSION + '-disabled';
     return;
+  }
+
+  if (window.__ag_disabled_dcl_fn && typeof document.removeEventListener === 'function') {
+    document.removeEventListener('DOMContentLoaded', window.__ag_disabled_dcl_fn);
+    window.__ag_disabled_dcl_fn = null;
   }
 
   // ============================================================================
@@ -385,8 +530,7 @@
   }
 
   document.documentElement.setAttribute('data-ag-wax-seal', MODULES.composerWaxSeal === false ? 'off' : 'on');
-  const detectedOs =
-    boot.platform || (/Win/i.test(navigator.platform || '') ? 'win32' : /Mac/i.test(navigator.platform || '') ? 'darwin' : 'linux');
+  const detectedOs = DETECTED_OS;
   document.documentElement.setAttribute('data-ag-os', detectedOs);
   applyThemeVars(THEME_VARS);
 
@@ -464,6 +608,242 @@
   }
 
   // ============================================================================
+  // 2.05 冷启动内嵌兜底包漂移安全自愈（HEAD ETag 零流量比对 + 六重空输入/零交互安全门禁）
+  // ============================================================================
+  if (
+    !IS_SWARM_PLUGIN_FRAME &&
+    window.top === window &&
+    MODULES.deadlockHealer !== false &&
+    MODULES.coldBootHealer === true &&
+    /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(String(window.location.origin || ''))
+  ) {
+    const markUserDirty = () => {
+      window.__ag_user_interacted_dirty = true;
+      if (window.__ag_coldboot_timer) {
+        try {
+          clearTimeout(window.__ag_coldboot_timer);
+        } catch (e) {}
+        window.__ag_coldboot_timer = null;
+      }
+    };
+
+    if (!window.__ag_user_dirty_guard_installed) {
+      window.__ag_user_dirty_guard_installed = true;
+      const PURE_MOD_KEYS = new Set(['Meta', 'Control', 'Alt', 'Shift', 'CapsLock', 'NumLock', 'ScrollLock', 'Fn']);
+      document.addEventListener(
+        'keydown',
+        (e) => {
+          const k = String(e.key || '');
+          if (PURE_MOD_KEYS.has(k)) return;
+          if ((e.metaKey || e.ctrlKey) && !e.altKey && (k === '-' || k === '_' || k === '=' || k === '+' || k === '0')) {
+            return;
+          }
+          markUserDirty();
+        },
+        { capture: true, passive: true }
+      );
+      for (const evtName of ['paste', 'drop', 'compositionstart', 'input']) {
+        document.addEventListener(evtName, markUserDirty, { capture: true, passive: true });
+      }
+    }
+
+    const readSessionHealedFlag = () => {
+      try {
+        return window.sessionStorage.getItem('__ag_coldboot_bundle_healed') === '1';
+      } catch (e) {
+        return true;
+      }
+    };
+
+    const isWindowUntouchedAndIdleForColdHeal = () => {
+      if (!ENABLED || MODULES.deadlockHealer === false || MODULES.coldBootHealer !== true) return false;
+      if (window.__ag_coldboot_generation !== coldBootGeneration) return false;
+      if (window.__ag_user_interacted_dirty) return false;
+      // Never refresh a background window or a conversation with potentially unseen state.
+      if (document.hidden || !document.hasFocus() || window.location.pathname !== '/') return false;
+      if (document.activeElement?.matches?.('input, textarea, [contenteditable], [data-lexical-editor]')) return false;
+      if (typeof performance === 'undefined' || typeof performance.now !== 'function' || performance.now() >= 25000) {
+        return false;
+      }
+      if (readSessionHealedFlag()) return false;
+      // Empty text is not proof of an empty draft: attachments and queued sends count too.
+      if (document.querySelector('[data-testid*="attachment"], [data-testid*="queued-message"], [contenteditable] img, [contenteditable] video, [contenteditable] audio')) return false;
+      for (const fileInput of document.querySelectorAll('input[type="file"]')) {
+        if (fileInput.files && fileInput.files.length) return false;
+      }
+      if (
+        document.querySelector(
+          '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [data-state="open"], [data-testid="input-cancel-button"], [data-testid*="running-"], button[aria-label="Stop execution"], button[aria-label="停止执行"], button[aria-label*="Cancel ("], button[aria-label*="取消生成"]'
+        )
+      ) {
+        return false;
+      }
+      const editableList = document.querySelectorAll(
+        '[data-lexical-editor="true"], [contenteditable="true"], textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"])'
+      );
+      for (let i = 0; i < editableList.length; i++) {
+        const el = editableList[i];
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          if (el.tagName === 'INPUT') {
+            const itype = String(el.type || '').toLowerCase();
+            if (
+              itype === 'hidden' ||
+              itype === 'checkbox' ||
+              itype === 'radio' ||
+              itype === 'range' ||
+              itype === 'color' ||
+              itype === 'button' ||
+              itype === 'submit' ||
+              itype === 'reset' ||
+              itype === 'file'
+            ) {
+              continue;
+            }
+          }
+          if (String(el.value || '').trim() !== '') return false;
+        } else {
+          const txt = String(el.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+          if (txt !== '') return false;
+        }
+      }
+      return true;
+    };
+
+    const probeColdBootBundleDrift = async (attempt) => {
+      window.__ag_coldboot_timer = null;
+      if (!isWindowUntouchedAndIdleForColdHeal()) {
+        window.__ag_coldboot_probe_done = true;
+        window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'gate-blocked' };
+        return;
+      }
+      try {
+        const entries =
+          typeof performance.getEntriesByType === 'function'
+            ? performance.getEntriesByType('resource').filter((e) => /\/main\.js(?:\?|$)/.test(String(e.name || '')))
+            : [];
+        const mainEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+        const loadedDecoded = Number(mainEntry && mainEntry.decodedBodySize) || 0;
+        const loadedEncoded = Number(mainEntry && mainEntry.encodedBodySize) || 0;
+        if (loadedDecoded <= 0 && loadedEncoded <= 0) {
+          window.__ag_coldboot_probe_done = true;
+          window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'no-perf-entry' };
+          return;
+        }
+
+        const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+        const abortTimer = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
+        let res = null;
+        try {
+          res = await fetch('/main.js', {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: ctrl ? ctrl.signal : undefined
+          });
+        } finally {
+          if (abortTimer) clearTimeout(abortTimer);
+        }
+        if (!res || !res.ok) {
+          window.__ag_coldboot_probe_done = true;
+          window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'head-failed' };
+          return;
+        }
+
+        const etag = String(res.headers.get('etag') || '').trim();
+        const mEtag = etag.match(/^(?:W\/)?"([0-9a-f]+)-[0-9a-f]+"$/i);
+        const serverDecoded = mEtag ? parseInt(mEtag[1], 16) : 0;
+        const serverEncoded = Number(res.headers.get('content-length')) || 0;
+
+        let hasDrift = false;
+        if (serverDecoded > 0 && loadedDecoded > 0) {
+          hasDrift = Math.abs(serverDecoded - loadedDecoded) > 1024;
+        } else if (serverEncoded > 0 && loadedEncoded > 0) {
+          hasDrift = Math.abs(serverEncoded - loadedEncoded) > 1024;
+        }
+
+        if (!isWindowUntouchedAndIdleForColdHeal()) {
+          window.__ag_coldboot_probe_done = true;
+          window.__ag_coldboot_healer_state = {
+            probeDone: true,
+            loadedDecoded,
+            serverDecoded,
+            drifted: hasDrift,
+            skippedReason: 'dirty-after-head'
+          };
+          return;
+        }
+
+        if (hasDrift) {
+          window.__ag_coldboot_probe_done = true;
+          window.__ag_coldboot_healer_state = {
+            probeDone: true,
+            loadedDecoded,
+            serverDecoded,
+            drifted: true,
+            reloadRequested: true
+          };
+          // Daemon acknowledges in this same execution context. The final safety check
+          // and reload stay synchronous on the page, avoiding a CDP Page.reload race.
+          if (typeof window.__agRequestHardReload !== 'function' || !window.crypto?.randomUUID) return;
+          const token = window.crypto.randomUUID();
+          window.__ag_commit_coldboot_reload = (candidate) => {
+            if (candidate !== token || !isWindowUntouchedAndIdleForColdHeal()) return false;
+            try { window.sessionStorage.setItem('__ag_coldboot_bundle_healed', '1'); }
+            catch (e) { return false; }
+            window.__ag_commit_coldboot_reload = null;
+            window.location.reload();
+            return true;
+          };
+          window.__agRequestHardReload(JSON.stringify({ token }));
+          return;
+        }
+
+        const hasRemoteTrigger = !!document.querySelector(
+          '[data-testid="project-selector-this-machine-trigger"], [data-testid="location-selector-trigger"]'
+        );
+        if (attempt === 1 && !hasRemoteTrigger && performance.now() < 16000) {
+          window.__ag_coldboot_healer_state = {
+            probeDone: false,
+            attempt: 1,
+            loadedDecoded,
+            serverDecoded,
+            drifted: false
+          };
+          window.__ag_coldboot_timer = setTimeout(() => {
+            probeColdBootBundleDrift(2);
+          }, 5500);
+          return;
+        }
+
+        window.__ag_coldboot_probe_done = true;
+        window.__ag_coldboot_healer_state = {
+          probeDone: true,
+          attempt,
+          loadedDecoded,
+          serverDecoded,
+          drifted: false
+        };
+      } catch (e) {
+        window.__ag_coldboot_probe_done = true;
+        window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'exception' };
+      }
+    };
+
+    if (!window.__ag_coldboot_probe_done && isWindowUntouchedAndIdleForColdHeal() && performance.now() < 20000) {
+      const delayMs = Math.max(1500, Math.round(5800 - Math.min(4300, performance.now())));
+      window.__ag_coldboot_healer_state = { armed: true, delayMs, probeDone: false };
+      window.__ag_coldboot_timer = setTimeout(() => {
+        probeColdBootBundleDrift(1);
+      }, delayMs);
+    } else if (!window.__ag_coldboot_healer_state) {
+      window.__ag_coldboot_healer_state = {
+        armed: false,
+        probeDone: true,
+        skippedReason: performance.now() >= 20000 ? 'warm-window' : 'gate-blocked'
+      };
+    }
+  }
+
+  // ============================================================================
   // 2.1 缩放快捷键修复与 2.31.2 原生菜单快捷键防双倍缩放保护（兼容 Numpad、欧式键盘与 Windows BaseWindow）
   // ============================================================================
   try {
@@ -474,12 +854,15 @@
   } catch (e) {}
 
   window.__ag_zoom_resize_fn = () => {
-    if (window.__ag_self_zooming) return;
     const native = window.electronNative;
     if (!native || typeof native.getZoomLevel !== 'function') return;
     try {
       const cur = native.getZoomLevel();
       if (typeof cur === 'number') {
+        if (window.__ag_self_zooming) {
+          window.__ag_settled_zoom = cur;
+          return;
+        }
         if (typeof window.__ag_settled_zoom === 'number' && Math.abs(cur - window.__ag_settled_zoom) > 0.003) {
           window.__ag_last_ext_zoom_ts = typeof performance !== 'undefined' ? performance.now() : Date.now();
         }
@@ -489,28 +872,75 @@
   };
 
   window.__ag_zoom_keydown_fn = (e) => {
-    if (IS_SWARM_PLUGIN_FRAME || MODULES.zoomShortcuts === false || MODULES.deadlockHealer === false) return;
+    if (MODULES.zoomShortcuts === false || MODULES.deadlockHealer === false) return;
     if (e.isComposing) return;
     const isMac = detectedOs === 'darwin';
     const modKey = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
     if (!modKey || e.altKey) return;
 
+    const k = String(e.key || '');
+    const isCjkImeKey =
+      k === 'Process' || k === 'Unidentified' || /[\uFF00-\uFFEF\u3000-\u303F]/.test(k);
+
+    let action = null;
+    if (
+      k === '-' ||
+      k === '_' ||
+      e.code === 'NumpadSubtract' ||
+      (!e.shiftKey && e.code === 'Minus' && isCjkImeKey)
+    ) {
+      action = 'out';
+    } else if (
+      k === '=' ||
+      k === '+' ||
+      e.code === 'NumpadAdd' ||
+      (e.code === 'Equal' && isCjkImeKey)
+    ) {
+      action = 'in';
+    } else if (!e.shiftKey && (k === '0' || e.code === 'Numpad0' || (e.code === 'Digit0' && isCjkImeKey))) {
+      action = 'reset';
+    }
+    if (!action) return;
+
+    // Swarm 子帧内：当 e.key 非宿主 sidecar-key-event 直接识别的 '+'/'='/'-'/'0'（如 Numpad0 'Insert'、'_'、中文输入法 'Process'/全角符号）时归一化转发
+    if (IS_SWARM_PLUGIN_FRAME) {
+      if (k !== '+' && k !== '=' && k !== '-' && k !== '0' && window.parent && window.parent !== window) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          window.parent.postMessage(
+            {
+              type: 'sidecar-key-event',
+              payload: {
+                eventType: 'keydown',
+                key: action === 'in' ? '=' : action === 'out' ? '-' : '0',
+                code: e.code,
+                ctrlKey: !!e.ctrlKey,
+                metaKey: !!e.metaKey,
+                shiftKey: action === 'reset' ? false : !!e.shiftKey,
+                altKey: false,
+                repeat: !!e.repeat
+              }
+            },
+            '*'
+          );
+        } catch (err) {}
+      }
+      return;
+    }
+
     const native = window.electronNative;
     if (!native) return;
 
-    let action = null;
-    let actionFn = null;
-    if (!e.shiftKey && (e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {
-      action = 'out';
-      actionFn = native.zoomOut;
-    } else if (e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') {
-      action = 'in';
-      actionFn = native.zoomIn;
-    } else if (!e.shiftKey && (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0')) {
-      action = 'reset';
-      actionFn = typeof native.resetZoom === 'function' ? native.resetZoom : native.zoomReset;
-    }
-    if (!action || typeof actionFn !== 'function') return;
+    const actionFn =
+      action === 'out'
+        ? native.zoomOut
+        : action === 'in'
+        ? native.zoomIn
+        : typeof native.resetZoom === 'function'
+        ? native.resetZoom
+        : native.zoomReset;
+    if (typeof actionFn !== 'function') return;
 
     if (window.__ag_zoom_timer != null) {
       clearTimeout(window.__ag_zoom_timer);
@@ -524,10 +954,11 @@
     e.preventDefault();
     e.stopPropagation();
 
-    // 若原生菜单加速器已在 keydown 到达渲染进程前刚完成缩放，直接同步状态并跳过补触发
+    // 若原生菜单加速器已在 keydown 到达渲染进程前刚完成缩放（macOS NSMenu），直接同步状态并跳过补触发
     if (
-      (typeof curFactor === 'number' && typeof settledBefore === 'number' && Math.abs(curFactor - settledBefore) > 0.003) ||
-      nowTs - (window.__ag_last_ext_zoom_ts || 0) < 80
+      !window.__ag_self_zooming &&
+      ((typeof curFactor === 'number' && typeof settledBefore === 'number' && Math.abs(curFactor - settledBefore) > 0.003) ||
+        nowTs - (window.__ag_last_ext_zoom_ts || 0) < (isMac ? 80 : 40))
     ) {
       if (typeof curFactor === 'number') window.__ag_settled_zoom = curFactor;
       return;
@@ -538,25 +969,74 @@
       return;
     }
 
+    const markSelfZoomWindow = (ms) => {
+      window.__ag_self_zooming = true;
+      if (window.__ag_self_zoom_timer) clearTimeout(window.__ag_self_zoom_timer);
+      window.__ag_self_zoom_timer = setTimeout(() => {
+        window.__ag_self_zoom_timer = null;
+        try {
+          const latest = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
+          if (typeof latest === 'number') window.__ag_settled_zoom = latest;
+        } catch (err) {}
+        window.__ag_self_zooming = false;
+      }, ms);
+    };
+
+    const runZoomAction = () => {
+      markSelfZoomWindow(250);
+      try {
+        const ret = actionFn.call(native);
+        const syncNext = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
+        if (
+          typeof syncNext === 'number' &&
+          (typeof curFactor !== 'number' || Math.abs(syncNext - curFactor) > 0.003)
+        ) {
+          window.__ag_settled_zoom = syncNext;
+        }
+        if (ret && typeof ret.then === 'function') {
+          ret.then(
+            () => {
+              try {
+                const asyncNext = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
+                if (typeof asyncNext === 'number') window.__ag_settled_zoom = asyncNext;
+              } catch (err) {}
+              markSelfZoomWindow(80);
+            },
+            () => {
+              markSelfZoomWindow(40);
+            }
+          );
+        }
+      } catch (err) {
+        markSelfZoomWindow(40);
+      }
+    };
+
+    // Windows / Linux 无 NSMenu 加速器竞态，且 macOS 原生菜单未绑定小键盘与 '_'：零延迟即时执行，确保长按连发 (e.repeat) 丝滑不吞键
+    if (!isMac || String(e.code || '').startsWith('Numpad') || k === '_') {
+      runZoomAction();
+      return;
+    }
+
+    // macOS 保留 60ms NSMenu 防双倍缩放观察窗口
+    if (window.__ag_zoom_timer) {
+      clearTimeout(window.__ag_zoom_timer);
+      window.__ag_zoom_timer = null;
+    }
+
     window.__ag_zoom_timer = setTimeout(() => {
       window.__ag_zoom_timer = null;
       try {
         const afterFactor = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
         if (
-          (typeof curFactor === 'number' && typeof afterFactor === 'number' && Math.abs(afterFactor - curFactor) > 0.003) ||
-          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - (window.__ag_last_ext_zoom_ts || 0) < 80
+          !window.__ag_self_zooming &&
+          ((typeof curFactor === 'number' && typeof afterFactor === 'number' && Math.abs(afterFactor - curFactor) > 0.003) ||
+            (typeof performance !== 'undefined' ? performance.now() : Date.now()) - (window.__ag_last_ext_zoom_ts || 0) < 80)
         ) {
           if (typeof afterFactor === 'number') window.__ag_settled_zoom = afterFactor;
           return;
         }
-        window.__ag_self_zooming = true;
-        try {
-          actionFn.call(native);
-          const nextFactor = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-          if (typeof nextFactor === 'number') window.__ag_settled_zoom = nextFactor;
-        } finally {
-          window.__ag_self_zooming = false;
-        }
+        runZoomAction();
       } catch (err) {}
     }, 60);
   };
@@ -644,16 +1124,22 @@
       const htmlEl = document.documentElement;
       const bodyEl = document.body;
       const htmlDataTheme = htmlEl ? htmlEl.getAttribute('data-theme') : null;
+      const hostThemeMode = boot.hostThemeMode || null;
       const systemPrefersDark = !!(
         typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
       );
       let isDark = false;
       if (IS_SWARM_PLUGIN_FRAME) {
-        // Swarm 插件 preload 直接向 html 内联 style 注入宿主 --background（不受样式表 !important 覆盖影响）
+        // Swarm 插件 preload 直接向 html 内联 style 注入宿主 --background（不受样式表 !important 覆盖影响）；
+        // 若后台预热阶段尚未收到宿主 theme-change（hostLum === null），优先对齐 ~/.gemini/config/config.json 的 hostThemeMode
         const inlineHostBg = htmlEl ? (htmlEl.style.getPropertyValue('--background') || '').trim() : '';
         const hostLum = computeColorLuminance(inlineHostBg);
         if (hostLum !== null) {
           isDark = hostLum < 0.5;
+        } else if (hostThemeMode === 'dark') {
+          isDark = true;
+        } else if (hostThemeMode === 'light') {
+          isDark = false;
         } else if (htmlDataTheme === 'dark') {
           isDark = true;
         } else if (htmlDataTheme === 'light') {
@@ -684,30 +1170,41 @@
         try {
           storedThemeMode = Storage.prototype.getItem.call(localStorage, 'theme-mode');
         } catch (e) {}
-        isDark = bodyExplicitDark
-          ? true
-          : bodyExplicitLight || storedThemeMode === 'light'
-          ? false
-          : storedThemeMode === 'dark'
-          ? true
-          : !!(htmlEl && htmlEl.style.colorScheme === 'dark') || systemPrefersDark;
+        const hasColorSchemeDark = !!(htmlEl && htmlEl.style.colorScheme === 'dark');
+        const hasColorSchemeLight = !!(htmlEl && htmlEl.style.colorScheme === 'light');
+        const bodyHydrated = !!(
+          bodyEl && (bodyEl.hasAttribute('data-agy-theme') || bodyEl.hasAttribute('data-newux-theme'))
+        );
+        if (bodyExplicitDark) {
+          isDark = true;
+        } else if (bodyExplicitLight) {
+          isDark = false;
+        } else if (hasColorSchemeDark) {
+          isDark = true;
+        } else if (hasColorSchemeLight) {
+          isDark = false;
+        } else if (bodyHydrated) {
+          isDark = false;
+        } else if (hostThemeMode === 'dark') {
+          isDark = true;
+        } else if (hostThemeMode === 'light') {
+          isDark = false;
+        } else if (hostThemeMode === 'inherit') {
+          isDark = systemPrefersDark;
+        } else if (storedThemeMode === 'dark') {
+          isDark = true;
+        } else if (storedThemeMode === 'light') {
+          isDark = false;
+        } else {
+          isDark = systemPrefersDark;
+        }
       }
       const targetMode = isDark ? 'dark' : 'light';
       const prevMode = document.documentElement.getAttribute('data-ag-theme-mode');
       if (prevMode !== targetMode || prevPreset !== targetPreset) {
         document.documentElement.setAttribute('data-ag-theme-mode', targetMode);
-        if (!IS_SWARM_PLUGIN_FRAME) {
-          try {
-            const cs = getComputedStyle(document.body || document.documentElement);
-            const sidebarBg = cs.getPropertyValue('--sidebar').trim() || (isDark ? '#191917' : '#F0EEE6');
-            const fgColor = cs.getPropertyValue('--foreground').trim() || (isDark ? '#FAF9F5' : '#141413');
-            window.electronNative?.setTitleBarOverlay?.({
-              color: sidebarBg,
-              symbolColor: fgColor
-            });
-          } catch (e) {}
-        }
       }
+      syncWinTitleBarOverlay(isDark);
       syncCurtainSurfaceColor();
     } catch (e) {}
   }
@@ -1149,22 +1646,35 @@
   const DICT = Object.assign(Object.create(null), boot.i18nDict || {});
   window.__ag_i18n_dict = DICT;
 
-  // 大小写不敏感兜底索引（2.31.1 起同一文案并存 "Toggle Sidebar" / "Toggle sidebar" 等多种大小写）
-  // 仅对首字母大写的界面文案生效，避免误伤小写标识符；精确匹配始终优先。
+  // 大小写不敏感兜底索引与弯撇号 (\u2018/\u2019 -> ') 归一化（2.31.1+ 并存多种大小写与排版弯引号文案）
+  // 仅对首字母大写的界面文案启用大小写兜底，避免误伤小写标识符；精确匹配始终优先。
+  const RE_CURLY_APOS = /[\u2018\u2019]/g;
+  const DICT_APOS = new Map();
   const DICT_CI = new Map();
   for (const k in DICT) {
     const v = DICT[k];
     if (typeof v !== 'string') continue;
-    const lk = k.toLowerCase();
+    const kNorm = k.indexOf('\u2019') !== -1 || k.indexOf('\u2018') !== -1 ? k.replace(RE_CURLY_APOS, "'") : k;
+    if (kNorm !== k && !(kNorm in DICT) && !DICT_APOS.has(kNorm)) {
+      DICT_APOS.set(kNorm, v);
+    }
+    const lk = kNorm.toLowerCase();
     if (!DICT_CI.has(lk)) DICT_CI.set(lk, v);
   }
   function dictLookup(s) {
     if (!s) return undefined;
     const exact = DICT[s];
     if (typeof exact === 'string') return exact;
-    const c0 = s.charCodeAt(0);
+    const sNorm = s.indexOf('\u2019') !== -1 || s.indexOf('\u2018') !== -1 ? s.replace(RE_CURLY_APOS, "'") : s;
+    if (sNorm !== s) {
+      const exactNorm = DICT[sNorm];
+      if (typeof exactNorm === 'string') return exactNorm;
+    }
+    const aposAlias = DICT_APOS.get(sNorm);
+    if (typeof aposAlias === 'string') return aposAlias;
+    const c0 = sNorm.charCodeAt(0);
     if (c0 < 65 || c0 > 90) return undefined;
-    return DICT_CI.get(s.toLowerCase());
+    return DICT_CI.get(sNorm.toLowerCase());
   }
 
   let scanBodyFn = null;
@@ -1328,6 +1838,12 @@
     const RE_UPDATES_COUNT = /^(\d+)\s+updates?$/i;
     const RE_PROJECTS_COUNT = /^(\d+)\s+projects?$/i;
     const RE_CALLS_MB = /^(\d+)\s+calls?\s*·\s*([\d.]+\s*MB)$/i;
+    const RE_TASKS_DONE = /^(\d+)\s+of\s+(\d+)\s+tasks?\s+done$/i;
+    const RE_POSTS_COUNT = /^(\d+)\s+posts?$/i;
+    const RE_MEMBERS_COUNT = /^(\d+)\s+members?$/i;
+    const RE_MCP_FAILED_START = /^(\d+)\s+MCP servers?\s+failed to start$/i;
+    const RE_UP_NEXT_COUNT = /^Up next\s*·\s*(\d+)$/i;
+    const RE_USES_LOCAL_CLONE = /^Uses your local clone,\s+([^\r\n]{1,100})$/;
     const RE_PLUS_ATTACHMENTS = /^\+(\d+)\s+attachments?$/i;
     const RE_PLUS_MORE = /^\+(\d+)\s+more(\s*\(Show all\))?$/i;
     const RE_SEE_ALL = /^See all\s*\((\d+)\)$/i;
@@ -1342,6 +1858,14 @@
     const RE_WORKED_FOR_UPDATES = /^Worked for\s+([<0-9smhd\s]+?)\s*·\s*(\d+)\s+updates?$/i;
     const RE_WORKED_FOR = /^Worked for\s+([<0-9smhd]+(?:\s+\d+[smhd])*)$/i;
     const RE_WAITING_CMD_SEC = /^Waiting for command completion\s*\(up to\s+(\d+)\s+seconds?\)$/i;
+    const RE_HOME_HEY_NAME = /^Hey\s+([^\r\n]{1,40}?),\s+what should we build today\?$/i;
+    const RE_HOME_WELCOME_NAME = /^Welcome back,\s*([^\r\n]{1,40}?)\.\s+Where should we pick up\?$/i;
+    const RE_HOME_GOOD_SEE_NAME = /^Good to see you,\s*([^\r\n]{1,40}?)\.\s+What['\u2019]s next\?$/i;
+    const RE_WORK_LOCALLY_ON = /^Work locally on\s+([^\r\n]{1,80})$/;
+    const RE_WORK_IN_TARGET = /^Work in\s+(?!a New Worktree$)([^\r\n]{1,80})$/;
+    const RE_WORKTREE_FROM = /^Worktree from\s+([^\r\n,]{1,80}?)(?:,\s*and reuse\s+([^\r\n]{1,80}))?$/;
+    const RE_AUTO_FIG_WORKSPACE =
+      /^Automatically create a new\s+(Fig|Piper|JJ)\s+workspace when the conversation starts(?:,\s*Worktree from\s+([^\r\n,]{1,80}?))?(?:,\s*and reuse\s+([^\r\n]{1,80}))?$/;
     const RE_THOUGHT_FOR = /^Thought for\s+([<0-9smhd]+(?:\s+\d+[smhd])*)$/i;
     const RE_THINKING_FOR = /^Thinking for\s+([<0-9smhd]+(?:\s+\d+[smhd])*)$/i;
     const RE_USING_BROWSER_SEC = /^Using browser\s*\((\d+)s\)$/i;
@@ -1355,23 +1879,23 @@
       explored: '已探索',
       'explored file': '已探索文件',
       'explored files': '已探索文件',
-      'explored artifact': '已探索交付工件',
-      'explored artifacts': '已探索交付工件',
-      'explored file and artifact': '已探索文件与交付工件',
-      'explored files and artifact': '已探索文件与交付工件',
-      'explored file and artifacts': '已探索文件与交付工件',
-      'explored files and artifacts': '已探索文件与交付工件',
+      'explored artifact': '已探索 Artifact',
+      'explored artifacts': '已探索 Artifact',
+      'explored file and artifact': '已探索文件与 Artifact',
+      'explored files and artifact': '已探索文件与 Artifact',
+      'explored file and artifacts': '已探索文件与 Artifact',
+      'explored files and artifacts': '已探索文件与 Artifact',
       'ran command': '已运行命令',
       'ran commands': '已运行命令',
       edited: '已编辑',
       'edited file': '已编辑文件',
       'edited files': '已编辑文件',
-      'edited artifact': '已编辑交付工件',
-      'edited artifacts': '已编辑交付工件',
-      'edited file and artifact': '已编辑文件与交付工件',
-      'edited files and artifact': '已编辑文件与交付工件',
-      'edited file and artifacts': '已编辑文件与交付工件',
-      'edited files and artifacts': '已编辑文件与交付工件'
+      'edited artifact': '已编辑 Artifact',
+      'edited artifacts': '已编辑 Artifact',
+      'edited file and artifact': '已编辑文件与 Artifact',
+      'edited files and artifact': '已编辑文件与 Artifact',
+      'edited file and artifacts': '已编辑文件与 Artifact',
+      'edited files and artifacts': '已编辑文件与 Artifact'
     };
     const RE_EPHEMERAL_COUNT_CLAUSE = /^(explored|edited|ran)\s+(\d+)\s+(files?|artifacts?|commands?)$/i;
     function translateEphemeralClause(clause) {
@@ -1383,8 +1907,8 @@
         const nMap = {
           file: '个文件',
           files: '个文件',
-          artifact: '个交付工件',
-          artifacts: '个交付工件',
+          artifact: '个 Artifact',
+          artifacts: '个 Artifact',
           command: '条命令',
           commands: '条命令'
         };
@@ -1402,13 +1926,16 @@
     const EPHEMERAL_NOUN_MAP = {
       file: '文件',
       files: '文件',
-      artifact: '交付工件',
-      artifacts: '交付工件',
-      'file and artifact': '文件与交付工件',
-      'files and artifact': '文件与交付工件',
-      'file and artifacts': '文件与交付工件',
-      'files and artifacts': '文件与交付工件'
+      artifact: 'Artifact',
+      artifacts: 'Artifact',
+      'file and artifact': '文件与 Artifact',
+      'files and artifact': '文件与 Artifact',
+      'file and artifacts': '文件与 Artifact',
+      'files and artifacts': '文件与 Artifact'
     };
+    function joinZhVerbNoun(verbZh, nounZh) {
+      return /^[A-Za-z0-9]/.test(nounZh) ? verbZh + ' ' + nounZh : verbZh + nounZh;
+    }
     const RE_RUNNING_CMD = /^Running\s+(?!commands?\b|processes\b|for\b|\(Dev\b)(.+)$/;
     const RE_DELETED_RECORDINGS = /^Deleted\s+(\d+)\s+recordings?\s*\(([\d.]+\s*MB)\)$/i;
     const RE_DELETE_RECORDINGS_CONFIRM =
@@ -1431,11 +1958,12 @@
     const RE_ARIA_BRANCH = /^Branch, current:\s*(.*)$/i;
     const RE_ARIA_PROJECT = /^Select project(?:, current)?:\s*(.*)$/i;
     const RE_ARIA_LOCATION = /^(?:Where the agent runs, current|Select location(?:, current)?):\s*(.*)$/i;
-    const RE_ARIA_VERSION = /^Version\s+([\d.]+(?:\s*·\s*\S+)?)$/i;
+    const RE_ARIA_VERSION = /^Version\s+(\d+(?:\.\d+)+(?:-[0-9A-Za-z.-]+)?(?:\s*·\s*[^\r\n]{1,32})?)$/i;
     const RE_ARIA_MODEL = /^(?:Select model|Model(?:\s+selector)?)(?:,\s*current)?:\s*(.*)$/i;
     const RE_ARIA_PERM_SEL =
       /^(?:(?:Permission mode|Agent permissions preset)\s+selector(?:,\s*current)?|(?:Permission mode|Agent permissions preset),\s*current):\s*(.*)$/i;
-    const RE_ARIA_PERM_FIXED = /^(?:Permission mode|Agent permissions preset):\s*([^,(]+?)(?:\s*(?:,\s*(.+?)|\(([^)]+)\)))?$/i;
+    const RE_ARIA_PERM_FIXED =
+      /^(?:Permission mode|Agent permissions preset):\s*(.+?)(?:\s*,\s*(.+?)|\s+\((cannot be changed[^)]*)\))?$/i;
     const RE_ARIA_TURN = /^(?:Conversation turn\s+(\d+)\s+by\s+(User|Agent|Assistant)|Turn\s+(\d+)\s+of\s+(\d+))$/i;
     const RE_ARIA_GOTO_TURN = /^Go to turn\s+(\d+)\s+of\s+(\d+)$/i;
     const RE_ARIA_LOAD_OLDER = /^(?:Load\s+(\d+)\s+older\s+turns?.*|(Load|No more) older messages,\s*showing\s+(\d+)\s+of\s+(\d+))$/i;
@@ -1572,8 +2100,8 @@
         if (RE_DEMOTED.test(trimmed)) return raw.replace(RE_DEMOTED, '$1 项已降级');
         if (RE_EXCLUDED.test(trimmed)) return raw.replace(RE_EXCLUDED, '$1 项已排除');
         if (RE_TOOLS_EXCLUDED.test(trimmed)) return raw.replace(RE_TOOLS_EXCLUDED, '$1 个工具已排除');
-        if (RE_ACTIVE_CONVS.test(trimmed)) return raw.replace(RE_ACTIVE_CONVS, '$1 个进行中的会话');
-        if (RE_ARCHIVED_CONVS.test(trimmed)) return raw.replace(RE_ARCHIVED_CONVS, '$1 个已归档会话');
+        if (RE_ACTIVE_CONVS.test(trimmed)) return raw.replace(RE_ACTIVE_CONVS, '$1 个进行中的对话');
+        if (RE_ARCHIVED_CONVS.test(trimmed)) return raw.replace(RE_ARCHIVED_CONVS, '$1 个已归档对话');
         if (RE_PINNED_COUNT.test(trimmed)) return raw.replace(RE_PINNED_COUNT, '$1 个已固定标签页');
         if (RE_MODELS_SELECTED.test(trimmed)) return raw.replace(RE_MODELS_SELECTED, '已选择 $1 个模型');
         if (RE_BROWSER_STEPS.test(trimmed)) return raw.replace(RE_BROWSER_STEPS, '$1 个浏览器步骤');
@@ -1589,6 +2117,10 @@
         if (RE_ACCOUNTS_COUNT.test(trimmed)) return raw.replace(RE_ACCOUNTS_COUNT, '$1 个账号');
         if (RE_PROJECTS_COUNT.test(trimmed)) return raw.replace(RE_PROJECTS_COUNT, '$1 个项目');
         if (RE_CALLS_MB.test(trimmed)) return raw.replace(RE_CALLS_MB, '$1 次通话 · $2');
+        if (RE_TASKS_DONE.test(trimmed)) return raw.replace(RE_TASKS_DONE, '已完成 $1 / $2 项任务');
+        if (RE_POSTS_COUNT.test(trimmed)) return raw.replace(RE_POSTS_COUNT, '$1 条发言');
+        if (RE_MEMBERS_COUNT.test(trimmed)) return raw.replace(RE_MEMBERS_COUNT, '$1 名成员');
+        if (RE_MCP_FAILED_START.test(trimmed)) return raw.replace(RE_MCP_FAILED_START, '$1 个 MCP 服务器启动失败');
         return null;
       }
       if (c0 === 43) {
@@ -1605,7 +2137,7 @@
       if (firstUpper === 'S') {
         if (RE_SEE_ALL.test(trimmed)) return raw.replace(RE_SEE_ALL, '查看全部 ($1)');
         if (RE_SHOW_BREAKDOWNS.test(trimmed)) return raw.replace(RE_SHOW_BREAKDOWNS, '展开明细 ($1 项)');
-        if (RE_SHOW_MORE_SUBAGENTS.test(trimmed)) return raw.replace(RE_SHOW_MORE_SUBAGENTS, '显示另外 $1 个子代理');
+        if (RE_SHOW_MORE_SUBAGENTS.test(trimmed)) return raw.replace(RE_SHOW_MORE_SUBAGENTS, '显示另外 $1 个子 Agent');
         if (RE_SHOW_EARLIER_STEPS.test(trimmed)) return raw.replace(RE_SHOW_EARLIER_STEPS, '展开前 $1 个步骤');
         if (RE_SORT_FILTER_ACTIVE.test(trimmed)) return raw.replace(RE_SORT_FILTER_ACTIVE, '排序与筛选对话（已启用 $1 项）');
         if (RE_STILL_THINKING_SEC.test(trimmed)) return raw.replace(RE_STILL_THINKING_SEC, '仍在思考（$1 秒）');
@@ -1614,13 +2146,13 @@
           const mSearch = trimmed.match(RE_EPHEMERAL_ACTIVE);
           if (mSearch) {
             const noun = EPHEMERAL_NOUN_MAP[mSearch[2].toLowerCase()];
-            const out = noun ? EPHEMERAL_VERB_MAP[mSearch[1]] + noun : EPHEMERAL_VERB_MAP[mSearch[1]] + ' ' + mSearch[2];
+            const out = noun ? joinZhVerbNoun(EPHEMERAL_VERB_MAP[mSearch[1]], noun) : EPHEMERAL_VERB_MAP[mSearch[1]] + ' ' + mSearch[2];
             return raw.replace(trimmed, () => out);
           }
         }
       } else if (firstUpper === 'P') {
         if (RE_PERM_DELETE.test(trimmed)) {
-          return raw.replace(RE_PERM_DELETE, (_, target, cnt) => '永久删除 ' + target + ' 及 ' + cnt + ' 个进行中的会话。');
+          return raw.replace(RE_PERM_DELETE, (_, target, cnt) => '永久删除 ' + target + ' 及 ' + cnt + ' 个进行中的对话。');
         }
       } else if (firstUpper === 'W' || firstUpper === 'M') {
         const mNamed = trimmed.match(RE_NAMED_LIMIT_RESETS);
@@ -1635,6 +2167,28 @@
           if (RE_WORKED_FOR.test(trimmed)) return raw.replace(RE_WORKED_FOR, '已工作 $1');
           if (RE_WAITING_CMD_SEC.test(trimmed)) {
             return raw.replace(RE_WAITING_CMD_SEC, '正在等待命令完成（最多 $1 秒）');
+          }
+          const mWel = trimmed.match(RE_HOME_WELCOME_NAME);
+          if (mWel) {
+            return raw.replace(trimmed, () => '欢迎回来，' + mWel[1].trim() + '。我们从哪里继续？');
+          }
+          const mWorkLocal = trimmed.match(RE_WORK_LOCALLY_ON);
+          if (mWorkLocal) {
+            return raw.replace(trimmed, () => '在本地 ' + mWorkLocal[1].trim() + ' 中工作');
+          }
+          const mWorkFrom = trimmed.match(RE_WORKTREE_FROM);
+          if (mWorkFrom) {
+            return raw.replace(
+              trimmed,
+              () =>
+                mWorkFrom[2]
+                  ? '从 ' + mWorkFrom[1].trim() + ' 创建 Worktree，并复用 ' + mWorkFrom[2].trim()
+                  : '从 ' + mWorkFrom[1].trim() + ' 创建 Worktree'
+            );
+          }
+          const mWorkIn = trimmed.match(RE_WORK_IN_TARGET);
+          if (mWorkIn) {
+            return raw.replace(trimmed, () => '在 ' + mWorkIn[1].trim() + ' 中工作');
           }
         } else if (RE_MARKED_READ.test(trimmed)) {
           return raw.replace(RE_MARKED_READ, '已将 $1 个对话标为已读');
@@ -1667,7 +2221,7 @@
           const mActive = trimmed.match(RE_EPHEMERAL_ACTIVE);
           if (mActive) {
             const noun = EPHEMERAL_NOUN_MAP[mActive[2].toLowerCase()];
-            const out = noun ? EPHEMERAL_VERB_MAP[mActive[1]] + noun : EPHEMERAL_VERB_MAP[mActive[1]] + ' ' + mActive[2];
+            const out = noun ? joinZhVerbNoun(EPHEMERAL_VERB_MAP[mActive[1]], noun) : EPHEMERAL_VERB_MAP[mActive[1]] + ' ' + mActive[2];
             return raw.replace(trimmed, () => out);
           }
         }
@@ -1692,9 +2246,21 @@
         if (RE_USING_BROWSER_SEC.test(trimmed)) {
           return raw.replace(RE_USING_BROWSER_SEC, '正在操作浏览器 ($1s)');
         }
+        if (RE_UP_NEXT_COUNT.test(trimmed)) {
+          return raw.replace(RE_UP_NEXT_COUNT, '接下来 · $1');
+        }
+        const mLocalClone = trimmed.match(RE_USES_LOCAL_CLONE);
+        if (mLocalClone) {
+          return raw.replace(trimmed, () => '使用本地克隆：' + mLocalClone[1].trim());
+        }
         const mUpd = trimmed.match(RE_UPDATED_AT);
         if (mUpd) {
           return raw.replace(trimmed, () => formatUpdatedAtZh(mUpd[1], mUpd[2]));
+        }
+      } else if (firstUpper === 'V') {
+        const mVer = trimmed.match(RE_ARIA_VERSION);
+        if (mVer) {
+          return raw.replace(trimmed, () => '版本 ' + mVer[1].trim());
         }
       } else if (firstUpper === 'Z') {
         if (RE_ZIPPING_FOLDER.test(trimmed)) {
@@ -1755,6 +2321,29 @@
         }
         if (RE_BASELINE_QUOTA_REFRESH.test(trimmed)) {
           return raw.replace(RE_BASELINE_QUOTA_REFRESH, '您套餐的基础配额将于 $1 刷新。');
+        }
+      } else if (firstUpper === 'H') {
+        const mHey = trimmed.match(RE_HOME_HEY_NAME);
+        if (mHey) {
+          return raw.replace(trimmed, () => '嗨，' + mHey[1].trim() + '，今天想做点什么？');
+        }
+      } else if (firstUpper === 'G') {
+        const mGood = trimmed.match(RE_HOME_GOOD_SEE_NAME);
+        if (mGood) {
+          return raw.replace(trimmed, () => '很高兴见到你，' + mGood[1].trim() + '。接下来做什么？');
+        }
+      } else if (firstUpper === 'A') {
+        const mAutoFig = trimmed.match(RE_AUTO_FIG_WORKSPACE);
+        if (mAutoFig) {
+          return raw.replace(
+            trimmed,
+            () =>
+              '对话开始时自动新建 ' +
+              mAutoFig[1] +
+              ' 工作区' +
+              (mAutoFig[2] ? '，从 ' + mAutoFig[2].trim() + ' 创建 Worktree' : '') +
+              (mAutoFig[3] ? '，并复用 ' + mAutoFig[3].trim() : '')
+          );
         }
       }
 
@@ -1910,7 +2499,7 @@
         }
         const mappedNote =
           rawNote.toLowerCase() === 'cannot be changed mid-conversation'
-            ? '会话中途无法更改'
+            ? '对话中途无法更改'
             : dictLookup(rawNote) || computeTextTranslation(rawNote, el) || rawNote;
         return '权限模式：' + lookupPerm(pMode) + '（' + mappedNote + '）';
       }
@@ -1923,7 +2512,7 @@
         if (mTurn[3] && mTurn[4]) {
           return '第 ' + mTurn[3] + ' / ' + mTurn[4] + ' 轮对话';
         }
-        const roleZh = mTurn[2].toLowerCase() === 'user' ? '用户' : '智能体';
+        const roleZh = mTurn[2].toLowerCase() === 'user' ? '用户' : 'Agent';
         return '第 ' + mTurn[1] + ' 轮对话（' + roleZh + '）';
       }
       const mOlder = atrim.match(RE_ARIA_LOAD_OLDER);
@@ -1948,11 +2537,25 @@
         const locName = mLoc[1].trim();
         const mappedLoc =
           locName === 'This Computer' ? '本机' : locName === 'Remote' ? '远程' : dictLookup(locName) || locName;
-        return '智能体运行位置，当前：' + mappedLoc;
+        return 'Agent 运行位置，当前：' + mappedLoc;
       }
       const mVer = atrim.match(RE_ARIA_VERSION);
       if (mVer) {
         return '版本 ' + mVer[1].trim();
+      }
+      if (
+        atrim === 'File' &&
+        (IS_SWARM_PLUGIN_FRAME || (el && el.classList && el.classList.contains('segmented')))
+      ) {
+        return '文件';
+      }
+      if (
+        el &&
+        el.getAttribute &&
+        el.getAttribute('data-testid') === 'running-row-stop' &&
+        /^Stop\s+(.+)$/i.test(atrim)
+      ) {
+        return '停止 ' + atrim.replace(/^Stop\s+/i, '');
       }
       return computeTextTranslation(atrim, el);
     }

@@ -10,7 +10,7 @@
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Web'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular'), local('Anthropic Serif');
+  src: local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular'), local('Anthropic Serif');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -18,7 +18,7 @@
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextMedium'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Medium'), local('AnthropicSerifText-Medium'), local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular');
+  src: local('AnthropicSerifWebWeb-TextMedium'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Medium'), local('AnthropicSerifText-Medium'), local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -26,7 +26,7 @@
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextSemibold'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Semibold'), local('AnthropicSerifText-Semibold'), local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold');
+  src: local('AnthropicSerifWebWeb-TextSemibold'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Semibold'), local('AnthropicSerifText-Semibold'), local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -34,7 +34,7 @@
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold'), local('Anthropic Serif Text Extrabold'), local('AnthropicSerifText-Extrabold');
+  src: local('AnthropicSerifWebWeb-TextBold'), local('Anthropic Serif Bold'), local('Anthropic Serif Web Bold'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Bold'), local('AnthropicSerifText-Bold'), local('Anthropic Serif Text Extrabold'), local('AnthropicSerifText-Extrabold');
   font-weight: 700 900;
   font-style: normal;
   font-display: swap;
@@ -132,7 +132,7 @@
 /* 3. Anthropic Sans（Text 光学字号：全局 UI 骨架、输入框、按钮、菜单、指标胶囊） */
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Light'), local('AnthropicSansText-Light'), local('Anthropic Sans');
+  src: local('AnthropicSansWebVariable-TextLight'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text Regular'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Light'), local('AnthropicSansText-Light'), local('Anthropic Sans');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -140,7 +140,7 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular'), local('Anthropic Sans');
+  src: local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text Regular'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular'), local('Anthropic Sans');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -148,7 +148,7 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextMedium'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Medium'), local('AnthropicSansText-Medium'), local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular');
+  src: local('AnthropicSansWebVariable-TextMedium'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text Regular'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Medium'), local('AnthropicSansText-Medium'), local('AnthropicSansWebVariable-TextRegular'), local('Anthropic Sans Text Regular'), local('AnthropicSansText-Regular');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -156,7 +156,7 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextSemibold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Semibold'), local('AnthropicSansText-Semibold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold');
+  src: local('AnthropicSansWebVariable-TextSemibold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text Regular'), local('Anthropic Sans Web Text'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Semibold'), local('AnthropicSansText-Semibold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -164,7 +164,7 @@
 
 @font-face {
   font-family: 'Anthropic Sans';
-  src: local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold'), local('Anthropic Sans Text Extrabold'), local('AnthropicSansText-Extrabold');
+  src: local('AnthropicSansWebVariable-TextBold'), local('Anthropic Sans Bold'), local('Anthropic Sans Web Bold'), local('Anthropic Sans Web'), local('Anthropic Sans Web Text Regular'), local('Anthropic Sans Web Display Light'), local('Anthropic Sans Text Bold'), local('AnthropicSansText-Bold'), local('Anthropic Sans Text Extrabold'), local('AnthropicSansText-Extrabold');
   font-weight: 700 900;
   font-style: normal;
   font-display: swap;
@@ -409,6 +409,36 @@ article,
 
 :is([data-markdown-root], .select-text, .prose, .markdown) :is(p, li, blockquote) {
   line-height: 1.62;
+}
+
+/* Windows DirectWrite 可变字体命名实例修正：Windows 版 AnthropicSerif TTF 仅暴露 TextLight (wght=300) 实例名，显式驱动 wght 轴还原 400 正文/斜体、500 中黑与 600 粗体/粗斜体 */
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article),
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(i, em, .italic) {
+  font-variation-settings: 'wght' 400, 'opsz' 16 !important;
+}
+
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) .font-medium,
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) .font-medium :is(i, em, .italic) {
+  font-weight: 500 !important;
+  font-variation-settings: 'wght' 500, 'opsz' 16 !important;
+}
+
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold),
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold) :is(i, em, .italic) {
+  font-weight: 600 !important;
+  font-variation-settings: 'wght' 600, 'opsz' 16 !important;
+}
+
+html[data-ag-os="win32"] :is(code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm),
+html[data-ag-os="win32"] :is(code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm) *,
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, kbd, samp, .font-mono, [class*="language-"]),
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, kbd, samp, .font-mono, [class*="language-"]) :is(*, strong, b, i, em, .italic, .font-medium, .font-semibold, .font-bold) {
+  font-variation-settings: normal !important;
+}
+
+html[data-ag-os="win32"] :is(.katex, .MathJax, math, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror),
+html[data-ag-os="win32"] :is(.katex, .MathJax, math, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror) :is(*, strong, b, i, em, .italic, .font-medium, .font-semibold, .font-bold) {
+  font-variation-settings: normal !important;
 }
 
 html[data-ag-custom-font-size="true"] :is([data-markdown-root], [data-testid="user-message-content"], [data-testid="user-message-content"] .select-text, .agy-user-bubble, .prose, .markdown, [class*="chat-message"]) {

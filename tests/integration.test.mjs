@@ -32,7 +32,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.1.6-eric.1');
+  assert.equal(manifest.version, '5.2.0-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -40,10 +40,10 @@ test('core manifest matches every shipped byte', () => {
   }
 });
 test('dictionary keeps upstream coverage and clear permission labels without case duplicates', () => {
-  assert.equal(Object.keys(dict).length, 1524);
+  assert.equal(Object.keys(dict).length, 1646);
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
-  assert.equal(new Set(keys.map(k => k.toLowerCase())).size, keys.length);
+  assert.equal(new Set(keys.map(k => k.toLowerCase().replace(/[‘’]/g, "'"))).size, keys.length);
   assert.equal(dict.Turbo, '完全模式 (Turbo)');
   assert.equal(dict['Turbo mode'], dict.Turbo);
   assert.equal(dict.Thinking, '正在思考');
@@ -62,7 +62,7 @@ test('no automatic external title-patch execution or destructive sync-user switc
 });
 // Exercise the real translation functions without substituting for browser DOM tests.
 function translationUnit(dictionary = dict, version = 'unit-1', originalMap = new WeakMap()) {
-  const lookupStart = runtime.indexOf('  const DICT_CI =');
+  const lookupStart = runtime.indexOf('  const RE_CURLY_APOS =');
   const lookupEnd = runtime.indexOf('  let scanBodyFn', lookupStart);
   const start = runtime.indexOf('    const RE_HAS_CJK =');
   const end = runtime.indexOf('    const walkerFilter =', start);
@@ -78,8 +78,27 @@ test('translation units resolve exact, dynamic and permission labels safely', ()
     ['Worked for 2m 3s', '已工作 2m 3s'], ['12 files changed', '12 个文件变更'],
     ['unknown text', null], ['中文原文', null], ['__proto__', null]]) assert.equal(tr(input, null), expected, input);
   assert.equal(ctx.api.resolveAttrTranslation('Permission mode selector, current: Turbo'), '权限模式，当前：完全模式 (Turbo)');
-  assert.match(ctx.api.resolveAttrTranslation('Permission mode: Turbo (Cannot be changed mid-conversation)'), /完全模式.*会话中途无法更改/);
+  assert.match(ctx.api.resolveAttrTranslation('Permission mode: Turbo (Cannot be changed mid-conversation)'), /完全模式.*对话中途无法更改/);
   ctx.DICT.literal = '$& $1 中文'; assert.equal(tr(' literal ', null), '$& $1 中文');
+});
+test('translation units preserve Turbo risk semantics and support 2.32.0 templates', () => {
+  const { api } = translationUnit();
+  for (const [input, expected] of [
+    ['Local Checkout', '本地'],
+    ['2 MCP servers failed to start', '2 个 MCP 服务器启动失败'],
+    ['Uses your local clone, example', '使用本地克隆：example'],
+    ['Hey Eric, what should we build today?', '嗨，Eric，今天想做点什么？'],
+    ['Work locally on main', '在本地 main 中工作'],
+    ['Turbo mode', '完全模式 (Turbo)'],
+  ]) assert.equal(api.computeTextTranslation(input, null), expected, input);
+  assert.match(api.resolveAttrTranslation('Agent permissions preset: Auto (Preview), Automatically decide if commands run.'), /自动.*预览.*自动判断/);
+  assert.match(api.resolveAttrTranslation('Agent permissions preset: Turbo, Run all commands without restrictions.'), /完全模式.*不受限制/);
+  assert.doesNotMatch(api.resolveAttrTranslation('Agent permissions preset: Turbo, Run all commands without restrictions.'), /极速/);
+  const custom = translationUnit({ "What's next?": '默认译文', 'Good Response': '原始反馈', 'Good response': '精确覆盖' });
+  assert.equal(custom.api.dictLookup('What’s next?'), '默认译文');
+  assert.equal(custom.api.dictLookup('Good response'), '精确覆盖');
+  const curlyOverride = translationUnit({ 'What’s next?': '自定义弯引号' });
+  assert.equal(curlyOverride.api.dictLookup("What's next?"), '自定义弯引号');
 });
 test('translation units support 2.31.2 New context, orchestrators and extra effort', () => {
   const { api } = translationUnit();

@@ -18,7 +18,7 @@ function curtain(swarm = false) {
   const window = {electronNative: {wcvBrowser: owner}};
   const ctx = vm.createContext({window, IS_SWARM_PLUGIN_FRAME: swarm, document:{body:{}}, getComputedStyle:()=>({getPropertyValue:()=>color})});
   const code = section(runtime, '  function parseColorToRgb', '  // 若用户在');
-  const inject = () => vm.runInContext(code + '\nglobalThis.sync = syncCurtainSurfaceColor;', ctx);
+  const inject = () => vm.runInContext('(() => {' + code + '\nglobalThis.sync = syncCurtainSurfaceColor;})()', ctx);
   inject();
   return {ctx,window,calls,writes,inject,setColor:value=>{color=value;}};
 }
@@ -49,7 +49,7 @@ function zoom() {
   const ctx=vm.createContext({window,IS_SWARM_PLUGIN_FRAME:false,MODULES:{},detectedOs:'darwin',performance:{now:()=>now},setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:key=>timers.delete(key)});
   const init=section(runtime,'  // Cancel callbacks captured','  // 执行上一轮');
   const code=section(runtime,'  try {\n    const initZoom','  if (!window.__ag_zoom_guard_installed)');
-  const inject=()=>vm.runInContext(init+code,ctx); inject();
+  const inject=()=>vm.runInContext('(() => {'+init+code+'})()',ctx); inject();
   return {window,ctx,inject,timers,count:()=>count,setFactor:x=>{factor=x;},press:key=>window.__ag_zoom_keydown_fn({key,code:key==='0'?'Digit0':'Equal',metaKey:true,preventDefault(){},stopPropagation(){}}), flush:()=>{now+=100;for(const fn of [...timers.values()])fn();timers.clear();}};
 }
 test('zoom reset at factor one cancels pending zoom', () => {

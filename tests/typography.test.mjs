@@ -346,3 +346,31 @@ for (const mode of ['light', 'dark']) {
     });
   });
 }
+
+test('typography computed Windows axes retain protected code and do not affect macOS', async t => {
+  const { chromium } = require('playwright');
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(`<html data-ag-os="darwin"><body data-agy-font="inter"><article id="prose">
+    <p id="normal">Normal <em id="italic">Italic</em></p>
+    <span class="font-medium" id="medium">Medium <em id="medium-italic">Italic</em></span>
+    <strong id="bold">Bold <em id="bold-italic">Italic</em></strong>
+    <code id="code"><strong><em id="nested-code">Code</em></strong></code>
+    <span class="file-path"><strong id="path">file.js</strong></span>
+    <div contenteditable="true"><strong id="editable">Draft</strong></div>
+    <div class="katex"><em id="math">Formula</em></div>
+  </article></body></html>`);
+  await page.addStyleTag({ content: css });
+  const variation = id => page.locator('#' + id).evaluate(el => getComputedStyle(el).fontVariationSettings);
+  for (const id of ['prose','normal','italic','medium','medium-italic','bold','bold-italic','code','nested-code','path','editable','math']) assert.equal(await variation(id), 'normal', 'darwin ' + id);
+  await page.locator('html').evaluate(el => el.dataset.agOs = 'win32');
+  for (const [ids, weight] of [[['prose','normal','italic'],400], [['medium','medium-italic'],500], [['bold','bold-italic'],600]]) {
+    for (const id of ids) {
+      assert.match(await variation(id), new RegExp('"wght" ' + weight), id);
+      assert.match(await variation(id), /"opsz" 16/, id);
+    }
+  }
+  for (const id of ['code','nested-code','path','editable','math']) assert.equal(await variation(id), 'normal', 'protected ' + id);
+  assert.match(await page.locator('#code').evaluate(el => getComputedStyle(el).fontFamily), fonts.mono);
+});

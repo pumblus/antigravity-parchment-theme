@@ -1,28 +1,29 @@
 ---
 name: chuanban-antigravity-theme-patch
-description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.1.6 模块化架构 · 完整适配 Antigravity 2.31.2 全栈演进 + Swarm 协作面板跨域子帧同步 + 原生幕布底色桥接 + 昼夜双模式独立解耦 + 1524条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 沙箱排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
+description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.2.0 模块化架构 · Antigravity 2.31.2 / 2.32.0 源码适配 + Swarm 协作面板跨域子帧同步 + 原生幕布底色桥接 + 昼夜双模式独立解耦 + 1646条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 跳过用户扩展排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
 ---
 
-> **融合分支说明（5.1.6-eric.1）**：此源码包基于上游 v5.1.6 / Antigravity 2.31.2，开发与安装差异见 [FORK.md](FORK.md)。本次更新在本机 `main`，未推送远端；请核对实际源码版本。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。2.31.2 的原生幕布颜色桥接会通过客户端 API 持久化主题色到应用配置，不修改应用二进制；部署前需备份相关应用配置。
+> **融合分支说明（5.2.0-eric.1）**：此源码包基于上游 v5.2.0 / Antigravity 2.31.2、2.32.0，开发与安装差异见 [FORK.md](FORK.md)。本次更新在本机 `main`，未推送远端；请核对实际源码版本。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。2.31.2 的原生幕布颜色桥接会通过客户端 API 持久化主题色到应用配置，不修改应用二进制；部署前需备份相关应用配置。
 
-# 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.1.6 · 昼夜双模式解耦 & Antigravity 2.31.2 双端全量适配）
+# 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.2.0 · 昼夜双模式解耦 & Antigravity 2.31.2 / 2.32.0 源码适配）
 
 > **前置概括（致用户与执行端 AI Agent）**：
 > - **设计目的**：以纯运行时 CDP 非侵入式注入，严格遵循 Anthropic 设计规范为 Google Antigravity 提供**昼夜同源暖调主题与精密排版**：
 >   - **白天模式（`body:not(.dark)`）**：提供三套 Anthropic 官方暖羊皮纸配色预设（默认 `high-contrast`：`#F0EEE6` 侧栏 + `#FAF9F5` 阅读区 + `#141413` 暖墨字 + `1px solid #CCCBC8` 石色细边，严守零 `#FFFFFF` 纯冷白与零悬浮投影），输入框采用扁平暖纸层叠 + `1px` 细边三态过渡，仅发送主按钮使用 `#D97757` 陶土色；
 >   - **黑夜模式（`body.dark`）**：当点击客户端「深色 / Dark」按钮（或跟随系统深色）切换时，**100% 保持三族字体排版与扁平几何结构不变**，同时 `0ms` 切换至 Anthropic / Claude 暖墨黑反色体系（`#141413` Slate Dark 主背景 / `#191917` 侧栏 / `#1F1E1C` 卡片 / `1px solid #3D3D3A` 暖墨细边 / `#FAF9F5` 象牙亮字 / `#D97757` 陶土色主按钮）；
->   - **全局共享能力**：Anthropic 三族中西文精密排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，完美适配 `2.31.2` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,524 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`，统一采用 `Anthropic Sans` + `tabular-nums`）。
-> - **v5.1.6 核心执行铁律**：
+>   - **全局共享能力**：Anthropic 三族中西文精密排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，完美适配 `2.31.2` `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,646 条全界面无死角汉化（内置 `DICT_CI` 首字母大写不敏感兜底）及基于 SQLite `O(1)` 增量游标的同行实时会话指标胶囊（`tok/s · TTFT · Ctx 256k 水位 · Out`，统一采用 `Anthropic Sans` + `tabular-nums`）。
+> - **v5.2.0 核心执行铁律**：
 >   1. **Agent 一键部署，内核已预封装无需构建**：全部样式、词典、DOM 引擎与守护进程已封装在 `core/` 只读黄金内核中，**严禁 Agent 从头手写或重生成守护代码**，直接运行 `node install.mjs` 即可 3 秒完成部署；
 >   2. **个性化修改永远只在 `user/` 改装层进行（2.5 秒可逆热重载）**：`user/` 目录在升级时 100% 永不覆盖，保存后 2.5 秒自动热更新生效。
 
 ---
 
-## 一、核心资源链接与三端官方入口
+## 一、资源链接（上游字体资源与融合版源码分开）
 
 1. **Google Drive 完全资源包（全项目成品包 + 全套商业/开源字体库）**
    - 链接：<https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC>
-   - 包含：**v5.1.6 完整项目成品包 + 全套必备字体包（Anthropic 官方字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc` 超集）**。
+   - 包含：**上游 v5.2.0 资源（不含本融合版）+ 字体包（Anthropic 官方字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc` 超集）**。
+   - *备用字体获取渠道*：若大文件 `Sarasa-SuperTTC.ttc`（~791 MB）偶发触发 Google Drive 24 小时下载配额限制，macOS 可直接执行 `brew install --cask font-sarasa-gothic`，Windows / Linux 可从官方开源仓库 [`be5invis/Sarasa-Gothic` GitHub Releases](https://github.com/be5invis/Sarasa-Gothic/releases) 获取同款 `Sarasa-SuperTTC.ttc`。
 2. **GitHub 权威代码库（成品补丁仓库与 `SKILL.md` 本体）**
    - 仓库：<https://github.com/pumblus/chuanban-antigravity-theme-patch>
    - 包含：全部 `core/` 黄金内核、`user/` 改装模板、`install.mjs` CLI 与本 `SKILL.md`（字体文件请从上方 Google Drive 链接下载）。
@@ -39,7 +40,7 @@ description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成�
 
 守护进程（`core/daemon.mjs`）内置**运行时环境动态分级**，绝不因 Node 小版本差异崩溃或无限重启：
 
-| 运行时版本 | 昼夜双模式主题 / 扁平三态 / Anthropic 三族字体 | 1,524 条深度汉化 + 原型安全词典 | 死锁自愈 + 缩放快捷键修复 | SQLite 实时会话指标胶囊 (`node:sqlite`) |
+| 运行时版本 | 昼夜双模式主题 / 扁平三态 / Anthropic 三族字体 | 1,646 条深度汉化 + 原型安全词典 | 死锁自愈 + 缩放快捷键修复 | SQLite 实时会话指标胶囊 (`node:sqlite`) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Node.js `>= 22.13.0`**（推荐完全体） | ✅ 全量启用 | ✅ 全量启用 | ✅ 全量启用 | ✅ **自动动态解锁**（精确显示生成速度、耗时、上下文窗口与缓存命中率） |
 | **Node.js `22.0.0 ~ 22.12.x`** | ✅ 全量启用 | ✅ 全量启用 | ✅ 全量启用 | ⚠️ 自动优雅降级关闭（无需 `--experimental-sqlite` 标志，后台零报错） |
@@ -56,12 +57,13 @@ chuanban-antigravity-theme-patch/
 ├── install.mjs                 # 跨平台一键生命周期 CLI（install / install-fonts / doctor / verify / rollback / uninstall / pack）
 ├── SKILL.md                    # 面向 AI Agent 的极简部署与二次改装指南（本文件）
 ├── README.md                   # 面向用户的项目说明与快速上手指南
+├── CHANGELOG.md                # 历次版本演进与双平台修复记录
 ├── core/                       # 【只读黄金内核】随版本升级整包原子替换，对方 Agent 严禁直接修改
-│   ├── manifest.json           # 版本号（5.1.6）、三端地址与 core/* 文件 SHA-256 校验清单
-│   ├── daemon.mjs              # Node CDP 守护进程（SQLite O(1) 增量遥测、Swarm 跨域子帧注入、2.5s 热重载感知、Stable+Insiders 双守护）
-│   ├── runtime.js              # 浏览器端注入引擎（昼夜模式与 curtainView 底色联动、DICT_CI 兜底索引、防双倍缩放保护、WeakMap O(1) 缓存）
+│   ├── manifest.json           # 版本号（5.2.0）、三端地址与 core/* 文件 SHA-256 校验清单
+│   ├── daemon.mjs              # Node CDP 守护进程（SQLite O(1) 增量遥测、WSL 懒探测、Swarm 跨域子帧注入、冷启动重载绑定、2.5s 热重载感知）
+│   ├── runtime.js              # 浏览器端注入引擎（昼夜模式与 curtainView/标题栏底色联动、实验性冷启动检测/普通重载（默认关）、弯引号与 DICT_CI 兜底索引、防双倍缩放保护）
 │   ├── theme.css               # 四段式 CSS 样式表（Part I 共享排版与几何 / Part II 白天暖纸 / Part III 独立黑夜 / Part IV 指标胶囊）
-│   └── i18n.json               # 1,524 条严格零大小写冲突标准 JSON 基准词典（兼容 PowerShell ConvertFrom-Json，挂载至 Object.create(null)）
+│   └── i18n.json               # 1,646 条严格零大小写冲突标准 JSON 基准词典（兼容 PowerShell ConvertFrom-Json，挂载至 Object.create(null)）
 └── user/                       # 【用户改装层】升级时 100% 永不覆盖，守护进程每 2.5s 自动检测 mtimeMs 热重载注入！
     ├── config.json             # 开关配置（enabled / channel / preset / contextLimit / modules / themeVars）
     ├── custom.css              # 用户/对方 Agent 自定义追加 CSS（独立挂载于 #antigravity-user-custom-style）
@@ -79,15 +81,16 @@ chuanban-antigravity-theme-patch/
 ```bash
 node install.mjs doctor
 ```
-- **若缺少字体**：引导用户从 [Google Drive 完全资源包](https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC) 下载字体包并安装（macOS: `~/Library/Fonts/`；Windows: 运行 `node install.mjs install-fonts --from <解压目录>`；Linux: `~/.local/share/fonts/`）。
+- **若缺少字体**：引导用户从 [Google Drive 完全资源包](https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC) 下载字体包并安装（macOS: `~/Library/Fonts/`；Windows: 运行 `node install.mjs install-fonts --from <解压目录>`；Linux: `~/.local/share/fonts/`；若 `Sarasa-SuperTTC.ttc` 遇 Google Drive 限流，macOS 可用 `brew install --cask font-sarasa-gothic`，Windows/Linux 可用 [`be5invis/Sarasa-Gothic` Releases](https://github.com/be5invis/Sarasa-Gothic/releases)）。
 
-### Step 2：一键安装并注册守护服务
+### Step 2：确认本次安装权限后安装并注册守护服务
 ```bash
 # 默认安装（channel="auto"，单守护进程同时自动兼容并守护 Stable 正式版与 Insiders 预览版窗口）
 node install.mjs install
 
 # 若需强制锁定只监听单一通道，可显式指定 --channel stable 或 --channel insiders
 node install.mjs install --channel stable
+
 ```
 `install.mjs install` 会自动完成：
 1. 生成并校验 `core/manifest.json` SHA-256 完整性；
@@ -100,9 +103,16 @@ node install.mjs install --channel stable
 ```bash
 node install.mjs verify
 ```
-当终端输出 `"ok": true` 且显示 `"version": "20261113-v5.1.6-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
+当终端输出 `"ok": true` 且显示 `"version": "20261114-v5.2.0-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
 
 ---
+
+## 隔离与重载边界
+
+- 本融合版不支持 `--sync-user`，不以“备份后覆盖”替代用户文件保留。
+- 显式 `--target-dir` 是隔离演练边界：不修改宿主 argv、wrapper 或系统服务。`--register-service` 不得用来绕过隔离；真实部署使用默认目标，另行取得本次安装权限。
+- 回滚候选必须含完整 manifest 和四个核心文件，并匹配字节数与 SHA-256；用户文件备份不能作为核心备份。回滚只恢复 core，不恢复 user 或其他全局配置。
+- `modules.coldBootHealer` 默认为 `false`，只有布尔 `true` 才启用实验功能。页面需通过首页/前台/无草稿/无输入/无弹窗任务等门禁，daemon 只对发起主上下文回调，最后在同一同步调用内复查再普通重载。不使用 daemon `Page.reload(ignoreCache)` 或 280ms 延迟强刷，不能保证绕过缓存；实机草稿与多窗口安全尚未验证。本轮维护不启用它。
 
 ## 五、对方 Agent 如何协助用户做个性化改装与 Debug？
 
@@ -120,6 +130,7 @@ node install.mjs verify
     "metrics": true,
     "composerWaxSeal": true,
     "deadlockHealer": true,
+    "coldBootHealer": false,
     "zoomShortcuts": true,
     "customCss": true,
     "customJs": true

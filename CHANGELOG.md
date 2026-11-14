@@ -6,6 +6,120 @@
 
 ---
 
+## [v5.2.0] - 2026-11-14
+
+> **适用版本**：Antigravity `2.32.0+` / `2.31.2`（向下完全兼容 `2.31.1` / `2.31.0` / `2.30.0`）
+> **核验基线**：macOS Antigravity `2.32.0` 二进制与实机 CDP 全栈零漂移核验 + `1,630` 条全词库系统性去机翻精校验收
+
+### Changed（全词库系统性去机翻精校与五大高频术语统一）
+- **环境选择器机翻修正与非 Git 目录说明补全（`core/i18n.json` / `core/runtime.js`）**：
+  - 将输入框底部运行环境选择器的生硬直译 `"Local Checkout"`（原译 `本地检出`）修正为简洁准确的 **`本地`**，配套将 `"Keeps your checkout untouched"` 润色为 **`不影响当前本地目录`**，动态副标题 `Work locally on <target>` 润色为 `在本地 <target> 中工作`；
+  - 补齐非 Git 普通文件夹点开环境选择器时的禁用说明与分支标签等 9 条漏翻项（`Worktrees are available for Git repositories`、`Worktrees are not available for this project`、`Worktrees are a git feature. This folder is shared as is.`、`Search past worktrees...`、`Search past workspaces...`、`Unknown Worktree`、`Base branch for new worktree`、`Worktree branch`、`Remote branch`）。
+- **全界面核心术语一致性统一（`core/i18n.json` / `core/runtime.js`）**：
+  - **`Artifact` 约定俗成原文保留**：废除工业机翻感较重的“交付工件 / 工件”，全界面（右侧栏标签、对话过程流式状态、设置与评论提示）统一保留 **`Artifact`**（如 `已编辑文件与 Artifact`、`正在编辑 Artifact`、`Artifact 审阅策略`），并在 `runtime.js` 新增 `joinZhVerbNoun()` 自动保持中英文间标准空格；
+  - **`支线提问`（`/btw`）统一**：废除电路术语“旁路提问”，全量 15 处相关文案统一为 **`支线提问`**（如 `支线提问 (/btw)`、`新建支线提问`）；
+  - **`Worktree` 统一**：消除同一菜单内“工作树”与“Worktree”半中半英混用，全量统一保留 **`Worktree`**（如 `新建 Worktree`、`在新建 Worktree 中运行`）；
+  - **`Agent / 子 Agent` 统一**：全库 104 处混用的“智能体 / 代理 / 子代理 / 子智能体”及无障碍轮次角色统一为 **`Agent` / `子 Agent`**；
+  - **按钮去冗余英文括号尾巴与细节硬伤修正**：清理 23 处日常按钮与预设选项后的冗余英文括号尾巴（如 `极速模式`、`自动判断`、`自动判断（预览）`、`始终直接执行`、`请求审阅`、`蜂群协作`、`协调器`、`错误反馈`，仅保留 `Best of N`、`Hooks` 等必要专名）；修正 `"Execute URLs"`（`执行网址` → `可操控网址`）、顶栏 `"Review"`（`代码审查` → `审阅`）、`"Review plans and walkthroughs"`（`演练报告` → `完成总结`）、首页问候 `"what should we build today?"`（`构建些什么` → `今天想做点什么？`），并统一 `Conversation → 对话`、`沙箱 → 沙盒`、Swarm `Narrator → 纪要员`。
+
+### Added（Antigravity `2.32.0` 新增 UI 静态词条与动态模板全覆盖）
+- **新增 34 条 `2.32.0` 客户端原生 UI 词条至 `1,630` 条（`core/i18n.json`）**：
+  - 覆盖 `2.32.0` 新增的提示词跳转与备用发送快捷键（`Jump to Previous/Next Prompt`、`Submit Prompt (Alternate to Enter)`、`Code Search`）、SSH 连接与切回本机（`Connect to SSH Host…`、`Stop SSH Server…`、`Switch to This Computer`）、内置浏览器下载拦截状态（`Blocked: file type not allowed`、`Canceled`、`Interrupted`）、网页登录失败手动授权码兜底与企业账号登录向导（`Trouble signing in? Enter authorization code`、`Copy sign-in link`、`Use Business Account` 等 9 条）、终端沙盒与插件 MCP 服务启动状态徽章（`1 MCP server failed to start`、`Setup required` 等 6 条）以及 `Remote` 远程 GitHub 仓库克隆至本地向导（`Only GitHub repos are included in Remote`、`Clone to a local folder` 等 8 条），保持 100% 原始 JSON 零重复键、零大小写与弯直引号冲突。
+- **新增 2 条 `2.32.0` 动态正则模板（`core/runtime.js`）**：
+  - 新增 `RE_MCP_FAILED_START`（`<N> MCP servers failed to start` → `<N> 个 MCP 服务器启动失败`）与 `RE_USES_LOCAL_CLONE`（`Uses your local clone, <project>` → `使用本地克隆：<project>`）。
+
+---
+
+## [v5.1.9] - 2026-11-14
+
+> **适用版本**：Antigravity `2.31.2+`（`CL=1019359392`，向下完全兼容 `2.31.1` / `2.31.0` / `2.30.0`）
+> **核验基线**：Windows 11 `2.31.2` 发版后全链路回归审计热修（Batch `#007`）+ macOS `2.31.2` 沙箱与真机 CDP 双重验收
+
+### Fixed（Windows PowerShell 5.1 二维数组兼容、回滚安全校验与 `--target-dir` 沙箱隔离）
+- **Windows PowerShell `5.1` `ConvertFrom-Json` 嵌套二维数组兼容修复（`install.mjs`）**：
+  - 修复 `buildDistZip()`（`pack` 子命令）与 `runInstallFonts()`（`install-fonts` 子命令）在 Windows PowerShell `5.1` 下因 `@(Get-Content ... | ConvertFrom-Json)` 将 JSON 数组包装为单元素外层 `Object[][]` 导致的成员枚举扁平化异常（此前在 Windows PowerShell 5.1 下运行 `pack` 会必现抛出 `System.NotSupportedException`，运行 `install-fonts` 安装 `>=2` 个字体时会导致 Win32 `AddFontResourceW` 收到空格拼接路径而静默注册 `0` 个字体）；
+  - `runInstallFonts()` 新增 `AddFontResourceW > 0` 真实会话注册计数（`fontRegisteredCount`）与 `SendNotifyMessage` 返回值联合校验，并补充 `--from` 指向已安装字体目录时的同路径自拷贝保护。
+- **`rollback` 核心备份完整性校验与 `--sync-user` 备份目录隔离（`install.mjs`）**：
+  - 修复启用 `--sync-user` 生成 `backups/<timestamp>-user/` 后，若在缺失 `core.prev` 的极端情况下执行 `rollback`，按字典序倒序枚举会误命中 `<timestamp>-user` 并将仅含用户配置的目录覆盖至 `core/` 的高危隐患；现强制排除 `-user` 后缀并通过 `isValidCoreBackup()` 校验 `daemon.mjs` 与 `runtime.js` 同时存在。
+- **`--target-dir` 自定义沙箱测试目录全生命周期隔离与软链接路径等价识别（`install.mjs`）**：
+  - 当显式传入非默认 `--target-dir`（且未带 `--register-service`）执行 `install`、`rollback` 或 `uninstall` 时，自动跳过全局 `~/.antigravity/argv.json` 修改、`~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs` 包装脚本重写以及宿主系统 `LaunchAgent` / `systemd` / `schtasks` 常驻服务启停销毁，确保沙箱演练对正式运行环境零惊扰；
+  - `isSameTargetPath()` 结合 `fs.realpathSync.native`（含父目录软链接回退）与大小写归一化，完整兼容 macOS `/tmp` ↔ `/private/tmp` 软链接及 Windows 大小写不敏感路径比对。
+- **冷启动兜底包自愈器非文本 `<input>` 控件误判排除（`core/runtime.js`）**：
+  - `isWindowUntouchedAndIdleForColdHeal()` 在原有 `hidden` / `checkbox` / `radio` 豁免基础上，进一步排除自带非空默认 `.value` 的 `range`（默认 `"50"`）、`color`（默认 `"#000000"`）、`button`、`submit`、`reset` 与 `file` 类型 `<input>`，避免首屏挂载滑块或取色控件时误阻断冷启动自愈。
+
+### Added（1,587 条零冲突词典、动态人名首页问候与 Worktree / Swarm 细节汉化）
+- **扩充 `2.31.2` 首页卡片与 Worktree 分支词条至 1,587 条（`core/i18n.json`）**：
+  - 新增 `Local Checkout`、`New Fig Workspace`、`Unknown Environment`、`Worktree Branches`、`Configure Branches`、`Loading worktrees…`、`Announcements and tips`、`Previous card`、`Next card` 及无署名首页问候语等 12 条静态词条，保持 100% 原始 JSON 零重复键、零大小写与弯直引号冲突。
+- **新增 7 条首页动态人名问候与 Worktree / Fig 工作区副标题动态汉化（`core/runtime.js`）**：
+  - 支持带用户昵称的 `2.31.2` 首页问候（`Hey <name>, what should we build today?`、`Welcome back, <name>. Where should we pick up?`、`Good to see you, <name>. What's next?`）动态汉化；
+  - 支持新建对话分支选择器动态副标题（`Work locally on <branch>`、`Work in <target>`、`Worktree from <branch>[, and reuse <env>]`、`Automatically create a new Fig/Piper/JJ workspace...`）及 Swarm 面板分段控件 `aria-label="File"`（`文件`）精准汉化。
+
+---
+
+## [v5.1.8] - 2026-11-14
+
+> **适用版本**：Antigravity `2.31.2+`（`CL=1019359392`，向下完全兼容 `2.31.1` / `2.31.0` / `2.30.0`）
+> **核验基线**：社区 Issue `#1` / PR `#2` 实机源码核验与择优吸收 + macOS `2.31.2` CDP 全断言回归验证
+> **社区致谢**：特别感谢 [@webber181](https://github.com/webber181)（[Issue #1](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/1)）与 [@pumblus](https://github.com/pumblus)（Eric Zhou · [PR #2](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2)）的详实排查与共建贡献！
+
+### Fixed（冷启动内嵌兜底包无感自愈、无障碍正则修复与字体回退兜底）
+- **冷启动 `embedded assets` 旧版兜底包零流量安全自愈（`core/daemon.mjs` / `core/runtime.js`）**：
+  - 针对 Antigravity 冷启动期 `language_server` 先返回内置旧版兜底包（导致偶发缺失 `Remote` 远程项目入口）、约 1~5 秒后才切换至 Mendel/Fastpush 新版 `/main.js` 的官方竞态缺陷（由 [@webber181](https://github.com/webber181) 在 [#1](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/1) 定位反馈），新增受 `modules.coldBootHealer`（默认 `true`）控制的零流量安全自愈器；
+  - 采用 `PerformanceResourceTiming` 已加载字节数与 `HEAD /main.js`（`ETag` 十六进制体积头 / `Content-Length`，**0 字节响应体下载开销**）比对，并在重载前强制校验六重安全门禁（仅限冷启动前 `25s` 窗口、未发生任何键盘输入/粘贴/输入法组合、所有 Lexical/输入框草稿为空、无打开弹窗或运行中任务、`sessionStorage` 单会话单次锁），通过 `daemon.mjs` `__agRequestHardReload` 绑定执行 `Page.reload({ ignoreCache: true })`（`60s` 冷却保护），彻底杜绝额外拉取 ~12MB 脚本或误清用户草稿的风险。
+- **带括号权限预设名称（`Auto (Preview)`）的无障碍标签匹配修复（`core/runtime.js`）**：
+  - 修复 `RE_ARIA_PERM_FIXED` 在匹配 `"Agent permissions preset: Auto (Preview), Automatically decide if commands run."` 时因模式名自身含括号被提前截断导致漏翻的正则缺陷，并补齐运行态会话行 `[data-testid="running-row-stop"]` 的 `"Stop <会话名>"` 动态无障碍标签翻译。
+- **未安装更纱黑体时的输入框中文字形防点阵退化与桌面版 Anthropic 字体别名兼容（`core/theme.css`）**：
+  - 在 `Anthropic Serif` / `Anthropic Sans` `@font-face` 中追加 `Anthropic Serif Text`、`Anthropic Sans Text` 及对应 `Bold` 桌面版 `local()` 别名兜底（由 [@pumblus](https://github.com/pumblus) 在 [#2](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 建议，置于现有 Web 可变字体声明之后，对 Google Drive 官方字体包与 Windows `DirectWrite` 零干扰）；
+  - 在输入框编辑区（Lexical / `contenteditable` / `textarea`）字体栈末尾 `monospace` 之前补充 `'PingFang SC'`、`'Hiragino Sans GB'`、`'Microsoft YaHei UI'`、`'Microsoft YaHei'`，确保未安装 `Sarasa-SuperTTC.ttc` 的 Windows 用户在输入框中文排版时优雅回退至微软雅黑，不再跌落至新宋体（`NSimSun`）。
+
+### Added（1,575 条零冲突词典补全、`--sync-user` 安全同步开关与备用字体源指引）
+- **补齐 21 条 `2.31.2` 原生漏翻 UI 词条至 1,575 条（`core/i18n.json`）**：
+  - 基于 [@pumblus](https://github.com/pumblus) 在 [#2](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 的提议核验并补齐跨平台对称词条：文件管理器定位（`Reveal in Finder` / `Show in File Explorer` / `Show in File Manager`）、会话已读状态与调试菜单（`Mark Read` / `Mark Unread` / `View Debug`）、项目与工作区排序筛选（`Sort Projects` / `Sort Workspaces` / `Filter` / `Display`）、思考与复制状态（`Thinking...` / `Thinking…` / `Thought Process` / `Copy code` / `Copy error messages` / `Copied` / `Stop`）及生命周期钩子事件名（`Pre/Post Tool Use`、`Pre/Post Invocation`），保持 100% 大小写与弯直引号不敏感唯一性。
+- **`install.mjs install --sync-user` 可选非破坏性同步参数（`install.mjs`）**：
+  - 默认继续严格保护已有 `user/` 改装层永不覆盖；当进阶用户或调试场景显式传入 `--sync-user` 时，自动先将原 `target/user/` 备份至 `backups/<timestamp>-user/`，再按 4 模板白名单同步最新 `user/` 模板（源自 [#2](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 建议并加固自动备份）。
+- **文档补充 `Sarasa-SuperTTC.ttc` 官方开源备用源与冷启动排障说明（`README.md` / `SKILL.md`）**：
+  - 针对 `791 MB` `Sarasa-SuperTTC.ttc` 偶发触发 Google Drive 24 小时单文件下载配额限制的问题（[@webber181](https://github.com/webber181) 在 [#1](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/1) 反馈），补充 macOS（`brew install --cask font-sarasa-gothic`）与 Windows/Linux（[`be5invis/Sarasa-Gothic` GitHub Releases](https://github.com/be5invis/Sarasa-Gothic/releases)）备用获取方式及冷启动 `Cmd/Ctrl + Shift + R` 手动强刷提示。
+
+### Contributors（本版社区贡献致谢）
+- **[@webber181](https://github.com/webber181)**（[Issue #1](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/1)）：定位反馈 Antigravity `language_server` 冷启动 `embedded assets` 与 Mendel/Fastpush 切换时序竞态根因及 `Sarasa-SuperTTC.ttc` Google Drive 下载配额备用源建议。
+- **[@pumblus](https://github.com/pumblus)**（Eric Zhou · [PR #2](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2)）：贡献桌面版 Anthropic 字体别名映射、未装更纱时输入框中文回退、漏翻 UI 词条线索与 `install.mjs --sync-user` 参数。
+
+---
+
+## [v5.1.7] - 2026-11-14
+
+> **适用版本**：Antigravity `2.31.2+`（`CL=1019359392`，向下完全兼容 `2.31.1` / `2.31.0` / `2.30.0`）
+> **核验基线**：Windows `2.31.2` 实机排障热修合流 + macOS `2.31.2` 实机 CDP 全断言回归 + `Claude Sonnet 5.5 (High)` 独立对抗审查闭环加固
+
+### Fixed（Windows `2.31.2` 专有缺陷根治与双平台对称加固）
+- **Windows `DirectWrite` 可变字体 `wght/opsz` 双轴全字重/斜体修复（`core/theme.css`）**：
+  - 针对 `AnthropicSerif-*.ttf` 默认 `wght=300` 轴导致 Windows `DirectWrite` 将 `nameID 4/6` 暴露为 `'Anthropic Serif Web Text Light'` / `'AnthropicSerifWebWeb-TextLight'` 进而使 `600 900` 粗体回退至 `Sarasa Mono Slab SC` 的底层缺陷，补齐 `Anthropic Serif` 与 `Anthropic Sans` `@font-face` `local()` 全名声明；
+  - 在 `html[data-ag-os="win32"]` 下显式注入 `:is(p, li, ...)` 正文（`'wght' 400, 'opsz' 16`）、`:is(i, em, .italic)` 斜体（`'wght' 400`）、`.font-medium` 中黑（`'wght' 500`）、`:is(strong, b, h1~h6, th, .font-semibold, .font-bold)` 粗体及粗斜体嵌套（`'wght' 600, 'opsz' 16`）与代码块内嵌 `normal` 还原规则，同时对 macOS `CoreText` 保持 0 干扰。
+- **Windows 计划任务电池断电强杀与 72 小时时限修复（`install.mjs`）**：
+  - `registerSystemService()` 在创建 `AntigravityThemeDaemon` 后通过 PowerShell `Set-ScheduledTask` 关闭 `DisallowStartIfOnBatteries`、`StopIfGoingOnBatteries`、清除 `ExecutionTimeLimit='PT0S'` 72 小时上限并设置 `MultipleInstances='Parallel'`，根治笔记本拔电休眠唤醒后守护进程失活；同步在 `install` 流程向安装目录拷入 `CHANGELOG.md`。
+- **Windows/Linux `0ms` 长按连发缩放、异步 `resize` 水位追踪与欧式键盘保护（`core/runtime.js`）**：
+  - 保留 macOS 主键盘 `60ms` `NSMenu` 原生菜单加速双倍跳变防抖窗口，将无原生 `NSMenu` 加速器的 Windows / Linux 及 macOS 数字小键盘与 `_` 改为 `0ms` 即时执行（彻底修复长按 `Ctrl + =/-` `e.repeat` `33ms` 周期被 `60ms` 定时器重置吞键的缺陷）；
+  - 修复 `void ipcRenderer.invoke('window:zoom-*')` 异步缩放期间 `__ag_zoom_resize_fn` 水位吸收逻辑，补齐 `plugin://swarm--` 子帧小键盘 `Ctrl + Numpad0`、`_` 及中文输入法归一化转发，并收窄 `isCjkImeKey`（移除 `Dead` 重音死键）防止误伤德语 QWERTZ `Ctrl+ß` / `Ctrl+´`。
+- **Windows 原生标题栏按钮 `setTitleBarOverlay` 昼夜反差同步与 `2.31.2` 主题优先级对齐（`core/runtime.js`）**：
+  - 新增支持 `color-mix()` / `oklch()` 零 DOM 污染离屏解析的 `resolveCssColorToHex6()` 与仅在 `win32` 顶层窗口激活的 `syncWinTitleBarOverlay()`，实时同步标题栏最小化/最大化/关闭按钮反差，禁用/卸载（含 `<head>` 早注阶段）时精准还原宿主原生色值；
+  - 修正跨版本升级场景下旧版 `localStorage['theme-mode']` 残留压过 `2.31.2` 实时 `colorScheme` 与 `hostThemeMode` 的优先级缺陷。
+- **Windows WSL 会话库按需懒探测、休眠退避与双游标零重扫（`core/daemon.mjs`）**：
+  - 新增基于 `%APPDATA%\Antigravity\wsl_state.json`（及 `ANTIGRAVITY_WSL_DISTRO` 环境变量）缓存、未命中短冷却负缓存与 `>400ms` 慢响应 `45s` 自动熔断退避的 WSL `\\wsl.localhost\<distro>` / `\\wsl$\<distro>` 按需懒解析（本地会话命中时 0 UNC 网络探测，避免休眠 WSL2 VM 被轮询唤醒或阻塞主线程），并合并 `getDbState` 消除单轮重复 `statSync`。
+- **Windows 守护进程三态 PID 防误杀、字体占用容错与 `.NET ZipFile` 打包（`install.mjs` / `core/daemon.mjs`）**：
+  - `checkDaemonPidState()` 引入 `'confirmed' | 'not_daemon' | 'uncertain'` 三态校验与 `12s` WMI 超时重试，既杜绝系统重启后 PID 复用误杀无关 `node.exe`，又防止登录高负载超时误删 `.pid` 制造孤儿双守护进程；
+  - `install-fonts` 捕获客户端运行期 `EBUSY/EPERM/EACCES` 字体内存映射锁并归入 `skippedLocked`，通过 `25s` 超时的 `gdi32!AddFontResource` 与异步 `SendNotifyMessage(HWND_BROADCAST, WM_FONTCHANGE)` 即时广播刷新；
+  - `buildDistZip()` 双端共享 `user/` 4 模板白名单，Windows 下采用 `.NET System.IO.Compression.ZipFile` 原生流式生成 POSIX `/` 路径规范压缩包，彻底告别 `Compress-Archive` 30 秒卡顿与反斜杠归档污染。
+
+### Added（Swarm 隐藏预加载感知、弯引号归一与 1,554 条词典扩充）
+- **`plugin://swarm--` OOPIF 顶层重注入与宿主 `config.json` 主题兜底（`core/daemon.mjs` / `core/runtime.js`）**：
+  - 修复 `daemon.mjs` `Page.frameNavigated` 在 OOPIF 子帧上因携带 `frame.parentId` 漏触发重注入的问题；
+  - `daemon.mjs` 新增 `~/.gemini/config/config.json` `userSettings.themeMode` `mtime` 缓存读取并注入 `bootPayload.hostThemeMode`（纳入热更新签名），解决 Swarm 面板隐藏预加载期 `hostLum === null` 时的初始深浅色对齐。
+- **弯引号（`\u2018`/`\u2019`）双向归一化与 1,554 条零冲突词典（`core/i18n.json` / `core/runtime.js`）**：
+  - `dictLookup()` 新增 `DICT_APOS` 双向弯单引号（`’`/`‘` ↔ `'`）归一化映射（同时兼容宿主弯引号 DOM 与用户 `i18n.override.json` 弯引号覆盖，且保持 `dictCount` 精确恒定）；
+  - `core/i18n.json` 扩充 54 条新词条至 **1,554 条**（保持 100% 大小写不敏感与弯直引号不敏感唯一性），支持带多词后缀的 `Version X.Y.Z · <Channel>` 版本号文本与 4 组 Swarm 任务/讨论计数动态正则（`X of Y tasks done`、`Up next · N`、`N posts`、`N members`）。
+
+---
+
 ## [v5.1.6] - 2026-11-13
 
 > **适用版本**：Antigravity `2.31.2+`（`CL=1019359392`，向下完全兼容 `2.31.1` / `2.31.0` / `2.30.0`）
