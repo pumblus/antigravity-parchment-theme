@@ -150,3 +150,21 @@ test('v530 emitted bundle preserves explicit exclusion provenance without inject
  for(const selector of ['.monaco-editor','.monaco-diff-editor','.xterm','[data-markdown-root]','[data-testid="user-message-content"]','.agy-user-bubble','[class*="onyx-key"]'])assert.ok(defaults.includes(selector),selector);
  assert.match(runtime,/splitTopLevelSelectors\(DEFAULT_EXCLUDE_I18N\)/);
 });
+test('translation review platform trash defaults preserve exact personal overrides', async t => {
+ for(const platform of ['darwin','win32','linux']) {
+  const h=await harness(t);h.context.process.platform=platform;
+  fs.writeFileSync(path.join(h.tmp,'core/i18n.json'),JSON.stringify({Trash:'废纸篓','Move to Trash':'移到废纸篓'}));
+  const stamp=new Date(Date.now()+7000);fs.utimesSync(path.join(h.tmp,'core/i18n.json'),stamp,stamp);
+  assert.equal(h.api.rebuildBundleIfNeeded(),true);
+  const browser=vm.createContext({});vm.runInContext(h.api.getBundle(),browser);
+  assert.equal(browser.__testBoot.i18nDict.Trash,platform==='darwin'?'废纸篓':'回收站');
+  assert.equal(browser.__testBoot.i18nDict['Move to Trash'],platform==='darwin'?'移到废纸篓':'移到回收站');
+  fs.writeFileSync(path.join(h.tmp,'user/i18n.override.json'),JSON.stringify({exact:{Trash:'我的自定义名称'}}));
+  assert.equal(h.api.rebuildBundleIfNeeded(),true);vm.runInContext(h.api.getBundle(),browser);
+  assert.equal(browser.__testBoot.i18nDict.Trash,'我的自定义名称');
+ }
+});
+test('translation review metrics labels distinguish model capacity from compression and parent totals', async t => {
+ const h=await harness(t);h.makeDb(parent);h.makeDb(child,generation(200),parent,parent);
+ const result=h.api.parseConversationMetrics(parent,h.dir);assert.match(result.tooltipHtml,/上下文窗口用量/);assert.match(result.tooltipHtml,/剩余容量/);assert.match(result.tooltipHtml,/主会话累计/);assert.match(result.tooltipHtml,/主会话累计输入/);assert.match(result.tooltipHtml,/总计 300 \(主 100 \+ 子 200\)/);assert.doesNotMatch(result.tooltipHtml,/压缩水位|距压缩/);
+});

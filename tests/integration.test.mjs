@@ -32,7 +32,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.3.0-eric.1');
+  assert.equal(manifest.version, '5.3.0-eric.2');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -44,7 +44,7 @@ test('dictionary keeps upstream coverage and clear permission labels without cas
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map(k => k.toLowerCase().replace(/[‘’]/g, "'"))).size, keys.length);
-  assert.equal(dict.Turbo, '完全模式 (Turbo)');
+  assert.equal(dict.Turbo, '完全模式（Turbo）');
   assert.equal(dict['Turbo mode'], dict.Turbo);
   assert.equal(dict.Thinking, '正在思考');
   assert.equal(Object.hasOwn(dict, 'New'), false, 'New must reach contextual translation');
@@ -54,7 +54,7 @@ test('dictionary keeps upstream coverage and clear permission labels without cas
   assert.equal(dict['Cancel (⌃C)'], '取消生成 (⌃C)');
   assert.equal(dict['Enable Sandbox Mode'], '启用沙盒模式');
   const warning = dict[Object.keys(dict).find(key => key.startsWith('Allow the agent to automatically view'))];
-  assert.match(warning, /提示注入/); assert.match(warning, /凭证、密钥/);
+  assert.match(warning, /提示注入/); assert.match(warning, /凭证文件、密钥/);
 });
 test('no automatic external title-patch execution or destructive sync-user switch', () => {
   assert.doesNotMatch(read('core/daemon.mjs'), /ensureZhTitlePatch|antigravity-zh-title-patch\.py|execFile\(/);
@@ -73,11 +73,11 @@ function translationUnit(dictionary = dict, version = 'unit-1', originalMap = ne
 }
 test('translation units resolve exact, dynamic and permission labels safely', () => {
   const ctx = translationUnit(); const tr = ctx.api.computeTextTranslation;
-  for (const [input, expected] of [['Turbo', '完全模式 (Turbo)'], ['Thinking', '正在思考'],
-    ['Running command >', '正在执行命令 >'], ['Thought for 8s', '已思考 8s'],
-    ['Worked for 2m 3s', '已工作 2m 3s'], ['12 files changed', '12 个文件变更'],
+  for (const [input, expected] of [['Turbo', '完全模式（Turbo）'], ['Thinking', '正在思考'],
+    ['Running command >', '正在执行命令 >'], ['Thought for 8s', '已思考 8 秒'],
+    ['Worked for 2m 3s', '已工作 2 分钟 3 秒'], ['12 files changed', '12 个文件变更'],
     ['unknown text', null], ['中文原文', null], ['__proto__', null]]) assert.equal(tr(input, null), expected, input);
-  assert.equal(ctx.api.resolveAttrTranslation('Permission mode selector, current: Turbo'), '权限模式，当前：完全模式 (Turbo)');
+  assert.equal(ctx.api.resolveAttrTranslation('Permission mode selector, current: Turbo'), '权限模式，当前：完全模式（Turbo）');
   assert.match(ctx.api.resolveAttrTranslation('Permission mode: Turbo (Cannot be changed mid-conversation)'), /完全模式.*对话中途无法更改/);
   ctx.DICT.literal = '$& $1 中文'; assert.equal(tr(' literal ', null), '$& $1 中文');
 });
@@ -89,7 +89,7 @@ test('translation units preserve Turbo risk semantics and support 2.32.0 templat
     ['Uses your local clone, example', '使用本地克隆：example'],
     ['Hey Eric, what should we build today?', '嗨，Eric，今天想做点什么？'],
     ['Work locally on main', '在本地 main 中工作'],
-    ['Turbo mode', '完全模式 (Turbo)'],
+    ['Turbo mode', '完全模式（Turbo）'],
   ]) assert.equal(api.computeTextTranslation(input, null), expected, input);
   assert.match(api.resolveAttrTranslation('Agent permissions preset: Auto (Preview), Automatically decide if commands run.'), /自动.*预览.*自动判断/);
   assert.match(api.resolveAttrTranslation('Agent permissions preset: Turbo, Run all commands without restrictions.'), /完全模式.*不受限制/);
@@ -139,7 +139,7 @@ test('translation units support 2.31.1 turn-navigation and exhausted-history lab
 test('translation units restore originals after override removal and preserve React updates', () => {
   const originalMap = new WeakMap(); const node = { nodeValue: 'Turbo', parentElement: null };
   translationUnit(dict, 'first', originalMap).api.translateTextNode(node);
-  assert.equal(node.nodeValue, '完全模式 (Turbo)');
+  assert.equal(node.nodeValue, '完全模式（Turbo）');
   translationUnit({ ...dict, Turbo: '自定义权限' }, 'second', originalMap).api.translateTextNode(node);
   assert.equal(node.nodeValue, '自定义权限');
   const removed = { ...dict }; delete removed.Turbo;
@@ -156,7 +156,7 @@ test('translation units preserve Cancel aria-label and restore attributes', () =
   ctx.api.translateSingleAttr(el, 'aria-label', 'data-ag-orig-aria-label', ctx.api.resolveAttrTranslation);
   assert.equal(attrs.get('aria-label'), 'Cancel');
   ctx.api.translateSingleAttr(el, 'title', 'data-ag-orig-title', ctx.api.resolveAttrTranslation);
-  assert.equal(attrs.get('title'), '完全模式 (Turbo)');
+  assert.equal(attrs.get('title'), '完全模式（Turbo）');
   const removed = { ...dict }; delete removed.Turbo; const next = translationUnit(removed, 'unit-2');
   next.api.translateSingleAttr(el, 'title', 'data-ag-orig-title', next.api.resolveAttrTranslation);
   assert.equal(attrs.get('title'), 'Turbo'); assert.equal(attrs.has('data-ag-orig-title'), false);
@@ -169,11 +169,11 @@ test('runtime translates UI while isolating user content', async t => {
     <div class="monaco-editor" id="monaco">Turbo</div><div class="xterm" id="terminal">Thinking</div>
     <div contenteditable="true" id="composer">Turbo</div><input id="input" value="Turbo" placeholder="Thinking"><span id="new"></span>`);
   await inject(page);
-  await page.waitForFunction(() => document.querySelector('#turbo').textContent === '完全模式 (Turbo)');
+  await page.waitForFunction(() => document.querySelector('#turbo').textContent === '完全模式（Turbo）');
   assert.match(await page.locator('#turbo').getAttribute('aria-label'), /完全模式/);
   assert.equal(await page.locator('#run').textContent(), '正在执行命令 >');
   assert.equal(await page.locator('#run').getAttribute('title'), '正在执行命令 >');
-  assert.equal(await page.locator('#thought').textContent(), '已思考 8s');
+  assert.equal(await page.locator('#thought').textContent(), '已思考 8 秒');
   assert.equal(await page.locator('#thinking').textContent(), '正在思考');
   assert.equal(await page.locator('#case').textContent(), '回答不错');
   for (const [id, val] of Object.entries({ pre: 'Turbo', code: 'Thinking', prose: 'Running command >', monaco: 'Turbo', terminal: 'Thinking', composer: 'Turbo' })) assert.equal(await page.locator('#' + id).textContent(), val, id);
@@ -211,7 +211,7 @@ test('runtime hot reload is repeatable and disabling restores UI with cleanup', 
   assert.equal(await page.locator('#label').getAttribute('title'), 'Turbo');
   assert.equal(await page.locator('#ag-custom-fonts').count(), 0);
   assert.equal(await page.evaluate(() => window.testCleanups), 2);
-  await inject(page); await page.waitForFunction(() => document.querySelector('#label').textContent === '完全模式 (Turbo)');
+  await inject(page); await page.waitForFunction(() => document.querySelector('#label').textContent === '完全模式（Turbo）');
 });
 // Real file-copy logic in a VM; all service/CDP/subprocess/app operations are stubbed.
 function isolatedInstaller(sourceDir, targetDir, home, extraArgs = []) {
@@ -249,4 +249,41 @@ test('installer preserves user bytes/selectors and stable backups across upgrade
   const config = JSON.parse(fs.readFileSync(path.join(target, 'user/config.json')));
   assert.equal(config.channel, 'insiders'); assert.equal(config.enabled, false);
   assert.equal(config.selectors.custom, '#mine'); assert.equal(config.privateSetting, true);
+});
+test('translation review audits all 32 divergent and 16 supplemental entries', () => {
+ const review=JSON.parse(read('translation-review.json'));
+ assert.equal(review.sameKeyDifferences,32);assert.equal(review.additionalKeys,16);assert.equal(review.entries.length,48);
+ for(const item of review.entries)assert.equal(dict[item.key],item.chosen,item.key);
+ assert.equal(Object.keys(dict).length,1756);
+ for(const key of ['Notice','Display'])assert.equal(dict[key],key==='Notice'?'提示':'显示');
+ assert.equal(dict['At mention code block'],'引用代码块（@）');
+ assert.equal(dict['Agent response'],'Agent 回复');
+ assert.equal(Object.values(dict).some(v=>v.includes('智能体')),false);
+ const warning=dict[Object.keys(dict).find(k=>k.startsWith('Allow the agent to automatically view'))];
+ for(const token of ['查看和编辑','凭证文件','密钥','提示注入','其他漏洞利用','攻击的目标'])assert.ok(warning.includes(token),token);
+});
+test('translation review permission presets agree across static and dynamic accessibility labels', () => {
+ const {api}=translationUnit();
+ for(const mode of ['Turbo','Auto','Strict','Auto (Preview)']){
+  const expected='权限模式，当前：'+dict[mode];
+  assert.equal(api.resolveAttrTranslation('Agent permissions preset selector, current: '+mode),expected);
+  assert.equal(api.resolveAttrTranslation('Permission mode selector, current: '+mode),expected);
+ }
+ const exact='Agent permissions preset selector, current: Auto';
+ assert.equal(translationUnit({...dict,[exact]:'私人标签'}).api.resolveAttrTranslation(exact),'私人标签');
+ assert.equal(api.computeTextTranslation('Every command requires approval.',null),'每条命令都需您批准。');
+ assert.equal(api.computeTextTranslation('Ask before sensitive operations.',null),'执行敏感操作前先征求您的确认。');
+ assert.equal(api.computeTextTranslation('Run all commands without restrictions.',null),'不受限制地执行所有命令。');
+});
+test('translation review distinguishes active elapsed states and queue timing', () => {
+ const {api}=translationUnit();
+ for(const [en,zh] of [['Thought for 8s','已思考 8 秒'],['Thinking for 8s','思考中，已用时 8 秒'],['Thinking for <1s','思考中，已用时 不到 1 秒'],['Thought for <1m','已思考 不到 1 分钟'],['Worked for 2m 3s','已工作 2 分钟 3 秒'],['Worked for 2m · 3 updates','已工作 2 分钟 · 3 条进展'],['Running for 1h 2m','运行中，已用时 1 小时 2 分钟'],['⌘Enter Queues after the turn','⌘Enter 加入队列，本轮结束后发送']])assert.equal(api.computeTextTranslation(en,null),zh,en);
+});
+test('translation review preserves privacy, billing and review distinctions', () => {
+ const review=JSON.parse(read('translation-review.json'));for(const item of review.sharedCorrections)assert.equal(dict[item.key],item.chosen,item.key);
+ assert.equal(dict['Telemetry will be enabled for this conversation; click to disable.'],'此对话将启用遥测上报；点击可关闭。');
+ assert.equal(dict['Enable AI Credit Overages'],'启用 AI 点数超额使用');
+ assert.equal(dict['Allow full browser script execution without prompting.'],'允许执行所有浏览器脚本，不请求确认。');
+ const strict=dict[Object.keys(dict).find(k=>k.startsWith('Enforce settings that prevent'))];for(const word of ['定向漏洞利用','所有 Agent 操作','人工审阅','antigravity.google/docs/strict-mode'])assert.ok(strict.includes(word),word);
+ assert.equal(dict['Plan Review Policy'],'计划审阅策略');
 });

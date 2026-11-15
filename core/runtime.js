@@ -13,7 +13,7 @@
   if (window.top !== window && !IS_SWARM_PLUGIN_FRAME) return;
   if (!boot || typeof boot !== 'object') return;
 
-  const PATCH_VERSION = boot.version || '20261115-v5.3.0-eric.1';
+  const PATCH_VERSION = boot.version || '20261115-v5.3.0-eric.2';
   const DETECTED_OS =
     boot.platform || (/Win/i.test(navigator.platform || '') ? 'win32' : /Mac/i.test(navigator.platform || '') ? 'darwin' : 'linux');
   const ENABLED = boot.enabled !== false;
@@ -1670,10 +1670,10 @@
     ? {
         Coordinator: '协调器',
         Goal: '目标',
-        Threads: '工作流',
+        Threads: '任务组',
         Now: '当前',
         Progress: '进度',
-        Stuck: '受阻停滞',
+        Stuck: '受阻',
         Moving: '推进中',
         Waiting: '等待中',
         Other: '其他',
@@ -1681,7 +1681,7 @@
         Task: '任务',
         Active: '活跃中',
         Team: '团队',
-        Retired: '已退役',
+        Retired: '已终止',
         Error: '错误',
         Killed: '已终止',
         Frames: '关键帧',
@@ -2081,7 +2081,7 @@
 
     function formatCompactDurationZh(str) {
       const s = String(str || '').trim();
-      if (s === '<1m' || s === '< 1m') return '不到 1 分钟';
+      if (/^<\s*\d+\s*[smhd]$/i.test(s)) return '不到 ' + formatCompactDurationZh(s.slice(1));
       return s
         .replace(/(\d+)\s*d\b/gi, '$1 天')
         .replace(/(\d+)\s*h\b/gi, '$1 小时')
@@ -2224,9 +2224,9 @@
         if (RE_MCP_FAILED_START.test(trimmed)) return raw.replace(RE_MCP_FAILED_START, '$1 个 MCP 服务器启动失败');
         if (IS_SWARM_PLUGIN_FRAME) {
           if (RE_SWARM_N_WAITING_ON.test(trimmed)) return raw.replace(RE_SWARM_N_WAITING_ON, '$1 项等待 $2');
-          if (RE_SWARM_N_STUCK.test(trimmed)) return raw.replace(RE_SWARM_N_STUCK, '$1 项受阻停滞');
+          if (RE_SWARM_N_STUCK.test(trimmed)) return raw.replace(RE_SWARM_N_STUCK, '$1 项受阻');
           if (RE_SWARM_N_NEEDS_YOU.test(trimmed)) return raw.replace(RE_SWARM_N_NEEDS_YOU, '$1 项需要您处理');
-          if (RE_SWARM_N_THREADS_OPEN.test(trimmed)) return raw.replace(RE_SWARM_N_THREADS_OPEN, '$1 个工作流进行中');
+          if (RE_SWARM_N_THREADS_OPEN.test(trimmed)) return raw.replace(RE_SWARM_N_THREADS_OPEN, '$1 个任务组未完成');
           if (RE_SWARM_N_ACTIVE.test(trimmed)) return raw.replace(RE_SWARM_N_ACTIVE, '$1 项活跃');
           if (contextEl && contextEl.closest && contextEl.closest('.o2-progt') && RE_SWARM_NUM_OF_NUM.test(trimmed)) {
             return raw.replace(RE_SWARM_NUM_OF_NUM, '$1 / $2');
@@ -2247,7 +2247,7 @@
       const firstUpper = trimmed[0].toUpperCase();
       if (IS_SWARM_PLUGIN_FRAME) {
         if (firstUpper === 'W' && RE_SWARM_WAITING_ON.test(trimmed)) {
-          return raw.replace(RE_SWARM_WAITING_ON, '等待 $1');
+          return raw.replace(RE_SWARM_WAITING_ON, (_, target) => /^\d+$/.test(target) ? '等待 ' + target + ' 方响应' : '等待 ' + target);
         }
         if (firstUpper === 'L') {
           const mSeen = trimmed.match(RE_SWARM_LAST_SEEN);
@@ -2319,9 +2319,9 @@
         }
         if (firstUpper === 'W') {
           if (RE_WORKED_FOR_UPDATES.test(trimmed)) {
-            return raw.replace(RE_WORKED_FOR_UPDATES, (_, dur, cnt) => '已工作 ' + dur.trim() + ' · ' + cnt + ' 条进展');
+            return raw.replace(RE_WORKED_FOR_UPDATES, (_, dur, cnt) => '已工作 ' + formatCompactDurationZh(dur) + ' · ' + cnt + ' 条进展');
           }
-          if (RE_WORKED_FOR.test(trimmed)) return raw.replace(RE_WORKED_FOR, '已工作 $1');
+          if (RE_WORKED_FOR.test(trimmed)) return raw.replace(RE_WORKED_FOR, (_, dur) => '已工作 ' + formatCompactDurationZh(dur));
           if (RE_WAITING_CMD_SEC.test(trimmed)) {
             return raw.replace(RE_WAITING_CMD_SEC, '正在等待命令完成（最多 $1 秒）');
           }
@@ -2351,8 +2351,8 @@
           return raw.replace(RE_MARKED_READ, '已将 $1 个对话标为已读');
         }
       } else if (firstUpper === 'T') {
-        if (RE_THOUGHT_FOR.test(trimmed)) return raw.replace(RE_THOUGHT_FOR, '已思考 $1');
-        if (RE_THINKING_FOR.test(trimmed)) return raw.replace(RE_THINKING_FOR, '已思考 $1');
+        if (RE_THOUGHT_FOR.test(trimmed)) return raw.replace(RE_THOUGHT_FOR, (_, dur) => '已思考 ' + formatCompactDurationZh(dur));
+        if (RE_THINKING_FOR.test(trimmed)) return raw.replace(RE_THINKING_FOR, (_, dur) => '思考中，已用时 ' + formatCompactDurationZh(dur));
         if (RE_DELETE_RECORDINGS_CONFIRM.test(trimmed)) {
           return raw.replace(
             RE_DELETE_RECORDINGS_CONFIRM,
@@ -2387,7 +2387,7 @@
         }
         if (firstUpper === 'R') {
           if (RE_RUNNING_FOR.test(trimmed)) {
-            return raw.replace(RE_RUNNING_FOR, '已运行 $1');
+            return raw.replace(RE_RUNNING_FOR, (_, dur) => '运行中，已用时 ' + formatCompactDurationZh(dur));
           }
           if (!inHdr && RE_RUNNING_CMD.test(trimmed)) {
             return raw.replace(RE_RUNNING_CMD, (_, cmd) => '正在运行 ' + cmd);
@@ -2555,7 +2555,7 @@
 
       if (trimmed.length < 64) {
         if (RE_KEY_QUEUES_AFTER.test(trimmed)) {
-          return raw.replace(RE_KEY_QUEUES_AFTER, '$1 当前轮次结束后排队发送');
+          return raw.replace(RE_KEY_QUEUES_AFTER, '$1 加入队列，本轮结束后发送');
         }
         if (RE_KEY_SENDS_IMMEDIATELY.test(trimmed)) {
           return raw.replace(RE_KEY_SENDS_IMMEDIATELY, '$1 立即发送');

@@ -13,11 +13,11 @@ function unit(swarm = false, dict = {}) {
 }
 test('v530 translations keep Swarm-only terminology scoped and user exact overrides first', () => {
   const main = unit(), swarm = unit(true);
-  for (const [en, zh] of [['Coordinator','协调器'], ['Threads','工作流'], ['stale','待刷新'], ['(empty)','（空）']]) {
+  for (const [en, zh] of [['Coordinator','协调器'], ['Threads','任务组'], ['stale','待刷新'], ['(empty)','（空）']]) {
     assert.equal(main.dictLookup(en), undefined); assert.equal(swarm.dictLookup(en), zh);
   }
   assert.equal(unit(true, {Threads:'我的工作流'}).dictLookup('Threads'), '我的工作流');
-  for (const [en, zh] of [['3 stuck','3 项受阻停滞'], ['2 waiting on @alice','2 项等待 @alice'], ['Now · 2 / 7','当前 · 2 / 7'], ['paused: quota','已暂停：配额耗尽']]) {
+  for (const [en, zh] of [['3 stuck','3 项受阻'], ['2 waiting on @alice','2 项等待 @alice'], ['Now · 2 / 7','当前 · 2 / 7'], ['paused: quota','已暂停：配额耗尽']]) {
     assert.equal(main.computeTextTranslation(en, null), null); assert.equal(swarm.computeTextTranslation(en, null), zh);
   }
   assert.equal(swarm.computeTextTranslation('2 of 7', null), null);
@@ -100,4 +100,10 @@ test('v530 runtime default configuration translates Markdown UI metadata but pre
   assert.equal(await page.locator('#copy').textContent(),'Copy code');
   assert.equal(await page.locator('#prose').textContent(),'2 images');
   assert.equal(await page.locator('#code').getAttribute('title'),'Copy code');
+});
+test('translation review Swarm group/status terms stay frame-scoped and retain overrides', () => {
+ const main=unit(),swarm=unit(true);
+ for(const [en,zh] of [['Threads','任务组'],['Stuck','受阻'],['Retired','已终止']]){assert.equal(swarm.dictLookup(en),zh);assert.equal(main.dictLookup(en),undefined);}
+ for(const [en,zh] of [['3 threads open','3 个任务组未完成'],['Waiting on 3','等待 3 方响应'],['Waiting on @alice','等待 @alice']]){assert.equal(swarm.computeTextTranslation(en,null),zh);assert.equal(main.computeTextTranslation(en,null),null);}
+ assert.equal(unit(true,{Threads:'我的术语'}).dictLookup('Threads'),'我的术语');
 });

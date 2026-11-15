@@ -222,7 +222,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261115-v5.3.0-eric.1';
+const BASE_VERSION = '20261115-v5.3.0-eric.2';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -430,7 +430,8 @@ function rebuildBundleIfNeeded() {
   const baseDict = readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {});
   const rawOverrideDict = !SAFE_MODE ? readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {}) : {};
   const overrideDict = normalizeOverrideDict(rawOverrideDict);
-  const mergedDict = Object.assign({}, baseDict, overrideDict);
+  const platformDict = process.platform === 'darwin' ? {} : { Trash: '回收站', 'Move to Trash': '移到回收站' };
+  const mergedDict = Object.assign({}, baseDict, platformDict, overrideDict);
 
   const customJs = !SAFE_MODE && modules.customJs ? readTextSafe(path.join(USER_DIR, 'custom.js'), '') : '';
   const runtimeTemplate = readTextSafe(path.join(CORE_DIR, 'runtime.js'), '');
@@ -1710,9 +1711,9 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       `<div class="ag-tt-row"><span class="ag-tt-lbl">当前上下文</span><span class="ag-tt-val">${fmtNum(last.ctx)} (新增 ${fmtNum(last.inTok)} + 缓存 ${fmtNum(last.cacheRead)}, ${lastCacheRate}%)</span></div>`,
       `<div class="ag-tt-row"><span class="ag-tt-lbl">本步输出量</span><span class="ag-tt-val">${fmtNum(last.outTok)} (思考链 ${fmtNum(last.thinkTok)} + 正文/工具 ${fmtNum(last.respTok)})</span></div>`,
       turnRowHtml,
-      `<div class="ag-tt-hdr ag-tt-sec">当前会话累计 (${userStepsCount} 轮提问 / ${valid.length} 次有效调用)</div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">压缩水位线</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · 距压缩余 ${fmtTok(remainCtx)}</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输入量</span><span class="ag-tt-val">新增 ${fmtTok(totalIn)} + 缓存读取 ${fmtTok(totalCache)} (命中率 ${sessionCacheRate}%)</span></div>`,
+      `<div class="ag-tt-hdr ag-tt-sec">主会话累计 (${userStepsCount} 轮提问 / ${valid.length} 次有效调用)</div>`,
+      `<div class="ag-tt-row"><span class="ag-tt-lbl">上下文窗口用量</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · 剩余容量 ${fmtTok(remainCtx)}</span></div>`,
+      `<div class="ag-tt-row"><span class="ag-tt-lbl">主会话累计输入</span><span class="ag-tt-val">新增 ${fmtTok(totalIn)} + 缓存读取 ${fmtTok(totalCache)} (命中率 ${sessionCacheRate}%)</span></div>`,
       subRowHtml,
       outputRowHtml
     ];

@@ -1,0 +1,428 @@
+{
+  "base": "045dcced18daab4a9235eeb8f47cc0484c0014ea",
+  "upstream": "6a263b50cb575b22059f4429a9ba9625c0c540df",
+  "version": "5.3.0-eric.2",
+  "sameKeyDifferences": 32,
+  "additionalKeys": 16,
+  "entries": [
+    {
+      "key": "Running",
+      "upstream": "运行中",
+      "previous": "正在运行",
+      "chosen": "正在运行",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Turbo",
+      "upstream": "极速模式",
+      "previous": "完全模式 (Turbo)",
+      "chosen": "完全模式（Turbo）",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Every command requires approval.",
+      "upstream": "每项命令均需经过用户批准。",
+      "previous": "每条命令均需批准。",
+      "chosen": "每条命令都需您批准。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Every command requires approval",
+      "upstream": "每项命令均需经过用户批准",
+      "previous": "每条命令均需批准",
+      "chosen": "每条命令都需您批准",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Ask before sensitive operations.",
+      "upstream": "执行敏感操作前进行确认。",
+      "previous": "敏感操作前先确认。",
+      "chosen": "执行敏感操作前先征求您的确认。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Ask before sensitive operations",
+      "upstream": "执行敏感操作前进行确认",
+      "previous": "敏感操作前先确认",
+      "chosen": "执行敏感操作前先征求您的确认",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Run all commands without restrictions.",
+      "upstream": "不受限制地直接执行所有命令。",
+      "previous": "不受限制直接执行所有命令。",
+      "chosen": "不受限制地执行所有命令。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Run all commands without restrictions",
+      "upstream": "不受限制地直接执行所有命令",
+      "previous": "不受限制直接执行所有命令",
+      "chosen": "不受限制地执行所有命令",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Automatically decide if commands run.",
+      "upstream": "自动判断是否直接执行命令。",
+      "previous": "自动判断是否执行命令。",
+      "chosen": "自动判断是否执行命令。",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Automatically decide if commands run",
+      "upstream": "自动判断是否直接执行命令",
+      "previous": "自动判断是否执行命令",
+      "chosen": "自动判断是否执行命令",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Configures how the agent tries to access files outside of its working folders.",
+      "upstream": "配置 Agent 尝试访问其工作目录以外文件时的行为策略。",
+      "previous": "配置智能体访问工作区外文件时的权限策略。",
+      "chosen": "配置 Agent 尝试访问其工作文件夹之外的文件时的行为。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Controls whether terminal commands require your approval before running.",
+      "upstream": "控制终端命令在运行前是否需要您的批准。",
+      "previous": "终端命令运行前是否需要批准。",
+      "chosen": "控制终端命令运行前是否需要您批准。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Which workspace the New Conversation button and keyboard shortcut start you in.",
+      "upstream": "“新建对话”按钮及快捷键默认开启的工作区。",
+      "previous": "“新建对话”按钮与快捷键默认打开的工作区。",
+      "chosen": "“新建对话”按钮与快捷键默认打开的工作区。",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Commands and files these agents can use.",
+      "upstream": "这些 Agent 可以使用的命令与文件权限。",
+      "previous": "智能体可使用的命令与文件。",
+      "chosen": "这些 Agent 可使用的命令与文件。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Configure agent execution, queued message delivery, and permissions.",
+      "upstream": "配置 Agent 执行策略、排队消息发送及权限。",
+      "previous": "配置智能体执行、排队消息发送与权限设置。",
+      "chosen": "配置 Agent 执行方式、排队消息发送与权限。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Whether the agent asks you to review its documents.",
+      "upstream": "控制 Agent 在生成文档时是否请求您进行审查。",
+      "previous": "智能体生成工件文档时是否请求您审查。",
+      "chosen": "Agent 是否会请您审阅其文档。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Configure allowed and denied URLs for browser actuation.",
+      "upstream": "配置允许和拒绝进行浏览器交互操作的 URL 规则。",
+      "previous": "配置允许和拒绝浏览器操作的网址规则。",
+      "chosen": "配置允许或禁止浏览器操作的网址规则。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "To modify notification settings, open your operating system's system preferences.",
+      "upstream": "如需修改通知设置，请前往操作系统的系统设置进行配置。",
+      "previous": "如需修改通知设置，请在系统设置中调整。",
+      "chosen": "如需修改通知设置，请在操作系统的系统设置中调整。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Choose between the Default and Project 4K experience.",
+      "upstream": "在默认体验与 Project 4K 体验之间进行切换。",
+      "previous": "在默认与 Project 4K 体验间切换。",
+      "chosen": "在默认与 Project 4K 体验间切换。",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "The breakdown below shows token usage from customizations like rules, skills, and MCP. If a budget is exceeded, large rules are demoted to path pointers and large customizations are excluded automatically.",
+      "upstream": "下方明细展示了规则、技能及 MCP 等自定义项的 Token 占用情况。若超出预算上限，体积较大的规则将自动降级为路径指针，过大的自定义项将被自动排除。",
+      "previous": "下方展示规则、技能与 MCP 等自定义项的 Token 用量。若超出预算，大体积规则会自动转为路径指针，过大的自定义项会自动忽略。",
+      "chosen": "下方明细显示规则、技能和 MCP 等自定义项的 Token 用量。超出预算时，较大的规则会自动改为路径引用，过大的自定义项会自动排除。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Automatically prompt you to restart the app when a new update is available. When disabled, you can check for updates manually from the app menu.",
+      "upstream": "当有新版本可用时自动提示重启应用进行更新；关闭后仍可通过应用菜单手动检查更新。",
+      "previous": "有新版本时提示重启应用更新；关闭后可从菜单栏手动检查更新。",
+      "chosen": "有新版本时自动提示您重启应用进行更新；关闭后可从应用菜单手动检查更新。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Manage your conversations from the companion website.",
+      "upstream": "通过配套网页端远程管理您的本地对话。",
+      "previous": "在配套网页端查看与管理本地会话。",
+      "chosen": "通过配套网站管理您的对话。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "A nickname for identifying this application in the companion website. Changing this will restart the connection.",
+      "upstream": "用于在配套网页端识别此客户端的设备昵称，修改后将重新建立连接。",
+      "previous": "在配套网页端显示的设备名称，修改后会重新连接。",
+      "chosen": "用于在配套网站中识别此应用的昵称；修改后会重新连接。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Autonomous Mode",
+      "upstream": "全自主运行模式",
+      "previous": "全自主模式",
+      "chosen": "全自主模式",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Allow the agent to automatically view and edit files outside the current workspace. Use with caution: this gives the agent access to additional potentially-relevant information, but also allows the agent to access credential files, secrets, and other files outside of the workspace that could be targeted in prompt injection attacks or other exploits by malicious actors.",
+      "upstream": "允许 Agent 自动查看和编辑当前工作区目录以外的文件。请谨慎开启：这虽能提供更多参考信息，但也可能让 Agent 接触到工作区外的凭证或密钥文件。",
+      "previous": "允许智能体自动查看和编辑当前工作区外的文件。请谨慎开启：这能提供更多相关信息，也会让智能体接触到凭证、密钥及其他文件，恶意攻击者可能利用提示注入等手段获取这些信息。",
+      "chosen": "允许 Agent 自动查看和编辑当前工作区之外的文件。请谨慎开启：这能提供更多可能相关的信息，但也会让 Agent 访问工作区外的凭证文件、密钥等机密信息及其他文件。这些文件可能成为恶意攻击者通过提示注入或其他漏洞利用手段实施攻击的目标。",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Turbo mode",
+      "upstream": "极速模式",
+      "previous": "完全模式 (Turbo)",
+      "chosen": "完全模式（Turbo）",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Running command",
+      "upstream": "正在运行命令",
+      "previous": "正在执行命令",
+      "chosen": "正在执行命令",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Scroll to Bottom",
+      "upstream": "滚动到底部",
+      "previous": "回到底部",
+      "chosen": "回到底部",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "At mention code block",
+      "upstream": "引用代码块 (@)",
+      "previous": "引用代码块",
+      "chosen": "引用代码块（@）",
+      "decision": "重新润色"
+    },
+    {
+      "key": "Notice",
+      "upstream": "提示",
+      "previous": "公告",
+      "chosen": "提示",
+      "decision": "采用上游"
+    },
+    {
+      "key": "Mark Unread",
+      "upstream": "标为未读",
+      "previous": "标记为未读",
+      "chosen": "标记为未读",
+      "decision": "保留融合版"
+    },
+    {
+      "key": "Display",
+      "upstream": "显示",
+      "previous": "显示设置",
+      "chosen": "显示",
+      "decision": "采用上游"
+    },
+    {
+      "key": "Agent permissions preset selector, current: Turbo",
+      "upstream": null,
+      "previous": "智能体权限预设：完全模式",
+      "chosen": "权限模式，当前：完全模式（Turbo）",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Agent permissions preset selector, current: Auto",
+      "upstream": null,
+      "previous": "智能体权限预设：自动模式",
+      "chosen": "权限模式，当前：自动判断",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Agent permissions preset selector, current: Strict",
+      "upstream": null,
+      "previous": "智能体权限预设：严格模式",
+      "chosen": "权限模式，当前：严格模式",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Agent permissions preset selector, current: Auto (Preview)",
+      "upstream": null,
+      "previous": "智能体权限预设：自动模式 (预览)",
+      "chosen": "权限模式，当前：自动判断（预览）",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Running command >",
+      "upstream": null,
+      "previous": "正在执行命令 >",
+      "chosen": "正在执行命令 >",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Running tool",
+      "upstream": null,
+      "previous": "正在运行工具",
+      "chosen": "正在调用工具",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Running tool >",
+      "upstream": null,
+      "previous": "正在运行工具 >",
+      "chosen": "正在调用工具 >",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Thought",
+      "upstream": null,
+      "previous": "已思考",
+      "chosen": "已思考",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Thought for",
+      "upstream": null,
+      "previous": "已思考",
+      "chosen": "已思考",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Worked for",
+      "upstream": null,
+      "previous": "已工作",
+      "chosen": "已工作",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Trash",
+      "upstream": null,
+      "previous": "废纸篓",
+      "chosen": "废纸篓",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Move to Trash",
+      "upstream": null,
+      "previous": "移到废纸篓",
+      "chosen": "移到废纸篓",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Open in Finder",
+      "upstream": null,
+      "previous": "在访达中打开",
+      "chosen": "在访达中打开",
+      "decision": "保留补充"
+    },
+    {
+      "key": "User message",
+      "upstream": null,
+      "previous": "用户消息",
+      "chosen": "用户消息",
+      "decision": "保留补充"
+    },
+    {
+      "key": "Agent response",
+      "upstream": null,
+      "previous": "智能体回复",
+      "chosen": "Agent 回复",
+      "decision": "统一补充文案"
+    },
+    {
+      "key": "Copy Project Name",
+      "upstream": null,
+      "previous": "复制项目名称",
+      "chosen": "复制项目名称",
+      "decision": "保留补充"
+    }
+  ],
+  "sharedCorrections": [
+    {
+      "key": "Plan Review Policy",
+      "previous": "计划审查策略",
+      "chosen": "计划审阅策略"
+    },
+    {
+      "key": "Rules and customization token budgets exceeded. Large rules are demoted to path pointers and large customizations are excluded from context.",
+      "previous": "已超出规则与自定义项 Token 预算上限，较大规则已降级为路径指针，较大自定义项已从上下文中排除。",
+      "chosen": "已超出规则与自定义项的 Token 预算，较大的规则已改为路径引用，过大的自定义项已从上下文中排除。"
+    },
+    {
+      "key": "Rules token budget exceeded. Large rules are demoted to path pointers.",
+      "previous": "已超出规则 Token 预算上限，体积较大的规则已自动降级为路径指针。",
+      "chosen": "已超出规则的 Token 预算，较大的规则已自动改为路径引用。"
+    },
+    {
+      "key": "Enforce settings that prevent the agent from autonomously running targeted exploits and require human review for all agent actions. Visit antigravity.google/docs/strict-mode for details.",
+      "previous": "强制启用安全限制，防止 Agent 自主运行高风险操作，并要求所有 Agent 动作均经过人工审查。",
+      "chosen": "强制启用相关限制，阻止 Agent 自主执行定向漏洞利用，并要求所有 Agent 操作均经过人工审阅。详情见 antigravity.google/docs/strict-mode。"
+    },
+    {
+      "key": "The agent always asks for review.",
+      "previous": "Agent 始终请求人工审查。",
+      "chosen": "Agent 始终请求您审阅。"
+    },
+    {
+      "key": "Agent always asks for review.",
+      "previous": "Agent 始终请求人工审查。",
+      "chosen": "Agent 始终请求您审阅。"
+    },
+    {
+      "key": "Agent never asks for review. This maximizes the autonomy of the Agent, but also has the highest risk of the Agent operating over unsafe or injected Artifact content.",
+      "previous": "Agent 从不请求人工审阅。这能最大化 Agent 的自主性，但也存在处理不安全或被注入的 Artifact 内容的最高风险。",
+      "chosen": "Agent 不会请求您审阅。这使 Agent 的自主性最高，但根据不安全或遭提示注入的 Artifact 内容执行操作的风险也最高。"
+    },
+    {
+      "key": "Telemetry will be enabled for this conversation; click to disable.",
+      "previous": "此对话已启用遥测上报，点击可关闭。",
+      "chosen": "此对话将启用遥测上报；点击可关闭。"
+    },
+    {
+      "key": "Telemetry will be disabled for this conversation; click to enable.",
+      "previous": "此对话已关闭遥测上报，点击可开启。",
+      "chosen": "此对话将关闭遥测上报；点击可开启。"
+    },
+    {
+      "key": "Enable AI Credit Overages",
+      "previous": "启用 AI 超额抵扣",
+      "chosen": "启用 AI 点数超额使用"
+    },
+    {
+      "key": "Enable Overages",
+      "previous": "启用超额抵扣",
+      "chosen": "启用超额使用"
+    },
+    {
+      "key": "Failed to refresh credentials",
+      "previous": "刷新凭据失败",
+      "chosen": "刷新凭证失败"
+    },
+    {
+      "key": "Allow full browser script execution without prompting.",
+      "previous": "允许直接执行所有浏览器脚本，无需每次询问。",
+      "chosen": "允许执行所有浏览器脚本，不请求确认。"
+    }
+  ],
+  "dynamicCorrections": [
+    "区分 Thinking/Running 持续态与 Thought/Worked 完成态，中文时长并保留不到1秒/分钟",
+    "入队立即发生、本轮结束后才发送",
+    "Swarm Threads为任务组而非工作流，open表示未完成；Stuck为受阻、Retired为已终止，数字Waiting on表示等待响应方数量",
+    "主会话/子Agent累计明确分列，窗口容量不冒充压缩阈值",
+    "平台废纸篓/回收站默认词优先级低于用户覆盖"
+  ],
+  "principles": [
+    "不默认上游或旧译优先；忠实范围、时态及操作后果",
+    "Agent/对话/Artifact一致，审阅/批准/确认不混同",
+    "权限、隐私与费用说明不缩减，不增译免费或具体收费",
+    "用户精确覆盖优先；正文/代码/草稿与显式排除不改",
+    "仅改源码；部署需另外取得本次确认"
+  ],
+  "staticValuesChanged": 43,
+  "dictionaryKeys": 1756
+}
