@@ -1,20 +1,20 @@
-# Antigravity 主题融合分支 · 5.2.0-eric.1
+# Antigravity 主题融合分支 · 5.3.0-eric.1
 
-基于 [Anarcadia 上游 v5.2.0](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/9e549965df1868b573a5552818d0d8f2f0ea761f)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.0 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1646 条，保留上游全部 1630 个词条与新的大小写兜底查找。
+基于 [Anarcadia 上游 v5.3.0](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/6a263b50cb575b22059f4429a9ba9625c0c540df)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.1 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1756 条，保留上游全部 1740 个词条与新的大小写兜底查找。
 
 **本分支为独立集成版，不是上游发布。** 移除了自动调用仓库外 Python 二进制补丁的行为；不引入 `--sync-user`，安装保留已有用户文件及自定义选择器。变更边界、验证方法与限制见 [FORK.md](FORK.md)。下方截图为上游参考，不代表本分支已完成 Antigravity 实机验收。
 
-本次更新保存在本机仓库的 `main` 分支，版本 `5.2.0-eric.1`，尚未推送远端。安装请使用已同步的本地源码；不要假定远端 `main` 已包含本次更新。
+本次更新保存在本机仓库的 `main` 分支，版本 `5.3.0-eric.1`，尚未推送远端。安装请使用已同步的本地源码；不要假定远端 `main` 已包含本次更新。
 
-5.2.0 合入 2.32.0 新增翻译、Windows 字体/缩放与 WSL 改进，并加固隔离目标和回滚校验；保留 Anthropic/PingFang 字体、暖调配色、macOS 连续圆角和 Turbo 的“完全模式”权限含义。实验性冷启动重载默认关闭，不能将草稿安全视为已在真实客户端充分验证。
+5.3.0 合入 2.32.1 新增翻译、动态上下文窗口、缓冲输出识别、子 Agent 指标汇总与 WSL 慢路径退避；保留 Anthropic/PingFang 字体、暖调配色、macOS 连续圆角和 Turbo 的“完全模式”权限含义。实验性冷启动重载默认关闭，不能将草稿安全视为已在真实客户端充分验证。
 
 安装前请阅读 `SKILL.md`。安装会配置本地调试端口和系统自启服务，不能把 `doctor` 的完整性通过等同于客户端实机生效。
 
 ---
 
-# 船板的 Antigravity 书卷暖纸 × 暖墨黑昼夜双模式主题、字体优化与深度汉化全栈补丁 (v5.2.0 · Antigravity 2.31.2 / 2.32.0 源码适配)
+# 船板的 Antigravity 书卷暖纸 × 暖墨黑昼夜双模式主题、字体优化与深度汉化全栈补丁 (v5.3.0 · Antigravity 2.31.2 / 2.32.1 源码适配)
 
-[![Version](https://img.shields.io/badge/version-5.2.0-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
+[![Version](https://img.shields.io/badge/version-5.3.0-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 [![Antigravity](https://img.shields.io/badge/Antigravity-2.31.2%2B-D97757.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0%20(22.13%2B%20Full)-339933.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
@@ -34,7 +34,7 @@
 
 ---
 
-## 🖼️ 实机样式演示
+## 🖼️ 上游历史样式参考（非本融合版）
 
 ### 1. 三栏工作台：高对比暖纸主题 + 古朴暗红蜡封输入框 + 同行实时指标胶囊 + 书卷衬线工件
 ![三栏对话与工件阅读视图](assets/preview-workspace-chat-and-artifact.png)
@@ -44,7 +44,7 @@
 
 ---
 
-## ✨ 补丁简介：核心定位与五大亮点（v5.2.0）
+## ✨ 补丁简介：核心定位与五大亮点（v5.3.0）
 
 ### 1. 设计目的
 Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬线字体，长时间高强度阅读与编码容易视觉疲劳。本补丁以**纯运行时非侵入注入**的方式，严格遵循 **Anthropic 设计规范**，将 Antigravity 重塑为兼具 **暖羊皮纸扁平纸张美学、暖墨黑深色模式、三族中西文精密排版、全界面母语级汉化与实时模型遥测** 的主力工作台：
@@ -54,7 +54,7 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
   - **黑夜模式（Dark）**：当你点击设置中的「深色 / Dark」按钮（或跟随系统深色）时，**100% 保持三族字体与扁平几何要素不变**，同时 `0ms` 切换至 **Anthropic / Claude 暖墨黑反色体系**（`#141413` Slate Dark 主背景 / `#191917` 侧栏 / `#1F1E1C` 扁平卡片 / `1px solid #3D3D3A` 暖墨细边 / `#FAF9F5` 象牙亮字 / `#D97757` 陶土色主按钮），昼夜气质完全统一。
 - **🔤 Anthropic 规范三族排版（昼夜完全共用 · 原生适配 `2.31.2` `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字严格按角色分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）统一采用 `Anthropic Sans`，阅读散文采用 `Anthropic Serif`（首页欢迎语采用 `Anthropic Serif Display`，正文链接常驻 `1px` 细下划线），代码块、文件路径、Monaco 编辑器与终端严格限定 `Anthropic Mono`；中文统一优先采用 `PingFang SC`（跨平台自动回退更纱/雅黑）。
 - **📐 扁平纸张层叠、macOS 同心连续圆角与单一陶土主色纪律**：移除全部悬浮投影（`box-shadow: none`），输入框采用「暖纸外托盘 `12px` + 抬升内卡片 `11px` + `1px` 细边三态过渡（常态 `#CCCBC8` → 悬停 `#87867F` → 聚焦 `#3D3D3A`）」，全界面矩形容器对齐 macOS HIG 同心梯度（主画布/弹窗 `12px`、气泡/代码块/菜单 `10px`、菜单项与侧栏行 `6px`）与 `superellipse(1.5)` 连续曲率；全场仅将 `#D97757`（悬停 `#C6613F`）陶土色保留给唯一发送主按钮。
-- **🇨🇳 1,646 条零大小写冲突深度汉化 + 首字母大写不敏感兜底索引（`DICT_CI`） + ⚡ `O(1)` 增量实时指标胶囊**：全覆盖 `2.31.2` 新增的 Fork / Best of N / 定时任务（Scheduled Tasks）/ 快捷键编辑器 / 远程控制二维码 / 沙箱与浏览器执行权限 / 插件主题外观及全部命令面板标签（基于 `WeakMap` `O(1)` 隔离保护代码块、Monaco 编辑器、终端与对话正文不误伤），并在输入框底部同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、`256k` 上下文水位及缓存命中率详情面板。
+- **🇨🇳 1,756 条零大小写冲突深度汉化 + 首字母大写不敏感兜底索引（`DICT_CI`） + ⚡ `O(1)` 增量实时指标胶囊**：全覆盖 `2.31.2` 新增的 Fork / Best of N / 定时任务（Scheduled Tasks）/ 快捷键编辑器 / 远程控制二维码 / 沙箱与浏览器执行权限 / 插件主题外观及全部命令面板标签（基于 `WeakMap` `O(1)` 隔离保护代码块、Monaco 编辑器、终端与对话正文不误伤），并在输入框底部同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、动态上下文水位及缓存命中率详情面板。
 
 ### 2. 五大工程亮点
 1. **🤖 Agent 3 秒一键部署，零构建零依赖**：所有 CSS、词典、DOM 引擎与守护进程已预封装在 `core/` 只读内核中，无需任何 npm 依赖或编译构建，交给你的 Agent 即可 3 秒一键安装。
@@ -72,13 +72,13 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 2. **复制发给你的 AI Agent（Antigravity / Claude Code / Codex / Cursor 等）**：
 
 > **💬 复制发给 Agent（新用户一键安装）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.2.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.3.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
-### 二、老版本用户无缝升级至 v5.2.0
+### 二、老版本用户无缝升级至 v5.3.0
 `node install.mjs install` 会自动备份旧内核、接管旧版常驻服务，并无损保留你在 `~/.gemini/antigravity/theme-patch/user/` 中的个人配置：
 
 > **💬 复制发给 Agent（老用户无缝升级）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.2.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.3.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
 ### 三、后续与 Agent 对话定制风格或排障
 - **🎨 切换白天预设、调整字号或微调外观**：
@@ -95,7 +95,9 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 
 以下保留上游历史记录，并非融合版全部行为或本次验收结果；自动外部标题脚本、默认来源并集、--sync-user 与默认开启的冷启动强刷策略未合入，具体差异见 [FORK.md](FORK.md)。
 
-- **2026-11-14（v5.2.0 现行版 · Antigravity `2.32.0` 适配、全词库系统性去机翻精校与 1,630 条统一母语词典）**：
+- **2026-11-15（v5.3.0 现行版 · Antigravity `2.32.1` 双平台全量适配、子 Agent `+N sub` 血缘遥测聚合、动态上下文水位与 `1,740` 条零冲突词典）**：
+  融合社区共建（特别感谢 [@honlam996](https://github.com/honlam996) [#3](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/3)/[#4](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/4)/[#5](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/issues/5)/[#6](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/6)/[#7](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/7)）与 macOS × Windows 11 双端 `2.32.1` 真机压测加固：新增子 Agent 与本地 `/swarm` 全树血缘汇总（`+N sub` 胶囊徽标与悬浮明细，`4,096` 缓存容量 + `<= 45 DB / 60ms` 渐进分片预算 + WSL2 UNC `45s` `0-I/O` 熔断闭环）；支持动态读取模型真实上下文窗口（`256k` / `840k` / `1M+` 及 `contextLimitOverride`）与缓冲型调用 `streamRatio` 守卫（`Hold X.Xs`）；全量适配 `2.32.1` `.pdf-sdk-root` 局部字体变量、恢复被 `no-contextual` 误关的全局连字、支持 `[data-markdown-root]` 内嵌表格/外链/胶囊按钮无障碍属性定向汉化与 Swarm 2.0 子帧隔离词典，静态词条扩充至 **1,740 条**。
+- **2026-11-14（v5.2.0 · Antigravity `2.32.0` 适配、全词库系统性去机翻精校与 1,630 条统一母语词典）**：
   完成 Antigravity `2.32.0` 客户端实机零漂移核验与新增 UI 全覆盖（34 条 `2.32.0` 新增快捷键/SSH/授权码登录兜底/MCP 状态/GitHub 远程克隆词条 + 2 条动态正则），并对全量词库与动态模板实施系统性去机翻重构：将生硬直译的 `"Local Checkout"`（`本地检出`）修正为 **`本地`** 并补齐非 Git 目录下的 9 条环境选择器说明；统一全界面五大高频术语规范（保留约定俗成英文 **`Artifact`** 与 **`Worktree`**，统一 **`Agent / 子 Agent`**、**`支线提问`**、**`对话`**、**`沙盒`** 与 Swarm **`纪要员`**），清理 23 处按钮与菜单冗余英文括号尾巴（如 `极速模式`、`自动判断`、`始终直接执行`），修正 `可操控网址`、顶栏 `审阅`、`今天想做点什么？` 等直译硬伤，静态词条总计达 **1,630 条**。
 - **2026-11-14（v5.1.9 · Windows PowerShell 5.1 打包/字体注册修复、`rollback` 与沙箱目录安全隔离、1,587 条词典及动态人名问候补全）**：
   联合 Windows 11 真机全链路发版后回归热修与 macOS 沙箱验证：修复 Windows PowerShell `5.1` `ConvertFrom-Json` 嵌套二维数组导致的 `pack` 报错与 `install-fonts` 多字体静默漏注册（新增 `AddFontResourceW` 真实计数校验与同目录自拷贝保护）；为 `rollback` 增加核心文件完整性校验并隔离 `--sync-user` 生成的 `-user` 备份目录，为 `--target-dir` 自定义沙箱测试目录增加全生命周期系统服务隔离与 macOS 软链接路径等价识别；扩充静态词条至 **1,587 条**，新增 `2.31.2` 首页带用户名动态问候语、Worktree/Fig 分支工作区副标题与 Swarm `File` 标签汉化，并排除非文本滑块/取色 `<input>` 对冷启动自愈器的误阻断。

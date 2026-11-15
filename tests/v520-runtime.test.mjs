@@ -79,7 +79,7 @@ test('Windows process validation fails closed on uncertain WMI and rejects unrel
  }
 });
 test('WSL metrics explicit directory suppresses UNC discovery',()=>{
- let probes=0;const ctx=vm.createContext({path,fs:{existsSync:()=>false},process:{platform:'win32'},wslUncBackoffUntil:0,resolveWin32WslConversationsDirs:()=>{probes++;return [];}});
+ let probes=0;const ctx=vm.createContext({path,TextDecoder,fs:{existsSync:()=>false},process:{platform:'win32'},wslUncBackoffUntil:0,resolveWin32WslConversationsDirs:()=>{probes++;return [];}});
  vm.runInContext(slice(daemon,'const resolvedCascadeDbCache', '\nfunction getDbState')+'globalThis.resolve=resolveConversationDbPath;',ctx);
  assert.equal(ctx.resolve('a',{conversationsDir:'/explicit',explicitConvDir:true,portFile:'/port'}),path.join('/explicit','a.db'));assert.equal(probes,0);
 });

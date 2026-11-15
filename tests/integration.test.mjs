@@ -32,7 +32,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.2.0-eric.1');
+  assert.equal(manifest.version, '5.3.0-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -40,7 +40,7 @@ test('core manifest matches every shipped byte', () => {
   }
 });
 test('dictionary keeps upstream coverage and clear permission labels without case duplicates', () => {
-  assert.equal(Object.keys(dict).length, 1646);
+  assert.equal(Object.keys(dict).length, 1756);
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map(k => k.toLowerCase().replace(/[‘’]/g, "'"))).size, keys.length);
@@ -67,7 +67,7 @@ function translationUnit(dictionary = dict, version = 'unit-1', originalMap = ne
   const start = runtime.indexOf('    const RE_HAS_CJK =');
   const end = runtime.indexOf('    const walkerFilter =', start);
   assert.ok(lookupStart > 0 && lookupEnd > lookupStart && start > 0 && end > start);
-  const ctx = vm.createContext({ DICT: Object.assign(Object.create(null), dictionary), PATCH_VERSION: version, origTextMap: originalMap });
+  const ctx = vm.createContext({ IS_SWARM_PLUGIN_FRAME: false, DICT: Object.assign(Object.create(null), dictionary), PATCH_VERSION: version, origTextMap: originalMap });
   vm.runInContext(runtime.slice(lookupStart, lookupEnd) + runtime.slice(start, end) + '\nglobalThis.api = { dictLookup, computeTextTranslation, translateTextNode, translateSingleAttr, resolveAttrTranslation };', ctx);
   return ctx;
 }

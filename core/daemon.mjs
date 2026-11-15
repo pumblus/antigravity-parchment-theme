@@ -2,9 +2,9 @@
 /**
  * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（v5.2.0）：
+ * 架构特性（v5.3.0）：
  * 1. 动态 Node 分级：
- *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、1646条汉化、死锁修复与实验性冷启动普通重载（默认关闭）及 2.32.0/2.31.2 curtainView/Swarm 适配。
+ *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、死锁修复与实验性冷启动普通重载（默认关闭）及 2.32.1/2.32.0 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）；低版本优雅降级绝不崩溃。
  * 2. 模块化与热重载：
  *    - 周期性检测 `user/config.json`、`user/custom.css`、`user/i18n.override.json`、`user/custom.js` 的 mtime，
@@ -222,15 +222,43 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261114-v5.2.0-eric.1';
+const BASE_VERSION = '20261115-v5.3.0-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
+let metricsConfigEpoch = 0;
+const lastBestEffortPayloadCache = new Map(); // initialized before the first bundle rebuild
+const metricsCache = new Map(); // dbPath -> { sig, payload }
+const incrementalMetricsMap = new Map(); // dbPath -> { rowCount, maxIdx, userStepsCount, lastUserStepIdx, items, validItems, totalIn, totalCache, totalOut, totalThink, totalResp }
+const MAX_METRICS_CACHE_SIZE = 30;
+
+function setMetricsCache(dbPath, entry) {
+  if (metricsCache.has(dbPath)) metricsCache.delete(dbPath);
+  metricsCache.set(dbPath, entry);
+  if (metricsCache.size > MAX_METRICS_CACHE_SIZE) {
+    const oldestKey = metricsCache.keys().next().value;
+    if (oldestKey) {
+      metricsCache.delete(oldestKey);
+      incrementalMetricsMap.delete(oldestKey);
+    }
+  }
+}
+
+function setIncrementalMetrics(dbPath, state) {
+  if (incrementalMetricsMap.has(dbPath)) incrementalMetricsMap.delete(dbPath);
+  incrementalMetricsMap.set(dbPath, state);
+  if (incrementalMetricsMap.size > MAX_METRICS_CACHE_SIZE) {
+    const oldestKey = incrementalMetricsMap.keys().next().value;
+    if (oldestKey) incrementalMetricsMap.delete(oldestKey);
+  }
+}
+
 let activeConfig = {
   enabled: true,
   channel: 'auto',
   preset: 'high-contrast',
   contextLimit: 256000,
+  contextLimitOverride: 0,
   modules: {
     i18n: true,
     metrics: true,
@@ -320,7 +348,18 @@ function rebuildBundleIfNeeded() {
   const enabled = SAFE_MODE ? true : userCfg.enabled !== false;
   const channel = CLI_CHANNEL || userCfg.channel || 'auto';
   const preset = userCfg.preset || 'high-contrast';
-  const contextLimit = Number(userCfg.contextLimit) > 0 ? Number(userCfg.contextLimit) : 256000;
+  const rawCtxLimit = Number(userCfg.contextLimit);
+  const contextLimit = Number.isFinite(rawCtxLimit) && rawCtxLimit > 0 ? rawCtxLimit : 256000;
+  const rawCtxOverride = Number(userCfg.contextLimitOverride);
+  const contextLimitOverride = Number.isFinite(rawCtxOverride) && rawCtxOverride > 0 ? rawCtxOverride : 0;
+  if (
+    activeConfig &&
+    (contextLimit !== activeConfig.contextLimit || contextLimitOverride !== activeConfig.contextLimitOverride)
+  ) {
+    metricsCache.clear();
+    lastBestEffortPayloadCache.clear();
+    metricsConfigEpoch += 1;
+  }
 
   const rawModules = Object.assign({}, userCfg.features || {}, userCfg.modules || {});
   if (typeof rawModules.metricsCapsule === 'boolean' && typeof rawModules.metrics !== 'boolean') {
@@ -357,14 +396,9 @@ function rebuildBundleIfNeeded() {
   if (normalizedSelectors.homeGreeting && !String(normalizedSelectors.homeGreeting).includes('home-splash-content')) {
     delete normalizedSelectors.homeGreeting;
   }
-  if (
-    typeof normalizedSelectors.excludeI18n === 'string' &&
-    normalizedSelectors.excludeI18n.trim() &&
-    !normalizedSelectors.excludeI18n.includes('.monaco-editor')
-  ) {
-    normalizedSelectors.excludeI18n +=
-      ', .monaco-editor, .monaco-diff-editor, .xterm, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [class*="onyx-key"]';
-  }
+  // Preserve the provenance of user exclusions. Runtime always merges its own
+  // immutable/default protections; appending them here would falsely make them
+  // explicit user exclusions and prevent the narrow Markdown UI-attribute exception.
 
   const DEFAULT_ALLOWED_ORIGINS = [
     'http://127.0.0.1',
@@ -380,6 +414,7 @@ function rebuildBundleIfNeeded() {
     channel,
     preset,
     contextLimit,
+    contextLimitOverride,
     modules,
     themeVars,
     selectors: normalizedSelectors,
@@ -432,6 +467,7 @@ function rebuildBundleIfNeeded() {
       channel,
       preset,
       contextLimit,
+      contextLimitOverride,
       modules,
       themeVars
     },
@@ -548,30 +584,6 @@ if (!RUN_ONCE) {
 // ============================================================================
 // 4. SQLite + Protobuf 实时会话指标解析器（读取 ~/.gemini/antigravity/conversations/<id>.db）
 // ============================================================================
-const metricsCache = new Map(); // dbPath -> { sig, payload }
-const incrementalMetricsMap = new Map(); // dbPath -> { rowCount, maxIdx, userStepsCount, lastUserStepIdx, items, validItems, totalIn, totalCache, totalOut, totalThink, totalResp }
-const MAX_METRICS_CACHE_SIZE = 30;
-
-function setMetricsCache(dbPath, entry) {
-  if (metricsCache.has(dbPath)) metricsCache.delete(dbPath);
-  metricsCache.set(dbPath, entry);
-  if (metricsCache.size > MAX_METRICS_CACHE_SIZE) {
-    const oldestKey = metricsCache.keys().next().value;
-    if (oldestKey) {
-      metricsCache.delete(oldestKey);
-      incrementalMetricsMap.delete(oldestKey);
-    }
-  }
-}
-
-function setIncrementalMetrics(dbPath, state) {
-  if (incrementalMetricsMap.has(dbPath)) incrementalMetricsMap.delete(dbPath);
-  incrementalMetricsMap.set(dbPath, state);
-  if (incrementalMetricsMap.size > MAX_METRICS_CACHE_SIZE) {
-    const oldestKey = incrementalMetricsMap.keys().next().value;
-    if (oldestKey) incrementalMetricsMap.delete(oldestKey);
-  }
-}
 
 function parseProto(buf) {
   let i = 0;
@@ -639,6 +651,80 @@ function fmtNum(n) {
 
 const resolvedCascadeDbCache = new Map();
 const negativeCascadeWslCache = new Map(); // cacheKey -> expireAtMs
+const lastKnownDbStateCache = new Map(); // dbPath -> { dbPath, rawSig, sig }
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+const DB_FILE_RE = /^([0-9a-f-]{36})\.db$/i;
+const textDecoder = new TextDecoder('utf-8', { fatal: false });
+const MAX_CHILD_METRICS_CACHE_SIZE = 4096;
+const MAX_NO_META_PENDING_IDS = 64;
+const LINEAGE_TICK_MAX_OPENS = 45;
+const LINEAGE_TICK_MAX_MS = 60;
+const NO_META_RESCAN_LOCAL_MS = 2500;
+const NO_META_RESCAN_UNC_MS = 15000;
+const childMetricsCache = new Map(); // dbPath -> { sig, hasData, calls, totalIn, totalCache, totalOut, totalThink, totalResp }
+const lineageStateByDir = new Map(); // conversationsDir -> dirState
+function setChildMetricsCache(dbPath, entry) {
+  if (childMetricsCache.has(dbPath)) childMetricsCache.delete(dbPath);
+  childMetricsCache.set(dbPath, entry);
+  if (childMetricsCache.size > MAX_CHILD_METRICS_CACHE_SIZE) {
+    const oldestKey = childMetricsCache.keys().next().value;
+    if (oldestKey !== undefined) childMetricsCache.delete(oldestKey);
+  }
+}
+
+function isUncPath(p) {
+  if (!p || process.platform !== 'win32') return false;
+  return (
+    p.startsWith('\\\\wsl.localhost\\') ||
+    p.startsWith('\\\\wsl$\\') ||
+    p.startsWith('\\\\?\\UNC\\') ||
+    p.startsWith('\\\\') ||
+    p.startsWith('//wsl')
+  );
+}
+
+function setBoundedMap(map, key, val, maxEntries = 64) {
+  if (map.has(key)) map.delete(key);
+  map.set(key, val);
+  if (map.size > maxEntries) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey !== undefined) map.delete(oldestKey);
+  }
+}
+
+function readUtf8(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (val instanceof Uint8Array) return textDecoder.decode(val);
+  return '';
+}
+
+function getDbStatByPath(dbPath) {
+  try {
+    const st = fs.statSync(dbPath, { throwIfNoEntry: false });
+    if (!st) return null;
+    const wst = fs.statSync(`${dbPath}-wal`, { throwIfNoEntry: false });
+    const walSig = wst ? `${wst.mtimeMs}:${wst.size}` : '0:0';
+    return {
+      dbPath,
+      mtimeMs: Math.max(st.mtimeMs || 0, wst ? wst.mtimeMs || 0 : 0),
+      sig: `${st.mtimeMs}:${st.size}|${walSig}`
+    };
+  } catch {
+    return null;
+  }
+}
+
+// UNC probes obey the same cooldown in every resolution branch. The time budget
+// is cooperative: a synchronous filesystem call itself cannot be preempted.
+function metricPathExists(file) {
+  const unc = isUncPath(file);
+  if (unc && Date.now() < wslUncBackoffUntil) return false;
+  const start = Date.now();
+  try { return fs.existsSync(file); }
+  catch { return false; }
+  finally { if (unc && Date.now() - start > 400) wslUncBackoffUntil = Date.now() + 45000; }
+}
 
 function resolveConversationDbPath(cascadeId, endpointOrDir) {
   if (!cascadeId || !endpointOrDir) return '';
@@ -646,7 +732,7 @@ function resolveConversationDbPath(cascadeId, endpointOrDir) {
     const dirs = endpointOrDir.filter(Boolean);
     for (let i = 0; i < dirs.length; i++) {
       const candidate = path.join(dirs[i], `${cascadeId}.db`);
-      if (fs.existsSync(candidate)) return candidate;
+      if (metricPathExists(candidate)) return candidate;
     }
     return dirs.length > 0 ? path.join(dirs[0], `${cascadeId}.db`) : '';
   }
@@ -657,10 +743,19 @@ function resolveConversationDbPath(cascadeId, endpointOrDir) {
   const primaryDir = endpointOrDir.conversationsDir || '';
   const cacheKey = `${endpointOrDir.channel || 'default'}|${primaryDir}|${cascadeId}`;
   const cachedPath = resolvedCascadeDbCache.get(cacheKey);
-  if (cachedPath && fs.existsSync(cachedPath)) {
-    return cachedPath;
-  }
   if (cachedPath) {
+    const cachedUnc = isUncPath(cachedPath);
+    if (cachedUnc && Date.now() < wslUncBackoffUntil) {
+      return cachedPath;
+    }
+    const tCheck = Date.now();
+    const exists = metricPathExists(cachedPath);
+    if (cachedUnc && Date.now() - tCheck > 400) {
+      wslUncBackoffUntil = Date.now() + 45000;
+    }
+    if (exists) {
+      return cachedPath;
+    }
     resolvedCascadeDbCache.delete(cacheKey);
   }
 
@@ -676,7 +771,7 @@ function resolveConversationDbPath(cascadeId, endpointOrDir) {
 
   if (primaryDir) {
     const primaryCandidate = path.join(primaryDir, `${cascadeId}.db`);
-    if (fs.existsSync(primaryCandidate)) {
+    if (metricPathExists(primaryCandidate)) {
       return remember(primaryCandidate);
     }
   }
@@ -696,7 +791,7 @@ function resolveConversationDbPath(cascadeId, endpointOrDir) {
     );
     for (let i = 0; i < wslDirs.length; i++) {
       const wslCandidate = path.join(wslDirs[i], `${cascadeId}.db`);
-      if (fs.existsSync(wslCandidate)) {
+      if (metricPathExists(wslCandidate)) {
         return remember(wslCandidate);
       }
       if (Date.now() - t0 > 400) break;
@@ -717,14 +812,36 @@ function getDbState(cascadeId, endpointOrDir) {
   try {
     const dbPath = resolveConversationDbPath(cascadeId, endpointOrDir);
     if (!dbPath) return null;
+    const unc = isUncPath(dbPath);
+    if (unc && Date.now() < wslUncBackoffUntil) {
+      const prev = lastKnownDbStateCache.get(dbPath);
+      return prev ? { ...prev, uncDeferred: true } : { dbPath, rawSig: 'unc_deferred', sig: `${dbPath}#unc_deferred`, uncDeferred: true };
+    }
+    const t0 = Date.now();
     const st = fs.statSync(dbPath, { throwIfNoEntry: false });
-    if (!st) return null;
-    const wst = fs.statSync(`${dbPath}-wal`, { throwIfNoEntry: false });
+    if (unc && Date.now() - t0 > 400) {
+      wslUncBackoffUntil = Date.now() + 45000;
+    }
+    if (!st) {
+      lastKnownDbStateCache.delete(dbPath);
+      return null;
+    }
+    let wst = null;
+    if (!unc || Date.now() >= wslUncBackoffUntil) {
+      wst = fs.statSync(`${dbPath}-wal`, { throwIfNoEntry: false });
+      if (unc && Date.now() - t0 > 400) {
+        wslUncBackoffUntil = Date.now() + 45000;
+      }
+    }
     const walSig = wst ? `${wst.mtimeMs}:${wst.size}` : '0:0';
-    return {
+    const rawSig = `${st.mtimeMs}:${st.size}|${walSig}`;
+    const stateObj = {
       dbPath,
-      sig: `${dbPath}#${st.mtimeMs}:${st.size}|${walSig}`
+      rawSig,
+      sig: `${dbPath}#${rawSig}`
     };
+    setBoundedMap(lastKnownDbStateCache, dbPath, stateObj, 64);
+    return stateObj;
   } catch {
     return null;
   }
@@ -734,12 +851,517 @@ function getDbSignature(cascadeId, endpointOrDir) {
   return getDbState(cascadeId, endpointOrDir)?.sig || null;
 }
 
+function readTrajectoryLineage(dbPath) {
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true, timeout: 20 });
+    const row = db.prepare('SELECT data FROM trajectory_metadata_blob LIMIT 1').get();
+    if (!row || !row.data) {
+      return { ok: true, hasMeta: false, parentId: '', rootId: '' };
+    }
+    const meta = parseProto(row.data);
+    const rawParentId = readUtf8(meta.get(5)).trim();
+    const parentId = UUID_RE.test(rawParentId) ? rawParentId : '';
+    const rawRootId = readUtf8(meta.get(6)).trim();
+    const rootId = UUID_RE.test(rawRootId) ? rawRootId : '';
+    // An initially empty blob may gain lineage after creation; keep it eligible for rescan.
+    return { ok: true, hasMeta: Boolean(parentId || rootId), parentId, rootId };
+  } catch (err) {
+    const msg = String(err?.message || '');
+    if (/no such table/i.test(msg)) {
+      return { ok: true, hasMeta: false, parentId: '', rootId: '' };
+    }
+    if (!/locked|busy/i.test(msg)) {
+      return { ok: true, hasMeta: false, permanentInvalid: true, parentId: '', rootId: '' };
+    }
+    return { ok: false, error: err };
+  } finally {
+    try {
+      db?.close();
+    } catch {}
+  }
+}
+
+function addAdjacencyEdge(map, key, childId) {
+  if (!key || !childId || key === childId) return;
+  let set = map.get(key);
+  if (!set) {
+    set = new Set();
+    map.set(key, set);
+  }
+  set.add(childId);
+}
+
+function removeAdjacencyEdge(map, key, childId) {
+  if (!key) return;
+  const set = map.get(key);
+  if (!set) return;
+  set.delete(childId);
+  if (set.size === 0) map.delete(key);
+}
+
+function setNodeLineage(dirState, uuid, node) {
+  const prev = dirState.nodes.get(uuid);
+  if (prev) {
+    if (prev.parentId && prev.parentId !== node.parentId) {
+      removeAdjacencyEdge(dirState.byParent, prev.parentId, uuid);
+    }
+    if (prev.rootId && prev.rootId !== node.rootId) {
+      removeAdjacencyEdge(dirState.byRoot, prev.rootId, uuid);
+    }
+  }
+  dirState.nodes.set(uuid, node);
+  if (node.parentId) addAdjacencyEdge(dirState.byParent, node.parentId, uuid);
+  if (node.rootId) addAdjacencyEdge(dirState.byRoot, node.rootId, uuid);
+}
+
+function deleteNodeLineage(dirState, uuid) {
+  const prev = dirState.nodes.get(uuid);
+  if (prev) {
+    removeAdjacencyEdge(dirState.byParent, prev.parentId, uuid);
+    removeAdjacencyEdge(dirState.byRoot, prev.rootId, uuid);
+    dirState.nodes.delete(uuid);
+  }
+  dirState.noMetaPending.delete(uuid);
+}
+
+function rememberNoMetaPending(dirState, uuid, statSig) {
+  if (dirState.noMetaPending.has(uuid)) dirState.noMetaPending.delete(uuid);
+  dirState.noMetaPending.set(uuid, statSig);
+  while (dirState.noMetaPending.size > MAX_NO_META_PENDING_IDS) {
+    const oldest = dirState.noMetaPending.keys().next().value;
+    if (oldest === undefined) break;
+    dirState.noMetaPending.delete(oldest);
+  }
+}
+
+function refreshLineageIndex(conversationsDir) {
+  if (!conversationsDir || !DatabaseSync) {
+    return { dirState: null, isDraining: false, backoffSkipped: false };
+  }
+  let dirState = lineageStateByDir.get(conversationsDir);
+  if (!dirState) {
+    dirState = {
+      dirMtimeMs: -1,
+      scanningDirMtimeMs: -1,
+      lastPendingScanAt: 0,
+      recheckCursor: 0,
+      unindexedQueue: [],
+      unindexedSet: new Set(),
+      noMetaPending: new Map(),
+      nodes: new Map(),
+      byParent: new Map(),
+      byRoot: new Map()
+    };
+    lineageStateByDir.set(conversationsDir, dirState);
+  }
+
+  const unc = isUncPath(conversationsDir);
+  const nowMs = Date.now();
+  if (unc && nowMs < wslUncBackoffUntil) {
+    return {
+      dirState,
+      isDraining: dirState.unindexedQueue.length > 0,
+      backoffSkipped: true
+    };
+  }
+
+  let dirSt;
+  try { dirSt = fs.statSync(conversationsDir, { throwIfNoEntry: false }); }
+  catch { return { dirState, isDraining: dirState.unindexedQueue.length > 0, backoffSkipped: true }; }
+  if (!dirSt || !dirSt.isDirectory()) {
+    return { dirState, isDraining: false, backoffSkipped: false };
+  }
+
+  const dirChanged = dirSt.mtimeMs !== dirState.dirMtimeMs && dirSt.mtimeMs !== dirState.scanningDirMtimeMs;
+  const tWallStart = nowMs;
+  let backoffSkipped = false;
+
+  if (dirChanged) {
+    let entries;
+    try {
+      entries = fs.readdirSync(conversationsDir);
+    } catch {
+      if (unc && Date.now() - tWallStart > 400) {
+        wslUncBackoffUntil = Date.now() + 45000;
+        backoffSkipped = true;
+      }
+      return { dirState, isDraining: dirState.unindexedQueue.length > 0, backoffSkipped };
+    }
+
+    const seenIds = new Set();
+    let enqueued = false;
+    for (let i = 0; i < entries.length; i++) {
+      if (unc && Date.now() - tWallStart > 400) {
+        wslUncBackoffUntil = Date.now() + 45000;
+        backoffSkipped = true;
+        break;
+      }
+      const m = entries[i].match(DB_FILE_RE);
+      if (!m) continue;
+      const uuid = m[1];
+      seenIds.add(uuid);
+      const existingNode = dirState.nodes.get(uuid);
+      if (dirState.unindexedSet.has(uuid)) continue;
+
+      const dbPath = path.join(conversationsDir, entries[i]);
+      const statInfo = getDbStatByPath(dbPath);
+      if (!statInfo) continue;
+
+      if (existingNode && existingNode.statSig === statInfo.sig) continue;
+      if (dirState.noMetaPending.has(uuid) && dirState.noMetaPending.get(uuid) === statInfo.sig) {
+        continue;
+      }
+      dirState.unindexedQueue.push({ uuid, dbPath, mtimeMs: statInfo.mtimeMs, statSig: statInfo.sig });
+      dirState.unindexedSet.add(uuid);
+      enqueued = true;
+    }
+
+    if (!backoffSkipped) {
+      for (const existingId of Array.from(dirState.nodes.keys())) {
+        if (!seenIds.has(existingId)) {
+          deleteNodeLineage(dirState, existingId);
+        }
+      }
+      if (dirState.unindexedQueue.length > 0) {
+        const nextQueue = [];
+        for (let i = 0; i < dirState.unindexedQueue.length; i++) {
+          const item = dirState.unindexedQueue[i];
+          if (seenIds.has(item.uuid)) {
+            nextQueue.push(item);
+          } else {
+            dirState.unindexedSet.delete(item.uuid);
+          }
+        }
+        if (enqueued || nextQueue.length !== dirState.unindexedQueue.length) {
+          nextQueue.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        }
+        dirState.unindexedQueue = nextQueue;
+      }
+      dirState.scanningDirMtimeMs = dirSt.mtimeMs;
+    } else if (enqueued && dirState.unindexedQueue.length > 1) {
+      dirState.unindexedQueue.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    }
+  } else if (dirState.unindexedQueue.length === 0) {
+    const pendingRescanMs = unc ? NO_META_RESCAN_UNC_MS : NO_META_RESCAN_LOCAL_MS;
+    if (dirState.nodes.size > 0 && nowMs - dirState.lastPendingScanAt >= pendingRescanMs) {
+      dirState.lastPendingScanAt = nowMs;
+      const newlyChanged = [];
+      // Rotate over ALL known nodes, not only the bounded pending cache. Metadata
+      // can arrive late or correct an existing relationship without directory mtime changes.
+      const known = Array.from(dirState.nodes.entries());
+      const count = Math.min(MAX_NO_META_PENDING_IDS, known.length);
+      for (let scan = 0; scan < count; scan++) {
+        const [uuid, node] = known[dirState.recheckCursor++ % known.length];
+        const prevSig = node.statSig;
+        if (unc && Date.now() - tWallStart > 400) {
+          wslUncBackoffUntil = Date.now() + 45000;
+          backoffSkipped = true;
+          break;
+        }
+        const dbPath = path.join(conversationsDir, `${uuid}.db`);
+        const statInfo = getDbStatByPath(dbPath);
+        if (!statInfo) {
+          // A failed stat can be transient (permissions/network). Keep the node
+          // eligible for rotation; only a complete directory scan proves deletion.
+          continue;
+        }
+        if (statInfo.sig !== prevSig && !dirState.unindexedSet.has(uuid)) {
+          newlyChanged.push({ uuid, dbPath, mtimeMs: statInfo.mtimeMs, statSig: statInfo.sig });
+          dirState.unindexedSet.add(uuid);
+        }
+      }
+      if (newlyChanged.length > 0) {
+        newlyChanged.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        dirState.unindexedQueue.push(...newlyChanged);
+      }
+    }
+  }
+
+  if (dirState.unindexedQueue.length === 0) {
+    if (!backoffSkipped && dirState.scanningDirMtimeMs >= 0) {
+      dirState.dirMtimeMs = dirState.scanningDirMtimeMs;
+    }
+    return { dirState, isDraining: false, backoffSkipped };
+  }
+
+  if (backoffSkipped || (unc && Date.now() < wslUncBackoffUntil)) {
+    return {
+      dirState,
+      isDraining: dirState.unindexedQueue.length > 0,
+      backoffSkipped: true
+    };
+  }
+
+  const tPerfStart = performance.now();
+  let opens = 0;
+  let qIdx = 0;
+  const busyRetry = [];
+
+  while (qIdx < dirState.unindexedQueue.length) {
+    if (opens > 0 && (opens >= LINEAGE_TICK_MAX_OPENS || performance.now() - tPerfStart >= LINEAGE_TICK_MAX_MS)) {
+      break;
+    }
+    if (unc && Date.now() - tWallStart > 400) {
+      wslUncBackoffUntil = Date.now() + 45000;
+      backoffSkipped = true;
+      break;
+    }
+    const item = dirState.unindexedQueue[qIdx++];
+    dirState.unindexedSet.delete(item.uuid);
+    opens += 1;
+    const res = readTrajectoryLineage(item.dbPath);
+    if (res.ok) {
+      if (res.hasMeta) {
+        dirState.noMetaPending.delete(item.uuid);
+        setNodeLineage(dirState, item.uuid, {
+          hasMeta: true,
+          parentId: res.parentId,
+          rootId: res.rootId,
+          statSig: item.statSig
+        });
+      } else {
+        setNodeLineage(dirState, item.uuid, {
+          hasMeta: false,
+          parentId: '',
+          rootId: '',
+          statSig: item.statSig
+        });
+        if (!res.permanentInvalid) {
+          rememberNoMetaPending(dirState, item.uuid, item.statSig);
+          dirState.lastPendingScanAt = Date.now();
+        } else {
+          dirState.noMetaPending.delete(item.uuid);
+        }
+      }
+    } else {
+      busyRetry.push(item);
+      dirState.unindexedSet.add(item.uuid);
+    }
+  }
+
+  if (qIdx > 0 || busyRetry.length > 0) {
+    const remaining = dirState.unindexedQueue.slice(qIdx);
+    if (busyRetry.length > 0) {
+      remaining.push(...busyRetry);
+    }
+    dirState.unindexedQueue = remaining;
+  }
+
+  if (unc && !backoffSkipped && Date.now() - tWallStart > 400) {
+    wslUncBackoffUntil = Date.now() + 45000;
+    backoffSkipped = true;
+  }
+
+  if (dirState.unindexedQueue.length === 0 && !backoffSkipped && dirState.scanningDirMtimeMs >= 0) {
+    dirState.dirMtimeMs = dirState.scanningDirMtimeMs;
+  }
+
+  return {
+    dirState,
+    isDraining: dirState.unindexedQueue.length > 0,
+    backoffSkipped
+  };
+}
+
+function findDescendantIds(cascadeId, dirState) {
+  if (!dirState) return [];
+  const visited = new Set([cascadeId]);
+  const queue = [];
+
+  const selfNode = dirState.nodes.get(cascadeId);
+  if (!selfNode || !selfNode.parentId) {
+    const rootSet = dirState.byRoot.get(cascadeId);
+    if (rootSet) {
+      for (const id of rootSet) {
+        if (id === cascadeId || visited.has(id)) continue;
+        visited.add(id);
+        queue.push(id);
+      }
+    }
+  }
+
+  const directSet = dirState.byParent.get(cascadeId);
+  if (directSet) {
+    for (const id of directSet) {
+      if (id === cascadeId || visited.has(id)) continue;
+      visited.add(id);
+      queue.push(id);
+    }
+  }
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const curId = queue[qi++];
+    const nextSet = dirState.byParent.get(curId);
+    if (!nextSet) continue;
+    for (const id of nextSet) {
+      if (id === cascadeId || visited.has(id)) continue;
+      visited.add(id);
+      queue.push(id);
+    }
+  }
+
+  queue.sort();
+  return queue;
+}
+
+function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '') {
+  if (!cascadeId || !UUID_RE.test(cascadeId) || !conversationsDir) {
+    return {
+      conversationsDir: '',
+      descendantIds: [],
+      childSigs: new Map(),
+      isDraining: false,
+      partialStale: false,
+      sig: parentSig
+    };
+  }
+
+  const { dirState, isDraining, backoffSkipped } = refreshLineageIndex(conversationsDir);
+  const descendantIds = findDescendantIds(cascadeId, dirState);
+  const childSigs = new Map();
+  const childSigParts = [];
+  let partialStale = Boolean(backoffSkipped);
+  const unc = isUncPath(conversationsDir);
+  const t0 = Date.now();
+
+  if (unc && Date.now() < wslUncBackoffUntil) {
+    partialStale = true;
+    for (let i = 0; i < descendantIds.length; i++) {
+      const cid = descendantIds[i];
+      const prev = childMetricsCache.get(path.join(conversationsDir, `${cid}.db`))?.sig || '';
+      childSigs.set(cid, prev || 'unc_deferred');
+      childSigParts.push(`${cid}=${prev || '0:0|0:0'}`);
+    }
+  } else {
+    for (let i = 0; i < descendantIds.length; i++) {
+      const cid = descendantIds[i];
+      if (unc && (Date.now() < wslUncBackoffUntil || Date.now() - t0 > 400)) {
+        if (Date.now() >= wslUncBackoffUntil) {
+          wslUncBackoffUntil = Date.now() + 45000;
+        }
+        partialStale = true;
+        const prev = childMetricsCache.get(path.join(conversationsDir, `${cid}.db`))?.sig || '';
+        childSigs.set(cid, prev || 'unc_deferred');
+        childSigParts.push(`${cid}=${prev || '0:0|0:0'}`);
+        continue;
+      }
+      const statInfo = getDbStatByPath(path.join(conversationsDir, `${cid}.db`));
+      if (unc && Date.now() - t0 > 400) {
+        wslUncBackoffUntil = Date.now() + 45000;
+        partialStale = true;
+      }
+      childSigs.set(cid, statInfo ? statInfo.sig : 'missing');
+      childSigParts.push(`${cid}=${statInfo ? statInfo.sig : '0:0|0:0'}`);
+    }
+  }
+
+  const uncBackoffActive = Boolean(unc && Date.now() < wslUncBackoffUntil);
+  return {
+    conversationsDir,
+    descendantIds,
+    childSigs,
+    isDraining: Boolean(isDraining),
+    partialStale,
+    uncBackoffActive,
+    sig: `${parentSig}|children:${childSigParts.join(',')}${isDraining ? '|draining' : ''}${partialStale ? '|stale' : ''}`
+  };
+}
+
+function loadChildScalarMetrics(childId, conversationsDir, knownStatSig = null, allowUncachedOpen = true) {
+  if (!UUID_RE.test(childId) || !conversationsDir || knownStatSig === 'missing') return { exists: false };
+  const dbPath = path.join(conversationsDir, `${childId}.db`);
+  const cached = childMetricsCache.get(dbPath);
+  if (knownStatSig === 'unc_deferred') {
+    return { exists: true, deferred: true, staleMetrics: cached || null };
+  }
+  if (!knownStatSig && !allowUncachedOpen) {
+    return cached ? { exists: true, deferred: true, staleMetrics: cached } : { exists: true, deferred: true, staleMetrics: null };
+  }
+  const sig = knownStatSig || getDbStatByPath(dbPath)?.sig || '';
+  if (!sig) return { exists: false };
+
+  if (cached && cached.sig === sig) {
+    setChildMetricsCache(dbPath, cached);
+    return { exists: true, fromCache: true, metrics: cached };
+  }
+  if (!allowUncachedOpen) {
+    return { exists: true, deferred: true, staleMetrics: cached || null };
+  }
+
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true, timeout: 20 });
+    const rows = db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx ASC').all();
+    let calls = 0;
+    let totalIn = 0;
+    let totalCache = 0;
+    let totalOut = 0;
+    let totalThink = 0;
+    let totalResp = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const p = parseGenMetadataRow(rows[i]);
+      if (p.ctx > 0 || p.outTok > 0) {
+        calls += 1;
+        totalIn += p.inTok;
+        totalCache += p.cacheRead;
+        totalOut += p.outTok;
+        totalThink += p.thinkTok;
+        totalResp += p.respTok;
+      }
+    }
+    const entry = {
+      sig,
+      hasData: calls > 0,
+      calls,
+      totalIn,
+      totalCache,
+      totalOut,
+      totalThink,
+      totalResp
+    };
+    setChildMetricsCache(dbPath, entry);
+    return { exists: true, fromCache: false, metrics: entry };
+  } catch (err) {
+    const msg = String(err?.message || '');
+    if (/locked|busy/i.test(msg)) {
+      return { exists: true, fromCache: false, transientError: true, staleMetrics: cached || null };
+    }
+    const emptyEntry = {
+      sig,
+      hasData: false,
+      calls: 0,
+      totalIn: 0,
+      totalCache: 0,
+      totalOut: 0,
+      totalThink: 0,
+      totalResp: 0
+    };
+    setChildMetricsCache(dbPath, emptyEntry);
+    return { exists: true, fromCache: false, metrics: emptyEntry };
+  } finally {
+    try {
+      db?.close();
+    } catch {}
+  }
+}
+
 function parseGenMetadataRow(r) {
   const top = parseProto(r.data);
-  const chat = top.has(1) ? parseProto(top.get(1)) : new Map();
-  const usage = chat.has(4) ? parseProto(chat.get(4)) : new Map();
-  const ttftMap = chat.has(11) ? parseProto(chat.get(11)) : new Map();
-  const streamMap = chat.has(12) ? parseProto(chat.get(12)) : new Map();
+  const chatRaw = top.get(1);
+  const chat = chatRaw instanceof Uint8Array ? parseProto(chatRaw) : new Map();
+  const usageRaw = chat.get(4);
+  const usage = usageRaw instanceof Uint8Array ? parseProto(usageRaw) : new Map();
+  const chatStartRaw = chat.get(9);
+  const chatStart = chatStartRaw instanceof Uint8Array ? parseProto(chatStartRaw) : new Map();
+  const ctxWinRaw = chatStart.get(10);
+  const ctxWin = ctxWinRaw instanceof Uint8Array ? parseProto(ctxWinRaw) : new Map();
+  const maxCtx = ctxWin.get(4) || 0;
+  const ttftRaw = chat.get(11);
+  const ttftMap = ttftRaw instanceof Uint8Array ? parseProto(ttftRaw) : new Map();
+  const streamRaw = chat.get(12);
+  const streamMap = streamRaw instanceof Uint8Array ? parseProto(streamRaw) : new Map();
 
   const inTok = usage.get(2) || 0;
   const outTok = usage.get(3) || 0;
@@ -755,6 +1377,7 @@ function parseGenMetadataRow(r) {
     outTok,
     cacheRead,
     ctx: inTok + cacheRead,
+    maxCtx,
     thinkTok,
     respTok,
     ttft,
@@ -763,20 +1386,49 @@ function parseGenMetadataRow(r) {
   };
 }
 
-function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = null) {
+function formatContextCeiling(tokens) {
+  if (tokens >= 1000000) {
+    return `${Number((tokens / 1000000).toFixed(1))}M`;
+  }
+  return `${Math.round(tokens / 1000)}k`;
+}
+
+function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = null, precomputedChildSnap = null) {
   if (!DatabaseSync) return null;
-  if (!cascadeId || !/^[0-9a-f-]{36}$/i.test(cascadeId)) return null;
+  if (!cascadeId || !UUID_RE.test(cascadeId)) return null;
   const state = precomputedState || getDbState(cascadeId, endpointOrDir);
   if (!state || !state.dbPath || !state.sig) return { cascadeId, hasData: false };
   const { dbPath, sig } = state;
+  const conversationsDir = path.dirname(dbPath);
+  const childSnap =
+    precomputedChildSnap || getCompositeChildSnapshot(cascadeId, conversationsDir, state.rawSig || sig);
+  const compositeSig = childSnap?.sig || sig;
 
   const cached = metricsCache.get(dbPath);
-  if (cached && cached.sig === sig) {
+  if (cached && cached.sig === compositeSig && !childSnap?.isDraining && !childSnap?.partialStale) {
     return cached.payload;
   }
 
-  const contextLimitTokens = activeConfig.contextLimit || 256000;
+  const uncParent = isUncPath(dbPath);
+  if (uncParent && Date.now() < wslUncBackoffUntil) {
+    const bestEffort = cached?.payload || lastBestEffortPayloadCache.get(dbPath) || null;
+    if (bestEffort) {
+      return {
+        ...bestEffort,
+        partialStale: true,
+        uncBackoffActive: true
+      };
+    }
+    return {
+      cascadeId,
+      transientError: true,
+      uncBackoffActive: true,
+      cachedPayload: null
+    };
+  }
+
   let db;
+  const tParentWallStart = Date.now();
   try {
     db = new DatabaseSync(dbPath, { readOnly: true, timeout: 200 });
     const metaStat = db.prepare('SELECT COUNT(*) AS cnt, COALESCE(MAX(idx), -1) AS maxIdx FROM gen_metadata').get();
@@ -786,8 +1438,16 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       db.close();
       db = null;
       incrementalMetricsMap.delete(dbPath);
-      const emptyPayload = { cascadeId, hasData: false, sig };
-      setMetricsCache(dbPath, { sig, payload: emptyPayload });
+      const emptyPayload = {
+        cascadeId,
+        hasData: false,
+        sig: compositeSig,
+        isDraining: Boolean(childSnap?.isDraining),
+        partialStale: Boolean(childSnap?.partialStale)
+      };
+      if (!childSnap?.isDraining && !childSnap?.partialStale) {
+        setMetricsCache(dbPath, { sig: compositeSig, payload: emptyPayload });
+      }
       return emptyPayload;
     }
 
@@ -889,13 +1549,90 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
 
     db.close();
     db = null;
+    if (uncParent && Date.now() - tParentWallStart > 400) {
+      wslUncBackoffUntil = Date.now() + 45000;
+    }
     setIncrementalMetrics(dbPath, inc);
 
     const { validItems: valid, totalIn, totalCache, totalOut, totalThink, totalResp } = inc;
     if (valid.length === 0) {
-      const emptyPayload = { cascadeId, hasData: false, sig };
-      setMetricsCache(dbPath, { sig, payload: emptyPayload });
+      const emptyPayload = {
+        cascadeId,
+        hasData: false,
+        sig: compositeSig,
+        isDraining: Boolean(childSnap?.isDraining),
+        partialStale: Boolean(childSnap?.partialStale)
+      };
+      if (!childSnap?.isDraining && !childSnap?.partialStale) {
+        setMetricsCache(dbPath, { sig: compositeSig, payload: emptyPayload });
+      }
       return emptyPayload;
+    }
+
+    const descendantIds = childSnap?.descendantIds || [];
+    const isDraining = Boolean(childSnap?.isDraining);
+    let partialStale = Boolean(childSnap?.partialStale);
+    let childCount = 0;
+    let childCalls = 0;
+    let childIn = 0;
+    let childCache = 0;
+    let childOut = 0;
+    let childThink = 0;
+    let childResp = 0;
+    let childSqlOpens = 0;
+    const tChildPerfStart = performance.now();
+    const tChildWallStart = Date.now();
+    const uncChildren = isUncPath(conversationsDir);
+
+    for (let i = 0; i < descendantIds.length; i++) {
+      const childId = descendantIds[i];
+      if (childId === cascadeId) continue;
+
+      const knownChildSig = childSnap.childSigs?.get(childId) || null;
+      const uncNowBlocked =
+        uncChildren && (Date.now() < wslUncBackoffUntil || Date.now() - tChildWallStart > 400);
+      if (uncChildren && Date.now() - tChildWallStart > 400 && Date.now() >= wslUncBackoffUntil) {
+        wslUncBackoffUntil = Date.now() + 45000;
+      }
+      const allowUncachedOpen =
+        !uncNowBlocked &&
+        (childSqlOpens === 0 ||
+          (childSqlOpens < LINEAGE_TICK_MAX_OPENS &&
+            performance.now() - tChildPerfStart < LINEAGE_TICK_MAX_MS));
+      const childRes = loadChildScalarMetrics(
+        childId,
+        conversationsDir,
+        knownChildSig,
+        allowUncachedOpen
+      );
+      if (!childRes.exists) continue;
+      if (!childRes.fromCache && !childRes.deferred) {
+        childSqlOpens += 1;
+        if (uncChildren && Date.now() - tChildWallStart > 400) {
+          wslUncBackoffUntil = Date.now() + 45000;
+        }
+      }
+
+      let cm = null;
+      if (childRes.deferred || childRes.transientError) {
+        partialStale = true;
+        if (childRes.staleMetrics && childRes.staleMetrics.hasData) {
+          cm = childRes.staleMetrics;
+        } else {
+          continue;
+        }
+      } else {
+        cm = childRes.metrics;
+      }
+
+      if (!cm || !cm.hasData) continue;
+      childCount += 1;
+      childCalls += cm.calls;
+      childIn += cm.totalIn;
+      childCache += cm.totalCache;
+      childOut += cm.totalOut;
+      childThink += cm.totalThink;
+      childResp += cm.totalResp;
     }
 
     // 统计最后一条用户提问之后的模型规划步数，并从有效调用末尾切片汇总，消除按位置对齐的错位风险
@@ -913,24 +1650,41 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     }
 
     const last = valid[valid.length - 1];
-    const streamTps = last.stream >= 0.25 ? last.outTok / last.stream : 0;
+    const fallbackContextLimit = activeConfig.contextLimit || 256000;
+    const contextLimitTokens =
+      activeConfig.contextLimitOverride > 0
+        ? activeConfig.contextLimitOverride
+        : last.maxCtx > 0
+          ? last.maxCtx
+          : fallbackContextLimit;
+    const limitStr = formatContextCeiling(contextLimitTokens);
+
+    const rawStreamTps = last.stream >= 0.5 ? last.outTok / last.stream : 0;
     const e2eTps = last.totDur > 0 ? last.outTok / last.totDur : 0;
-    const displayTps = streamTps > 0 && streamTps <= 600 ? streamTps : e2eTps;
+    const streamRatio = last.totDur > 0 ? last.stream / last.totDur : 0;
+    const useStream =
+      rawStreamTps > 0 &&
+      rawStreamTps <= 600 &&
+      (streamRatio >= 0.15 || (last.stream >= 2.0 && rawStreamTps <= 250));
+    const displayTps = useStream ? rawStreamTps : e2eTps;
     const ctxPct = Math.round((last.ctx / contextLimitTokens) * 100);
     const ctxClass = ctxPct >= 90 ? 'ag-ctx-crit' : ctxPct >= 75 ? 'ag-ctx-warn' : 'ag-ctx-ok';
     const lastCacheRate = last.ctx > 0 ? ((last.cacheRead / last.ctx) * 100).toFixed(1) : '0.0';
     const sessionCacheRate = totalIn + totalCache > 0 ? ((totalCache / (totalIn + totalCache)) * 100).toFixed(1) : '0.0';
     const remainCtx = Math.max(0, contextLimitTokens - last.ctx);
-    const limitKStr = Math.round(contextLimitTokens / 1000) + 'k';
 
+    const subSyncing = isDraining || partialStale;
+    const subInlineHtml =
+      childCount > 0 ? `<span class="ag-sep">·</span><span class="ag-sub-badge">+${childCount} sub</span>` : '';
     const inlineHtml = [
       `<span>${Math.round(displayTps)} tok/s</span>`,
       `<span class="ag-sep">·</span>`,
-      `<span>TTFT ${last.ttft.toFixed(1)}s</span>`,
+      `<span>${useStream ? 'TTFT' : 'Hold'} ${last.ttft.toFixed(1)}s</span>`,
       `<span class="ag-sep">·</span>`,
-      `<span>Ctx ${fmtTok(last.ctx)}/${limitKStr} <span class="${ctxClass}">(${ctxPct}%)</span></span>`,
+      `<span>Ctx ${fmtTok(last.ctx)}/${limitStr} <span class="${ctxClass}">(${ctxPct}%)</span></span>`,
       `<span class="ag-sep">·</span>`,
-      `<span>Out ${fmtTok(last.outTok)}</span>`
+      `<span>Out ${fmtTok(last.outTok)}</span>`,
+      subInlineHtml
     ].join('');
 
     const turnRowHtml =
@@ -938,27 +1692,49 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
         ? `<div class="ag-tt-row"><span class="ag-tt-lbl">本轮合计 (${turnSteps}步)</span><span class="ag-tt-val">输出 ${fmtNum(turnOut)} (思考 ${fmtNum(turnThink)} + 响应 ${fmtNum(turnResp)}) | 耗时 ${turnDur.toFixed(1)}s</span></div>`
         : '';
 
-    const tooltipHtml = [
+    const combinedOut = totalOut + childOut;
+    const subRowHtml =
+      childCount > 0
+        ? `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (${childCount}${subSyncing ? ' · 同步中' : ''})</span><span class="ag-tt-val">${childCalls} 次 · 新增 ${fmtTok(childIn)} + 缓存 ${fmtTok(childCache)} · 输出 ${fmtTok(childOut)}</span></div>`
+        : descendantIds.length > 0 && subSyncing
+          ? `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (同步中)</span><span class="ag-tt-val">正在索引 ${descendantIds.length} 个子会话…</span></div>`
+          : '';
+    const outputRowHtml =
+      childCount > 0
+        ? `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(combinedOut)} (主 ${fmtTok(totalOut)} + 子 ${fmtTok(childOut)})</span></div>`
+        : `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(totalOut)} (思考链 ${fmtTok(totalThink)} + 正文/工具 ${fmtTok(totalResp)})</span></div>`;
+    const tooltipRows = [
       `<div class="ag-tt-hdr">本轮最新调用 (Gen #${last.idx + 1})</div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">生成速度</span><span class="ag-tt-val">${streamTps > 0 && streamTps <= 600 ? `流式 ${streamTps.toFixed(1)} tok/s | ` : ''}端到端 ${e2eTps.toFixed(1)} tok/s</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">响应耗时</span><span class="ag-tt-val">TTFT ${last.ttft.toFixed(2)}s | 流式 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s</span></div>`,
+      `<div class="ag-tt-row"><span class="ag-tt-lbl">生成速度</span><span class="ag-tt-val">${useStream ? `流式 ${rawStreamTps.toFixed(1)} tok/s | ` : ''}端到端（含等待） ${e2eTps.toFixed(1)} tok/s</span></div>`,
+      `<div class="ag-tt-row"><span class="ag-tt-lbl">响应耗时</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | 流式 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s` : `等待 ${last.ttft.toFixed(2)}s | 刷出 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s`}</span></div>`,
       `<div class="ag-tt-row"><span class="ag-tt-lbl">当前上下文</span><span class="ag-tt-val">${fmtNum(last.ctx)} (新增 ${fmtNum(last.inTok)} + 缓存 ${fmtNum(last.cacheRead)}, ${lastCacheRate}%)</span></div>`,
       `<div class="ag-tt-row"><span class="ag-tt-lbl">本步输出量</span><span class="ag-tt-val">${fmtNum(last.outTok)} (思考链 ${fmtNum(last.thinkTok)} + 正文/工具 ${fmtNum(last.respTok)})</span></div>`,
       turnRowHtml,
       `<div class="ag-tt-hdr ag-tt-sec">当前会话累计 (${userStepsCount} 轮提问 / ${valid.length} 次有效调用)</div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">压缩水位线</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitKStr} (${ctxPct}%) · 距压缩余 ${fmtTok(remainCtx)}</span></div>`,
+      `<div class="ag-tt-row"><span class="ag-tt-lbl">压缩水位线</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · 距压缩余 ${fmtTok(remainCtx)}</span></div>`,
       `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输入量</span><span class="ag-tt-val">新增 ${fmtTok(totalIn)} + 缓存读取 ${fmtTok(totalCache)} (命中率 ${sessionCacheRate}%)</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(totalOut)} (思考链 ${fmtTok(totalThink)} + 正文/工具 ${fmtTok(totalResp)})</span></div>`
-    ].join('');
+      subRowHtml,
+      outputRowHtml
+    ];
+    const tooltipHtml = tooltipRows.join('');
 
+    const uncBackoffActive = Boolean(
+      childSnap?.uncBackoffActive || (uncParent && Date.now() < wslUncBackoffUntil)
+    );
     const payload = {
       cascadeId,
       hasData: true,
-      sig,
+      sig: compositeSig,
+      isDraining,
+      partialStale,
+      uncBackoffActive,
       inlineHtml,
       tooltipHtml
     };
-    setMetricsCache(dbPath, { sig, payload });
+    setBoundedMap(lastBestEffortPayloadCache, dbPath, payload, 64);
+    if (!isDraining && !partialStale) {
+      setMetricsCache(dbPath, { sig: compositeSig, payload });
+    }
     return payload;
   } catch {
     // 若遇 SQLITE_BUSY 等瞬态锁竞争，标记 transientError 使得上层不锁死 lastPushedHash，下一轮自动重试
@@ -1038,6 +1814,7 @@ function attachTarget(target, endpoint) {
       let msgId = 1;
       let activeCascadeId = '';
       let lastPushedHash = '';
+      let lastRenderedSig = '';
       let evalScriptId = null;
       const pendingCallbacks = new Map();
 
@@ -1111,14 +1888,27 @@ function attachTarget(target, endpoint) {
         }
         if (!activeCascadeId) return;
 
-        // 先在 Node 本地通过 statSync 检查 .db/.db-wal 签名（兼容 Windows WSL 按需懒探测），未变化则 0 WebSocket 通信直接返回
+        // 先在 Node 本地通过 statSync 检查 .db/.db-wal 与子 Agent 复合签名（兼容 Windows WSL 按需懒探测），未变化则 0 WebSocket 通信直接返回
         const currentEndpoint = attachedTargets.get(target.id)?.endpoint || endpoint;
         const dbState = getDbState(activeCascadeId, currentEndpoint);
-        const sig = dbState?.sig || 'empty';
-        const sessionKey = `${activeCascadeId}@${sig}`;
-        if (!force && sessionKey === lastPushedHash) return;
+        const conversationsDir = dbState?.dbPath ? path.dirname(dbState.dbPath) : '';
+        const childSnap = conversationsDir
+          ? getCompositeChildSnapshot(activeCascadeId, conversationsDir, dbState.rawSig || dbState.sig)
+          : null;
+        const sig = childSnap?.sig || dbState?.sig || 'empty';
+        const sessionKey = `${activeCascadeId}@${sig}|${metricsConfigEpoch}`;
+        const uncCoolingDown = Boolean(
+          (dbState?.uncDeferred || childSnap?.uncBackoffActive) && Date.now() < wslUncBackoffUntil
+        );
+        if (
+          !force &&
+          ((!childSnap?.isDraining && !childSnap?.partialStale && sessionKey === lastPushedHash) ||
+            (uncCoolingDown && lastRenderedSig !== ''))
+        ) {
+          return;
+        }
 
-        const payload = parseConversationMetrics(activeCascadeId, currentEndpoint, dbState);
+        const payload = parseConversationMetrics(activeCascadeId, currentEndpoint, dbState, childSnap);
         if (!payload || payload.transientError) {
           if (force && payload?.cachedPayload) {
             await send('Runtime.evaluate', {
@@ -1129,11 +1919,19 @@ function attachTarget(target, endpoint) {
           return;
         }
 
-        await send('Runtime.evaluate', {
-          expression: `window.__ag_render_metrics && window.__ag_render_metrics(${JSON.stringify(payload)})`,
-          returnByValue: false
-        });
-        lastPushedHash = sessionKey;
+        const renderedSig = `${payload.hasData ? '1' : '0'}\n${payload.inlineHtml || ''}\n${payload.tooltipHtml || ''}`;
+        if (force || renderedSig !== lastRenderedSig) {
+          await send('Runtime.evaluate', {
+            expression: `window.__ag_render_metrics && window.__ag_render_metrics(${JSON.stringify(payload)})`,
+            returnByValue: false
+          });
+          lastRenderedSig = renderedSig;
+        }
+        if (!payload.isDraining && !payload.partialStale) {
+          lastPushedHash = sessionKey;
+        } else {
+          lastPushedHash = '';
+        }
       };
 
       const checkAndInject = async () => {
@@ -1188,6 +1986,7 @@ function attachTarget(target, endpoint) {
             if (/^[0-9a-f-]{36}$/i.test(nextId)) {
               activeCascadeId = nextId;
               lastPushedHash = '';
+              lastRenderedSig = '';
               syncMetricsForSession(true);
             }
             return;
@@ -1261,6 +2060,7 @@ function attachTarget(target, endpoint) {
         setActiveCascade: (cid) => {
           activeCascadeId = cid;
           lastPushedHash = '';
+          lastRenderedSig = '';
         }
       });
     } catch {

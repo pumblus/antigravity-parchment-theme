@@ -281,7 +281,7 @@ body[data-agy-theme] :where(.font-sans),
 body[data-agy-font],
 body[data-agy-font="google-sans"],
 body[data-agy-font="inter"],
-body[data-agy-font] :where(.font-sans) {
+body[data-agy-font] :where(.font-sans, .pdf-sdk-root) {
   --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'Anthropic Sans Web Display Light', 'anthropic-sans', 'Styrene B', 'Styrene', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
   --font-serif: 'Anthropic Serif', 'Anthropic Serif Text', 'Anthropic Serif Web', 'Anthropic Serif Web Text Light', 'Anthropic Serif Web Display Light', 'anthropic-serif', 'Tiempos Text', 'Tiempos', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
   --font-serif-display: 'Anthropic Serif Display', 'Anthropic Serif', 'Anthropic Serif Web Display Light', 'Anthropic Serif Web', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
@@ -291,6 +291,9 @@ body[data-agy-font] :where(.font-sans) {
   --default-font-family: var(--font-sans) !important;
   --default-mono-font-family: var(--font-mono) !important;
   --font-family: var(--font-sans) !important;
+  --sdk-font-family: var(--font-sans) !important;
+  --sdk-font-family-mono: var(--font-mono) !important;
+  --sdk-comment-font-family: var(--font-sans) !important;
   --font-weight-light: 300 !important;
   --font-weight-normal: 400 !important;
   --font-weight-medium: 500 !important;
@@ -300,6 +303,7 @@ body[data-agy-font] :where(.font-sans) {
   --agy-gsf-h1-wght: 600 !important;
   --agy-gsf-h3-wght: 600 !important;
   --agy-gsf-bold-wght: 600 !important;
+  --agy-gsf-fvs: normal !important;
   --agy-gsf-italic: italic !important;
   --agy-gsf-slnt: 0 !important;
 }
@@ -349,6 +353,7 @@ body[data-agy-font],
 body[data-agy-font="google-sans"] {
   font-weight: 400 !important;
   font-variation-settings: normal !important;
+  font-variant-ligatures: normal !important;
   color: var(--foreground) !important;
 }
 
@@ -363,7 +368,8 @@ body[data-agy-font="google-sans"]:not([data-has-browser-hole="true"]):not([data-
   background-color: var(--sidebar) !important;
 }
 
-body[data-agy-font] :where(.font-sans, h1, h2, h3, h4, h5, h6, b, strong, i, em, .italic) {
+body[data-agy-font] :where(.font-sans, h1, h2, h3, h4, h5, h6, b, strong, i, em, .italic),
+html[data-ag-page-type="plugin"] :where(h1, h2, h3, h4, h5, h6, b, strong, .swarm-title, .o2 .o2-h, .o2-goal > b, .o2-lb b, .o2-cb b, .o2-tht b) {
   --agy-gsf-bold-wght: 600 !important;
   font-variation-settings: normal !important;
 }
@@ -424,7 +430,8 @@ html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-co
 }
 
 html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold),
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold) :is(i, em, .italic) {
+html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold) :is(i, em, .italic),
+html[data-ag-os="win32"][data-ag-page-type="plugin"] :where(h1, h2, h3, h4, h5, h6, b, strong, .swarm-title, .o2 .o2-h, .o2-goal > b, .o2-lb b, .o2-cb b, .o2-tht b) {
   font-weight: 600 !important;
   font-variation-settings: 'wght' 600, 'opsz' 16 !important;
 }
@@ -1451,7 +1458,22 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   font-weight: 700 !important;
 }
 
-/* 黑夜模式指标胶囊配色 */
+#antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-sub-badge,
+#ag-live-metrics-pill .ag-sub-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  line-height: 1;
+  background-color: #E3DACC;
+  border: 1px solid #CCCBC8;
+  color: #56554F !important;
+}
+
+/* 黑夜模式指标胶囊配色与高可见预警色 */
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill {
   color: #B0AEA5 !important;
   border-left-color: #3D3D3A !important;
@@ -1474,6 +1496,13 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-crit,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill .ag-ctx-crit {
   color: #D96055 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-sub-badge,
+:is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill .ag-sub-badge {
+  background-color: #2B2A27;
+  border-color: #3D3D3A;
+  color: #D3D1C7 !important;
 }
 
 #ag-live-metrics-tooltip {
@@ -1544,7 +1573,7 @@ body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selecte
   text-align: right;
 }
 
-/* 黑夜模式悬浮指标详情卡配色（扁平无阴影） */
+/* 黑夜模式悬浮指标详情卡配色 */
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-tooltip {
   background-color: var(--card, #1F1E1C) !important;
   border-color: var(--border, #3D3D3A) !important;

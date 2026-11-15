@@ -128,7 +128,7 @@ test('v520 keeps PS5.1 flat JSON enumeration, fork packaging and version', () =>
   assert.ok(source.includes('$items = @(foreach ($x in $parsed) { if ($null -ne $x) { $x } })'));
   assert.ok(source.includes('$paths = @(foreach ($x in $parsed) { if ($null -ne $x) { [string]$x } })'));
   assert.doesNotMatch(source, /hasFlag\(['"]--sync-user/);
-  assert.match(source, /version: '5\.2\.0-eric\.1'/);
+  assert.match(source, /version: '5\.3\.0-eric\.1'/);
   assert.match(source, /https:\/\/github.com\/pumblus\/chuanban-antigravity-theme-patch/);
   const pack = source.slice(source.indexOf('function buildDistZip'), source.indexOf('function verifyCoreIntegrity'));
   assert.match(pack, /'FORK\.md'/); assert.match(pack, /'CHANGELOG\.md'/);
@@ -197,4 +197,19 @@ test('v520 rollback accepts verified snapshot containers after core.prev is miss
   const h = harness(t); core(path.join(h.target, 'core'), 'old'); await h.run('install');
   fs.rmSync(path.join(h.target, 'core.prev'), { recursive: true }); await h.run('rollback');
   assert.equal(fs.readFileSync(path.join(h.target, 'core/daemon.mjs'), 'utf8'), 'old:daemon.mjs\n');
+});
+
+test('v530 shipped core installs and rolls back only inside a temporary target', async t => {
+  const h = harness(t); const shipped = new URL('../core/', import.meta.url);
+  for (const name of [...names, 'manifest.json']) fs.copyFileSync(new URL(name, shipped), path.join(h.src, 'core', name));
+  core(path.join(h.target, 'core'), 'previous-fusion');
+  fs.mkdirSync(path.join(h.target, 'user')); const config = '{ "contextLimit": 840000, "modules":{"coldBootHealer":false}, "selectors":{"excludeI18n":".mine"} }\r\n';
+  fs.writeFileSync(path.join(h.target, 'user/config.json'), config);
+  await h.run('install');
+  assert.equal(h.api.isValidCoreBackup(path.join(h.target, 'core')), true);
+  for (const name of names) assert.deepEqual(fs.readFileSync(path.join(h.target, 'core', name)), fs.readFileSync(new URL(name, shipped)), name);
+  await h.run('rollback');
+  assert.equal(fs.readFileSync(path.join(h.target, 'core/daemon.mjs'), 'utf8'), 'previous-fusion:daemon.mjs\n');
+  assert.equal(fs.readFileSync(path.join(h.target, 'user/config.json'), 'utf8'), config);
+  assert.deepEqual(h.calls, []); assert.deepEqual(fs.readdirSync(h.home), []);
 });

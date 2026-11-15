@@ -374,3 +374,35 @@ test('typography computed Windows axes retain protected code and do not affect m
   for (const id of ['code','nested-code','path','editable','math']) assert.equal(await variation(id), 'normal', 'protected ' + id);
   assert.match(await page.locator('#code').evaluate(el => getComputedStyle(el).fontFamily), fonts.mono);
 });
+
+
+test('typography computed v530 PDF scope, ligatures, plugin headings and neutral sub badge', async t => {
+  const { chromium } = require('playwright');
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), headless: true });
+  t.after(() => browser.close()); const page = await browser.newPage();
+  await page.setContent(`<html data-ag-os="darwin" data-ag-page-type="plugin"><body data-agy-font="inter"><style>
+  .pdf-sdk-root { --sdk-font-family: Arial; --sdk-font-family-mono: monospace; --sdk-comment-font-family: Arial; --agy-gsf-fvs: 'opsz' 20; }
+  body {font-variant-ligatures:no-contextual}
+  </style><div class="pdf-sdk-root" id="pdf"><span>PDF</span></div>
+  <h2 class="swarm-title" id="heading">Title</h2><code><strong id="code-heading">Code</strong></code>
+  <div id="ag-live-metrics-pill"><span class="ag-sub-badge" id="badge">+2 sub</span></div>
+  <div id="ag-live-metrics-tooltip">Metrics</div></body></html>`);
+  await page.addStyleTag({ content: css });
+  const get = (id, prop) => page.locator('#' + id).evaluate((el, prop) => getComputedStyle(el).getPropertyValue(prop).trim(), prop);
+  assert.match(await get('pdf','--sdk-font-family'), /Anthropic Sans/);
+  assert.match(await get('pdf','--sdk-font-family-mono'), /Anthropic Mono/);
+  assert.match(await get('pdf','--sdk-comment-font-family'), /Anthropic Sans/);
+  assert.equal(await get('pdf','--agy-gsf-fvs'), 'normal');
+  assert.equal(await page.locator('body').evaluate(el=>getComputedStyle(el).fontVariantLigatures), 'normal');
+  assert.equal(await get('heading','font-variation-settings'), 'normal');
+  assert.equal(await get('badge','background-color'), 'rgb(227, 218, 204)');
+  assert.equal(await get('ag-live-metrics-tooltip','position'), 'fixed');
+  assert.equal(await get('ag-live-metrics-tooltip','box-shadow'), 'none');
+  await page.locator('body').evaluate(el => el.classList.add('dark'));
+  assert.equal(await get('badge','background-color'), 'rgb(43, 42, 39)');
+  await page.locator('html').evaluate(el => el.dataset.agOs = 'win32');
+  assert.match(await get('heading','font-variation-settings'), /"wght" 600/);
+  assert.equal(await get('code-heading','font-variation-settings'), 'normal');
+  await page.locator('body').evaluate(el => el.removeAttribute('data-agy-font'));
+  assert.equal(await get('pdf','--sdk-font-family'), 'Arial', 'SDK variables are not global when patch font scope is absent');
+});
