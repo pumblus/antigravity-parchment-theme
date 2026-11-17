@@ -66,9 +66,9 @@ test('zoom ordinary key still applies exactly once', () => {
 });
 test('frame guard admits top and Swarm but excludes preview frames', () => {
   const guard=section(runtime,'  const IS_SWARM_PLUGIN_FRAME','  const PATCH_VERSION');
-  for(const [href,top,accepted] of [['https://localhost/',true,true],['https://localhost/preview',false,false],['plugin://swarm--official/index',false,true],['plugin://other/index',false,false]]) {
+  for(const [href,top,accepted] of [['https://localhost/',true,false],['vscode-file://vscode-app/index.html',true,true],['https://localhost/preview',false,false],['plugin://swarm--official/index',false,true],['plugin://other/index',false,false]]) {
     const u=new URL(href); const window={location:{protocol:u.protocol,hostname:u.hostname,href}}; window.top=top?window:{};
-    const ctx=vm.createContext({window,boot:{}}); vm.runInContext('(function(){'+guard+'globalThis.accepted=true;})()',ctx); assert.equal(!!ctx.accepted,accepted,href);
+    const ctx=vm.createContext({window,boot:{},fromDcl:false,document:{documentElement:{},readyState:'complete',querySelector:()=>null}}); vm.runInContext('(function(){'+guard+'globalThis.accepted=true;})()',ctx); assert.equal(!!ctx.accepted,accepted,href);
   }
 });
 test('daemon explicit origin arrays remain restrictive and defaults include Swarm', () => {

@@ -128,7 +128,7 @@ test('v520 keeps PS5.1 flat JSON enumeration, fork packaging and version', () =>
   assert.ok(source.includes('$items = @(foreach ($x in $parsed) { if ($null -ne $x) { $x } })'));
   assert.ok(source.includes('$paths = @(foreach ($x in $parsed) { if ($null -ne $x) { [string]$x } })'));
   assert.doesNotMatch(source, /hasFlag\(['"]--sync-user/);
-  assert.match(source, /version: '5\.3\.0-eric\.2'/);
+  assert.match(source, /version: '5\.4\.2-eric\.1'/);
   assert.match(source, /https:\/\/github.com\/pumblus\/chuanban-antigravity-theme-patch/);
   const pack = source.slice(source.indexOf('function buildDistZip'), source.indexOf('function verifyCoreIntegrity'));
   assert.match(pack, /'FORK\.md'/); assert.match(pack, /'CHANGELOG\.md'/);

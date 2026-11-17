@@ -22,13 +22,14 @@ function page(options={}) {
 async function connection(p,options={}) {
  const time=clock(),sent=[],contexts=new Map([[1,p.ctx]]);let socket;
  class WS {static OPEN=1;readyState=1;handlers={};constructor(){socket=this;}addEventListener(k,f){this.handlers[k]=f;}send(raw){const m=JSON.parse(raw);sent.push(m);let value=true;
+  if(m.method==='Runtime.evaluate'&&m.params.expression.includes("return 'non_host'"))value='host';
   if(m.method==='Runtime.evaluate'&&m.params.contextId){const ctx=contexts.get(m.params.contextId);value=ctx?vm.runInContext(m.params.expression,ctx):false;}
   queueMicrotask(()=>this.handlers.message({data:JSON.stringify({id:m.id,result:{identifier:'test-script',result:{value}}})}));
  }}
- const config={enabled:true,modules:{coldBootHealer:true,metrics:false,...options.modules}};
- const ctx=vm.createContext({WebSocket:WS,...time,console:{log(){},error(){}},activeConfig:config,DatabaseSync:null,cachedInjectScript:'true',cachedPatchVersion:'test',attachedTargets:new Map(),Date:{now:()=>100000}});
- vm.runInContext(slice(daemon,'function attachTarget(', '\nlet isSyncing')+'\nglobalThis.attach=attachTarget;',ctx);
- const promise=ctx.attach({id:options.id||'page-1',type:options.type||'page',webSocketDebuggerUrl:'ws://mock'}, {channel:'stable'});
+ const config={enabled:true,allowedOrigins:['http://localhost'],modules:{coldBootHealer:true,metrics:false,...options.modules}};
+ const ctx=vm.createContext({URL,WebSocket:WS,...time,console:{log(){},error(){}},activeConfig:config,DatabaseSync:null,cachedInjectScript:'true',cachedPatchVersion:'test',attachedTargets:new Map(),Date:{now:()=>100000}});
+ vm.runInContext(slice(daemon,'const attachedTargets =', '\nlet isSyncing')+'\nglobalThis.attach=attachTarget;',ctx);
+ const promise=ctx.attach({id:options.id||'page-1',type:options.type||'page',url:'http://localhost:3000/',webSocketDebuggerUrl:'ws://mock'}, {channel:'stable'});
  await socket.handlers.open();assert.equal(await promise,true);
  const event=(payload,contextId=1)=>socket.handlers.message({data:JSON.stringify({method:'Runtime.bindingCalled',params:{name:'__agRequestHardReload',payload,executionContextId:contextId}})});
  p.window.__agRequestHardReload=payload=>event(payload);

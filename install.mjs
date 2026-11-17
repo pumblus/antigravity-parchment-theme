@@ -111,7 +111,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.3.0-eric.2',
+    version: '5.4.2-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -535,7 +535,11 @@ function ensureArgvRemoteDebugging(channel = 'auto') {
 
 function isAllowedOrigin(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return false;
-  return ALLOWED_ORIGINS.some((prefix) => urlStr.startsWith(prefix));
+  try {
+    const url = new URL(urlStr);
+    if (url.protocol === 'vscode-file:') return true;
+    return ['http:', 'https:'].includes(url.protocol) && ['127.0.0.1', 'localhost'].includes(url.hostname) && !url.username && !url.password;
+  } catch { return false; }
 }
 
 function fetchTargetsFromPort(port) {
@@ -625,62 +629,100 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
     return { reachable: true, port, pages: 0, reason: 'No active workbench page target' };
   }
 
-  const page = pages[0];
-  const state = await new Promise((resolve) => {
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    const timer = setTimeout(() => {
-      try {
-        ws.close();
-      } catch {}
-      resolve(null);
-    }, 2000);
-    ws.addEventListener('open', () => {
-      ws.send(
-        JSON.stringify({
-          id: 1,
-          method: 'Runtime.evaluate',
-          params: {
-            expression: `({
-              version: window.__ag_patch_version || null,
-              bodyReady: window.__ag_body_ready === true,
-              hasStyle: !!document.getElementById('ag-custom-fonts'),
-              hasUserStyle: !!document.getElementById('antigravity-user-custom-style'),
-              preset: document.documentElement.getAttribute('data-ag-preset'),
-              themeMode: document.documentElement.getAttribute('data-ag-theme-mode'),
-              pageType: document.documentElement.getAttribute('data-ag-page-type'),
-              waxSeal: document.documentElement.getAttribute('data-ag-wax-seal'),
-              dictCount: window.__ag_i18n_dict ? Object.keys(window.__ag_i18n_dict).length : 0,
-              protoSafe: window.__ag_i18n_dict ? Object.getPrototypeOf(window.__ag_i18n_dict) === null : false,
-              pillMounted: !!document.getElementById('ag-live-metrics-pill'),
-              pillText: document.getElementById('ag-live-metrics-pill')?.textContent || null
-            })`,
-            returnByValue: true
-          }
-        })
-      );
-    });
-    ws.addEventListener('message', (ev) => {
-      try {
-        const msg = JSON.parse(String(ev.data));
-        if (msg.id === 1) {
-          clearTimeout(timer);
+  const evaluatePageState = (candidate) =>
+    new Promise((resolve) => {
+      const ws = new WebSocket(candidate.webSocketDebuggerUrl);
+      const timer = setTimeout(() => {
+        try {
           ws.close();
-          resolve(msg.result?.result?.value || null);
-        }
-      } catch {}
+        } catch {}
+        resolve(null);
+      }, 2000);
+      ws.addEventListener('open', () => {
+        ws.send(
+          JSON.stringify({
+            id: 1,
+            method: 'Runtime.evaluate',
+            params: {
+              expression: `({
+                __isHost: !!(
+                  (window.location && window.location.protocol === 'vscode-file:') ||
+                  (window.__APP_CONFIG__ && window.__APP_CONFIG__.productName === 'antigravity') ||
+                  (window.electronNative && (
+                    (typeof window.electronNative.setTitleBarOverlay === 'function' && window.nativeStorage && typeof window.nativeStorage.getItems === 'function') ||
+                    (typeof window.electronNative.getZoomLevel === 'function' && window.electronNative.wcvBrowser && typeof window.electronNative.wcvBrowser.setThemeColor === 'function')
+                  )) ||
+                  (typeof document !== 'undefined' && typeof document.querySelector === 'function' && document.querySelector('link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]'))
+                ),
+                version: window.__ag_patch_version || null,
+                bodyReady: window.__ag_body_ready === true,
+                hasStyle: !!document.getElementById('ag-custom-fonts'),
+                hasUserStyle: !!document.getElementById('antigravity-user-custom-style'),
+                preset: document.documentElement ? document.documentElement.getAttribute('data-ag-preset') : null,
+                themeMode: document.documentElement ? document.documentElement.getAttribute('data-ag-theme-mode') : null,
+                pageType: document.documentElement ? document.documentElement.getAttribute('data-ag-page-type') : null,
+                waxSeal: document.documentElement ? document.documentElement.getAttribute('data-ag-wax-seal') : null,
+                dictCount: window.__ag_i18n_dict ? Object.keys(window.__ag_i18n_dict).length : 0,
+                protoSafe: window.__ag_i18n_dict ? Object.getPrototypeOf(window.__ag_i18n_dict) === null : false,
+                pillMounted: !!document.getElementById('ag-live-metrics-pill'),
+                pillText: document.getElementById('ag-live-metrics-pill')?.textContent || null
+              })`,
+              returnByValue: true
+            }
+          })
+        );
+      });
+      ws.addEventListener('message', (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data));
+          if (msg.id === 1) {
+            clearTimeout(timer);
+            ws.close();
+            resolve(msg.result?.result?.value || null);
+          }
+        } catch {}
+      });
+      ws.addEventListener('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
     });
-    ws.addEventListener('error', () => {
-      clearTimeout(timer);
-      resolve(null);
-    });
-  });
+
+  let selected = null;
+  let firstHostCandidate = null;
+
+  for (const candidate of pages) {
+    const rawState = await evaluatePageState(candidate);
+    if (rawState === null) {
+      continue;
+    }
+    const isHost = rawState.__isHost === true;
+    const cleanState = { ...rawState };
+    delete cleanState.__isHost;
+    if (isHost) {
+      if (cleanState.hasStyle === true) {
+        selected = { page: candidate, state: cleanState };
+        break;
+      }
+      if (!firstHostCandidate) {
+        firstHostCandidate = { page: candidate, state: cleanState };
+      }
+    }
+  }
+
+  if (!selected) {
+    selected = firstHostCandidate;
+  }
+  if (!selected) {
+    return { reachable: true, port, pages: 0, reason: 'No active workbench page target' };
+  }
 
   return {
     reachable: true,
     port,
-    targetId: page.id,
-    title: page.title,
-    state
+    targetId: selected.page.id,
+    title: selected.page.title,
+    state: selected.state
   };
 }
 
@@ -1249,7 +1291,7 @@ async function runVerify() {
   spawnSync(process.execPath, daemonArgs, { stdio: 'inherit' });
   const env = await detectEnvironment(channel);
   const live = await inspectLiveWindow(env);
-  const ok = Boolean(live.reachable && (live.state?.hasStyle || live.pages === 0));
+  const ok = Boolean(live.reachable && live.state?.hasStyle && live.state?.bodyReady);
   console.log(
     JSON.stringify(
       {

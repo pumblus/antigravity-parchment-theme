@@ -40,6 +40,7 @@ async function fixture(t, html, pathname = '/') {
   const executablePath = process.env.CHROMIUM_PATH || (fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome') ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : undefined);
   const browser = await chromium.launch({executablePath,headless:true}); t.after(()=>browser.close());
   const page = await browser.newPage();
+  await page.addInitScript(() => { window.__APP_CONFIG__ = { productName: 'antigravity' }; });
   await page.route('**/*',route=>route.fulfill({contentType:'text/html',body:html}));
   await page.goto('http://fixture.invalid'+pathname);
   const inject = async (extra={}) => page.evaluate(runtime.replace('__AG_BOOT_PAYLOAD__',()=>JSON.stringify({version:'v530-test',cssText:'',platform:'darwin',modules:{metrics:false,deadlockHealer:false,zoomShortcuts:false},i18nDict:{'Copy code':'复制代码','Cancel':'取消','Threads':'自定义工作流'},...extra})));

@@ -3,7 +3,7 @@ name: chuanban-antigravity-theme-patch
 description: 船板的 Antigravity 2.0 主题、字体与深度汉化全栈成品补丁包（v5.3.0 模块化架构 · Antigravity 2.31.2 / 2.32.1 源码适配 + Swarm 协作面板跨域子帧同步 + 原生幕布底色桥接 + 昼夜双模式独立解耦 + 1756条零大小写冲突词典与 DICT_CI 兜底 + SQLite O(1) 增量遥测）。采用「core/ 只读黄金内核 + user/ 永不覆盖改装层 + install.mjs 一键生命周期 CLI」，支持对方 Agent 零代码生成一键部署、2.5 秒热重载二次定制与 --safe-mode 跳过用户扩展排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
 ---
 
-> **融合分支说明（5.3.0-eric.2）**：此源码包基于上游 v5.3.0 / Antigravity 2.31.2、2.32.1，开发与安装差异见 [FORK.md](FORK.md)。本次更新在本机 `main`，未推送远端；请核对实际源码版本。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。2.31.2 的原生幕布颜色桥接会通过客户端 API 持久化主题色到应用配置，不修改应用二进制；部署前需备份相关应用配置。
+> **融合分支说明（5.4.2-eric.1）**：此源码包在上游 v5.3.0 基础上选择性移植 v5.4.2 宿主识别与 Swarm 明暗同步，非全量合并；支持基线仍为 Antigravity 2.31.2、2.32.1，开发与安装差异见 [FORK.md](FORK.md)。本次更新在本机 `main`，未推送远端；请核对实际源码版本。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。安装会修改调试端口和自启服务，只在用户明确要求部署且相关权限已获准后执行。开发/测试此 fork 不等于授权安装。2.31.2 的原生幕布颜色桥接会通过客户端 API 持久化主题色到应用配置，不修改应用二进制；部署前需备份相关应用配置。
 
 # 船板的 Antigravity 主题、字体与深度汉化全栈成品补丁（v5.3.0 · 昼夜双模式解耦 & Antigravity 2.31.2 / 2.32.1 源码适配）
 
@@ -103,7 +103,7 @@ node install.mjs install --channel stable
 ```bash
 node install.mjs verify
 ```
-当终端输出 `"ok": true` 且显示 `"version": "20261115-v5.3.0-eric.2-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
+当终端输出 `"ok": true` 且显示 `"version": "20261117-v5.4.2-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译与指标数据，不能仅凭这些标志认定所有功能通过验收。
 
 ---
 

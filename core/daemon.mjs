@@ -2,7 +2,7 @@
 /**
  * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（v5.3.0）：
+ * 架构特性（融合版 v5.4.2-eric.1）：
  * 1. 动态 Node 分级：
  *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、死锁修复与实验性冷启动普通重载（默认关闭）及 2.32.1/2.32.0 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）；低版本优雅降级绝不崩溃。
@@ -62,7 +62,8 @@ const CLI_CHANNEL = getArg('--channel', null);
 function readJsonSafe(filePath, fallback = {}) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
   } catch {
     return fallback;
   }
@@ -222,7 +223,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261115-v5.3.0-eric.2';
+const BASE_VERSION = '20261117-v5.4.2-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -1755,6 +1756,89 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
 // 5. CDP 目标发现、WebSocket 会话挂载与热更新推送
 // ============================================================================
 const attachedTargets = new Map();
+const targetThemeModes = new Map();
+const targetMetaMap = new Map();
+const skippedNonHostTargets = new Map(); // targetId -> { url, skippedAt }
+
+// CDP may omit parentId. Never guess between multiple host windows.
+function resolveParentThemeTarget(target, endpoint) {
+  let curId = target?.parentId || null;
+  const seen = new Set();
+  while (curId && !seen.has(curId)) {
+    seen.add(curId);
+    const entry = attachedTargets.get(curId);
+    if (entry?.type === 'page') {
+      return entry.hostConfirmed && entry.endpoint?.channel === endpoint?.channel ? curId : null;
+    }
+    const meta = targetMetaMap.get(curId);
+    if (!meta || meta.type === 'page') return null;
+    curId = meta.parentId || null;
+  }
+  if (seen.size) return null;
+  const candidates = [...attachedTargets].filter(([, entry]) =>
+    entry.hostConfirmed && entry.type === 'page' && entry.endpoint?.channel === endpoint?.channel
+  );
+  return candidates.length === 1 ? candidates[0][0] : null;
+}
+
+function resolveParentThemeMode(target, endpoint) {
+  const id = resolveParentThemeTarget(target, endpoint);
+  return id ? targetThemeModes.get(id) || null : null;
+}
+
+function syncThemeToChildIframes() {
+  for (const [, entry] of attachedTargets.entries()) {
+    if (!entry.hostConfirmed || entry.type !== 'iframe') continue;
+    const mode = activeConfig.enabled ? resolveParentThemeMode(entry, entry.endpoint) : null;
+    if (entry.lastParentThemeMode === mode) continue;
+    entry.lastParentThemeMode = mode;
+    const relayGeneration = (entry.themeRelayGeneration || 0) + 1;
+    entry.themeRelayGeneration = relayGeneration;
+    const retry = () => { if (entry.themeRelayGeneration === relayGeneration) entry.lastParentThemeMode = undefined; };
+    entry.send('Runtime.evaluate', {
+      expression: `typeof window.__ag_set_host_theme_mode === 'function' && (window.__ag_set_host_theme_mode(${JSON.stringify(mode)}), true)`,
+      returnByValue: true
+    }).then(result => { if (result?.result?.result?.value !== true || result.error || result.result?.exceptionDetails) retry(); }).catch(retry);
+    entry.updateNewDocScript?.().catch(() => {});
+  }
+}
+
+
+function isExemptInternalTarget(target) {
+  const url = String(target?.url || '');
+  if (target?.type === 'iframe' && url.startsWith('plugin://swarm--')) return true;
+  if (url.startsWith('vscode-file://')) return true;
+  return false;
+}
+
+const HOST_PROBE_EXPRESSION = `(function(){
+  try {
+    var loc = window.location;
+    var isSwarm = !!(loc && ((loc.protocol === 'plugin:' && /^swarm--/i.test(loc.hostname || '')) || /^plugin:\\/\\/swarm--/i.test(String(loc.href || ''))));
+    if (isSwarm || (loc && loc.protocol === 'vscode-file:')) return 'host';
+    if (window.__APP_CONFIG__ && window.__APP_CONFIG__.productName === 'antigravity') return 'host';
+    if (
+      window.electronNative &&
+      ((typeof window.electronNative.setTitleBarOverlay === 'function' &&
+        window.nativeStorage &&
+        typeof window.nativeStorage.getItems === 'function') ||
+        (typeof window.electronNative.getZoomLevel === 'function' &&
+          window.electronNative.wcvBrowser &&
+          typeof window.electronNative.wcvBrowser.setThemeColor === 'function'))
+    ) return 'host';
+    if (
+      typeof document !== 'undefined' &&
+      typeof document.querySelector === 'function' &&
+      document.querySelector('link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]')
+    ) return 'host';
+    if (typeof document === 'undefined' || !document.documentElement || document.readyState === 'loading') {
+      return 'pending';
+    }
+    return 'non_host';
+  } catch (e) {
+    return 'pending';
+  }
+})()`;
 
 function readPort(portFile) {
   try {
@@ -1793,7 +1877,16 @@ function fetchTargets(port) {
 
 function isAllowedOrigin(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return false;
-  return activeConfig.allowedOrigins.some((prefix) => urlStr.startsWith(prefix));
+  return activeConfig.allowedOrigins.some((prefix) => {
+    if (typeof prefix !== 'string' || !prefix) return false;
+    if (['http://localhost', 'https://localhost', 'http://127.0.0.1', 'https://127.0.0.1'].includes(prefix)) {
+      try {
+        const url = new URL(urlStr), allowed = new URL(prefix);
+        return url.protocol === allowed.protocol && url.hostname === allowed.hostname && !url.username && !url.password;
+      } catch { return false; }
+    }
+    return urlStr.startsWith(prefix);
+  });
 }
 
 function attachTarget(target, endpoint) {
@@ -1834,24 +1927,65 @@ function attachTarget(target, endpoint) {
           ws.send(JSON.stringify({ id, method, params }));
         });
 
-      const updateNewDocScript = async () => {
-        if (evalScriptId) {
-          await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: evalScriptId });
-          evalScriptId = null;
+      let newDocQueue = Promise.resolve();
+      let lastNewDocSig = '';
+
+      const buildTargetInjectScript = () => {
+        if (!activeConfig.enabled || target.type !== 'iframe') {
+          return { script: cachedInjectScript, parentMode: '' };
         }
-        if (activeConfig.enabled) {
-          const addRes = await send('Page.addScriptToEvaluateOnNewDocument', { source: cachedInjectScript });
-          if (addRes?.result?.identifier) {
-            evalScriptId = addRes.result.identifier;
-          }
+        const entry = attachedTargets.get(target.id);
+        const parentMode = resolveParentThemeMode(entry || target, entry?.endpoint || endpoint) || '';
+        if (parentMode !== 'dark' && parentMode !== 'light') {
+          return {
+            script: `window.__ag_host_theme_mode=null;\n${cachedInjectScript}`,
+            parentMode: ''
+          };
         }
+        return {
+          script: `window.__ag_host_theme_mode=${JSON.stringify(parentMode)};\n${cachedInjectScript}`,
+          parentMode
+        };
+      };
+
+      const updateNewDocScript = (force = false) => {
+        newDocQueue = newDocQueue
+          .then(async () => {
+            if (!hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
+            const { script, parentMode } = buildTargetInjectScript();
+            const nextSig = `${activeConfig.enabled}|${cachedPatchVersion}|${parentMode}`;
+            if (!force && evalScriptId && nextSig === lastNewDocSig) return;
+            if (evalScriptId) {
+              await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: evalScriptId });
+              evalScriptId = null;
+            }
+            if (activeConfig.enabled && hostConfirmed && !nonHostSettled) {
+              const addRes = await send('Page.addScriptToEvaluateOnNewDocument', { source: script });
+              if (addRes?.result?.identifier) {
+                evalScriptId = addRes.result.identifier;
+                lastNewDocSig = nextSig;
+                if (!hostConfirmed || nonHostSettled) {
+                  await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: evalScriptId });
+                  evalScriptId = null;
+                }
+              }
+            } else {
+              lastNewDocSig = nextSig;
+            }
+          })
+          .catch(() => {});
+        return newDocQueue;
       };
 
       const inject = async () => {
+        if (!hostConfirmed || nonHostSettled || !isAllowedOrigin(currentTargetUrl)) return false;
+        const generation = navigationGeneration;
+        const { script } = buildTargetInjectScript();
         const res = await send('Runtime.evaluate', {
-          expression: cachedInjectScript,
+          expression: script,
           returnByValue: true
         });
+        if (!res || generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return false;
         if (res?.error) {
           console.error(`[Daemon] Injection error on ${target.id}:`, res.error.message || res.error);
           return false;
@@ -1862,13 +1996,27 @@ function attachTarget(target, endpoint) {
           );
           return false;
         } else {
+          if (target.type === 'page') {
+            if (!activeConfig.enabled) {
+              targetThemeModes.delete(target.id);
+            } else {
+              const resolvedMode = res?.result?.result?.value;
+              if (resolvedMode === 'dark' || resolvedMode === 'light') {
+                const prevMode = targetThemeModes.get(target.id);
+                targetThemeModes.set(target.id, resolvedMode);
+                if (prevMode !== resolvedMode) {
+                  syncThemeToChildIframes(target.id, resolvedMode);
+                }
+              }
+            }
+          }
           console.log(`[Daemon] Injected (${cachedPatchVersion}) into target ${target.id} [${endpoint.channel}]`);
           return true;
         }
       };
 
       const syncMetricsForSession = async (force = false) => {
-        if (target.type === 'iframe' || !DatabaseSync || !activeConfig.modules.metrics || !activeConfig.enabled) return;
+        if (!hostConfirmed || nonHostSettled || target.type === 'iframe' || !DatabaseSync || !activeConfig.modules.metrics || !activeConfig.enabled) return;
 
         // 仅在尚未获知 activeCascadeId 或强制重同步时向前端发起 Runtime.evaluate，日常靠 __agRequestMetrics 绑定事件实时驱动
         if (!activeCascadeId || force) {
@@ -1937,40 +2085,300 @@ function attachTarget(target, endpoint) {
 
       const checkAndInject = async () => {
         try {
+          if (!hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
+          const generation = navigationGeneration;
+          if (!isAllowedOrigin(currentTargetUrl)) {
+            if (attachedTargets.get(target.id)?.ws === ws) {
+              attachedTargets.delete(target.id);
+              targetThemeModes.delete(target.id);
+            }
+            try {
+              ws.close();
+            } catch {}
+            return;
+          }
+          if (isExemptInternalTarget({ type: target.type, url: currentTargetUrl })) {
+            const checkRes = await send('Runtime.evaluate', {
+              expression:
+                '({ ok: window.__ag_patch_version === ' +
+                JSON.stringify(cachedPatchVersion) +
+                ' && (' +
+                JSON.stringify(!activeConfig.enabled) +
+                ' || (window.__ag_body_ready === true && !!document.getElementById("ag-custom-fonts"))), mode: ' +
+                JSON.stringify(target.type === 'iframe' ? 'iframe' : 'page') +
+                ' === "iframe" ? (window.__ag_host_theme_mode || null) : (window.__ag_resolved_theme_mode || null) })',
+              returnByValue: true
+            });
+            if (generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return;
+            const checkVal = checkRes?.result?.result?.value;
+            if (!checkVal || checkVal.ok !== true) {
+              await inject();
+              await syncMetricsForSession(true);
+            } else if (activeConfig.enabled && target.type === 'page') {
+              if (checkVal.mode === 'dark' || checkVal.mode === 'light') {
+                const prevMode = targetThemeModes.get(target.id);
+                targetThemeModes.set(target.id, checkVal.mode);
+                if (prevMode !== checkVal.mode) {
+                  syncThemeToChildIframes(target.id, checkVal.mode);
+                }
+              }
+            } else if (activeConfig.enabled && target.type === 'iframe') {
+              const entry = attachedTargets.get(target.id);
+              const parentMode = resolveParentThemeMode(entry || target, entry?.endpoint || endpoint);
+              if (checkVal.mode !== parentMode) {
+                await send('Runtime.evaluate', {
+                  expression: `window.__ag_set_host_theme_mode && window.__ag_set_host_theme_mode(${JSON.stringify(parentMode)})`,
+                  returnByValue: false
+                });
+                await updateNewDocScript();
+              } else if (!evalScriptId) {
+                await updateNewDocScript();
+              }
+            }
+            return;
+          }
           const checkRes = await send('Runtime.evaluate', {
-            expression:
-              'window.__ag_patch_version === ' +
-              JSON.stringify(cachedPatchVersion) +
-              ' && (' +
-              JSON.stringify(!activeConfig.enabled) +
-              ' || (window.__ag_body_ready === true && !!document.getElementById("ag-custom-fonts")))',
+            expression: `({
+              injected: window.__ag_patch_version === ${JSON.stringify(cachedPatchVersion)} && (${JSON.stringify(!activeConfig.enabled)} || (window.__ag_body_ready === true && !!document.getElementById("ag-custom-fonts"))),
+              skipNonHost: window.__ag_skip_non_host === true,
+              kind: ${HOST_PROBE_EXPRESSION},
+              mode: window.__ag_resolved_theme_mode || null
+            })`,
             returnByValue: true
           });
-          if (checkRes?.result?.result?.value !== true) {
+          if (generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return;
+          const state = checkRes?.result?.result?.value;
+          if (!state || typeof state !== 'object') return;
+          if (state.skipNonHost || state.kind === 'non_host') {
+            await markNonHostAndDetach(currentTargetUrl);
+            return;
+          }
+          if (state.kind === 'pending') {
+            return;
+          }
+          if (state.injected !== true) {
             await inject();
             await syncMetricsForSession(true);
+          } else if (activeConfig.enabled && target.type === 'page') {
+            if (!evalScriptId) {
+              await updateNewDocScript();
+            }
+            if (state.mode === 'dark' || state.mode === 'light') {
+              const prevMode = targetThemeModes.get(target.id);
+              targetThemeModes.set(target.id, state.mode);
+              if (prevMode !== state.mode) {
+                syncThemeToChildIframes(target.id, state.mode);
+              }
+            }
           }
         } catch {}
       };
 
+      let currentTargetUrl = String(target.url || '');
+      let navigationGeneration = 0;
+      let hostConfirmed = false;
+      let nonHostSettled = false;
+      let pendingProbe = false;
+      let probingPending = false;
+      let pendingRecheckQueued = false;
+      let pendingRetryCount = 0;
+      let pendingRetryTimer = null;
+      let runtimeEnabled = false;
+      let pageEnabled = false;
+      let bindingsAdded = false;
       let initialAttachDone = false;
       let navDebounceTimer = null;
       let lastHardReloadAt = 0;
 
-      ws.addEventListener('open', async () => {
-        console.log(`[Daemon] Attached target: ${target.id} (${target.title || 'Untitled'}) [${endpoint.channel}]`);
-        await send('Page.enable');
-        await send('Runtime.enable');
-        await send('Runtime.addBinding', { name: '__agRequestMetrics' });
-        if (target.type === 'page') {
-          await send('Runtime.addBinding', { name: '__agRequestHardReload' });
+      const clearPendingTimer = () => {
+        if (pendingRetryTimer) {
+          clearTimeout(pendingRetryTimer);
+          pendingRetryTimer = null;
         }
-        await updateNewDocScript();
+      };
+
+      const probeHostKind = async () => {
+        const generation = navigationGeneration;
+        const res = await send('Runtime.evaluate', {
+          expression: HOST_PROBE_EXPRESSION,
+          returnByValue: true
+        });
+        if (generation !== navigationGeneration) return 'pending';
+        const val = res?.result?.result?.value;
+        return val === 'host' || val === 'non_host' || val === 'pending' ? val : 'pending';
+      };
+
+      const markNonHostAndDetach = async (reasonUrl = currentTargetUrl) => {
+        if (nonHostSettled) return;
+        nonHostSettled = true;
+        pendingProbe = false;
+        hostConfirmed = false;
+        clearPendingTimer();
+        if (navDebounceTimer) {
+          clearTimeout(navDebounceTimer);
+          navDebounceTimer = null;
+        }
+        const skippedUrl = String(reasonUrl || target.url || '');
+        if (skippedUrl) skippedNonHostTargets.set(target.id, { url: skippedUrl, skippedAt: Date.now() });
+        if (evalScriptId && ws.readyState === WebSocket.OPEN) {
+          const idToRemove = evalScriptId;
+          evalScriptId = null;
+          try {
+            await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: idToRemove });
+          } catch {}
+        }
+        if (attachedTargets.get(target.id)?.ws === ws) {
+          attachedTargets.delete(target.id);
+          targetThemeModes.delete(target.id);
+        }
+        clearTimeout(attachTimeout);
+        try {
+          ws.close();
+        } catch {}
+        finishAttach(false);
+      };
+
+      const promoteToHost = async () => {
+        if (hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return false;
+        const generation = navigationGeneration;
+        hostConfirmed = true;
+        pendingProbe = false;
+        clearPendingTimer();
+        const entry = attachedTargets.get(target.id);
+        if (entry && entry.ws === ws) {
+          entry.hostConfirmed = true;
+        }
+        console.log(`[Daemon] Attached target: ${target.id} (${target.title || 'Untitled'}) [${endpoint.channel}]`);
+        if (!pageEnabled) {
+          pageEnabled = true;
+          await send('Page.enable');
+        }
+        if (!runtimeEnabled) {
+          runtimeEnabled = true;
+          await send('Runtime.enable');
+        }
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled || !hostConfirmed || generation !== navigationGeneration) {
+          finishAttach(false);
+          return false;
+        }
+        if (!bindingsAdded) {
+          bindingsAdded = true;
+          await send('Runtime.addBinding', { name: '__agRequestMetrics' });
+          if (target.type === 'page') {
+            await send('Runtime.addBinding', { name: '__agRequestHardReload' });
+            await send('Runtime.addBinding', { name: '__agSyncHostThemeMode' });
+          }
+        }
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled || !hostConfirmed || generation !== navigationGeneration) {
+          finishAttach(false);
+          return false;
+        }
+        await updateNewDocScript(true);
+        if (generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return false;
         const ok = await inject();
         await syncMetricsForSession(true);
         initialAttachDone = true;
         clearTimeout(attachTimeout);
         finishAttach(ok);
+        return ok;
+      };
+
+      const schedulePendingRetry = () => {
+        clearPendingTimer();
+        if (!pendingProbe || hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
+        if (pendingRetryCount >= 40) {
+          pendingProbe = false;
+          if (attachedTargets.get(target.id)?.ws === ws) {
+            attachedTargets.delete(target.id);
+            targetThemeModes.delete(target.id);
+          }
+          clearTimeout(attachTimeout);
+          try {
+            ws.close();
+          } catch {}
+          finishAttach(false);
+          return;
+        }
+        pendingRetryCount += 1;
+        pendingRetryTimer = setTimeout(() => {
+          pendingRetryTimer = null;
+          void recheckPendingHost();
+        }, 200);
+      };
+
+      const recheckPendingHost = async () => {
+        if (!pendingProbe || hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
+        if (probingPending) {
+          pendingRecheckQueued = true;
+          return;
+        }
+        probingPending = true;
+        try {
+          if (!isAllowedOrigin(currentTargetUrl)) {
+            pendingProbe = false;
+            clearPendingTimer();
+            if (attachedTargets.get(target.id)?.ws === ws) {
+              attachedTargets.delete(target.id);
+              targetThemeModes.delete(target.id);
+            }
+            clearTimeout(attachTimeout);
+            try {
+              ws.close();
+            } catch {}
+            finishAttach(false);
+            return;
+          }
+          if (isExemptInternalTarget({ type: target.type, url: currentTargetUrl })) {
+            await promoteToHost();
+            return;
+          }
+          const kind = await probeHostKind();
+          if (ws.readyState !== WebSocket.OPEN || nonHostSettled || hostConfirmed) return;
+          if (kind === 'host') {
+            await promoteToHost();
+          } else if (kind === 'non_host') {
+            await markNonHostAndDetach(currentTargetUrl);
+          } else if (!pendingRecheckQueued) {
+            schedulePendingRetry();
+          }
+        } finally {
+          probingPending = false;
+          if (pendingRecheckQueued) {
+            pendingRecheckQueued = false;
+            if (pendingProbe && !hostConfirmed && !nonHostSettled && ws.readyState === WebSocket.OPEN) {
+              void recheckPendingHost();
+            }
+          }
+        }
+      };
+
+      ws.addEventListener('open', async () => {
+        if (isExemptInternalTarget(target)) {
+          await promoteToHost();
+          return;
+        }
+        if (!runtimeEnabled) {
+          runtimeEnabled = true;
+          await send('Runtime.enable');
+        }
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        const kind = await probeHostKind();
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        if (kind === 'host') {
+          await promoteToHost();
+          return;
+        }
+        if (kind === 'non_host') {
+          await markNonHostAndDetach(currentTargetUrl);
+          return;
+        }
+        pendingProbe = true;
+        if (!pageEnabled) {
+          pageEnabled = true;
+          await send('Page.enable');
+        }
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        await recheckPendingHost();
       });
 
       ws.addEventListener('message', (event) => {
@@ -1983,6 +2391,7 @@ function attachTarget(target, endpoint) {
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestMetrics') {
+            if (!hostConfirmed) return;
             const nextId = String(msg.params.payload || '').trim();
             if (/^[0-9a-f-]{36}$/i.test(nextId)) {
               activeCascadeId = nextId;
@@ -1992,8 +2401,28 @@ function attachTarget(target, endpoint) {
             }
             return;
           }
+          if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agSyncHostThemeMode') {
+            const mode = String(msg.params.payload || '').trim();
+            const contextId = msg.params.executionContextId;
+            if (hostConfirmed && target.type === 'page' && activeConfig.enabled &&
+                (mode === 'dark' || mode === 'light') && Number.isInteger(contextId) && contextId > 0) {
+              const generation = navigationGeneration;
+              send('Runtime.evaluate', {
+                contextId,
+                expression: `window.top === window && window.__ag_resolved_theme_mode === ${JSON.stringify(mode)} && (${HOST_PROBE_EXPRESSION}) === 'host'`,
+                returnByValue: true
+              }).then(res => {
+                if (res?.result?.result?.value !== true || !hostConfirmed || nonHostSettled ||
+                    !activeConfig.enabled || generation !== navigationGeneration) return;
+                targetThemeModes.set(target.id, mode);
+                syncThemeToChildIframes();
+              }).catch(() => {});
+            }
+            return;
+          }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestHardReload') {
             if (
+              !hostConfirmed ||
               target.type !== 'page' ||
               !activeConfig.enabled ||
               activeConfig.modules.deadlockHealer === false ||
@@ -2019,13 +2448,30 @@ function attachTarget(target, endpoint) {
             });
             return;
           }
-          if (!initialAttachDone) return;
+          if (
+            msg.method === 'Page.frameNavigated' &&
+            (!msg.params?.frame?.parentId || msg.params.frame.id === target.id) &&
+            msg.params?.frame?.url
+          ) {
+            currentTargetUrl = String(msg.params.frame.url);
+            navigationGeneration += 1;
+            hostConfirmed = false;
+            pendingProbe = true;
+            pendingRetryCount = 0;
+            targetThemeModes.delete(target.id);
+            syncThemeToChildIframes();
+          }
           if (
             msg.method === 'Page.frameNavigated' ||
             msg.method === 'Page.loadEventFired' ||
             msg.method === 'Page.domContentEventFired'
           ) {
             if (!msg.params?.frame || !msg.params.frame.parentId || msg.params.frame.id === target.id) {
+              if (pendingProbe && !hostConfirmed && !nonHostSettled) {
+                void recheckPendingHost();
+                return;
+              }
+              if (!initialAttachDone) return;
               if (navDebounceTimer) clearTimeout(navDebounceTimer);
               navDebounceTimer = setTimeout(() => {
                 navDebounceTimer = null;
@@ -2038,13 +2484,18 @@ function attachTarget(target, endpoint) {
 
       const closeHandler = () => {
         clearTimeout(attachTimeout);
+        clearPendingTimer();
+        pendingProbe = false;
         if (navDebounceTimer) {
           clearTimeout(navDebounceTimer);
           navDebounceTimer = null;
         }
         for (const [, cb] of pendingCallbacks) cb(null);
         pendingCallbacks.clear();
-        attachedTargets.delete(target.id);
+        if (attachedTargets.get(target.id)?.ws === ws) {
+          attachedTargets.delete(target.id);
+          targetThemeModes.delete(target.id);
+        }
         finishAttach(false);
       };
       ws.addEventListener('close', closeHandler);
@@ -2052,12 +2503,23 @@ function attachTarget(target, endpoint) {
 
       attachedTargets.set(target.id, {
         ws,
+        type: target.type,
+        parentId: target.parentId || null,
         send,
         updateNewDocScript,
         inject,
         checkAndInject,
         syncMetricsForSession,
         endpoint,
+        get hostConfirmed() {
+          return hostConfirmed;
+        },
+        set hostConfirmed(v) {
+          hostConfirmed = Boolean(v);
+        },
+        updateTargetUrl: (u) => {
+          if (u) currentTargetUrl = String(u);
+        },
         setActiveCascade: (cid) => {
           activeCascadeId = cid;
           lastPushedHash = '';
@@ -2083,10 +2545,15 @@ async function sync() {
   syncTickCount = (syncTickCount + 1) % 6000;
   try {
     const bundleChanged = rebuildBundleIfNeeded();
+    if (!activeConfig.enabled) {
+      targetThemeModes.clear();
+    }
     const shouldHeartbeatCheck = bundleChanged || syncTickCount % 6 === 1;
 
     const activeTargetIds = new Set();
-    const attachPromises = [];
+    const seenRawTargetIds = new Set();
+    const pendingPages = [];
+    const pendingIframes = [];
 
     const probedPorts = new Set();
     const nowMs = Date.now();
@@ -2114,34 +2581,63 @@ async function sync() {
       }
       if (targets.length === 0) continue;
 
+      for (const t of targets) {
+        if (!t?.id) continue;
+        seenRawTargetIds.add(t.id);
+        targetMetaMap.set(t.id, { type: t.type, parentId: t.parentId || null, channel: endpoint.channel });
+        const skipped = skippedNonHostTargets.get(t.id);
+        if (skipped && (String(t.url) !== skipped.url || Date.now() - skipped.skippedAt >= 15000)) {
+          skippedNonHostTargets.delete(t.id);
+        }
+      }
+
       const pages = targets.filter(
         (t) =>
           (t.type === 'page' || (t.type === 'iframe' && String(t.url || '').startsWith('plugin://swarm--'))) &&
           t.webSocketDebuggerUrl &&
           !String(t.url || '').startsWith('devtools://') &&
           isAllowedOrigin(t.url) &&
-          !String(t.title || '').includes('Launchpad')
+          !String(t.title || '').includes('Launchpad') &&
+          !skippedNonHostTargets.has(t.id)
       );
 
       for (const page of pages) {
         activeTargetIds.add(page.id);
+        if (page.type === 'iframe') {
+          pendingIframes.push({ page, endpoint });
+        } else {
+          pendingPages.push({ page, endpoint });
+        }
+      }
+    }
+
+    const syncTargetBatch = async (items) => {
+      const attachPromises = [];
+      for (const { page, endpoint } of items) {
         if (!attachedTargets.has(page.id)) {
           attachPromises.push(attachTarget(page, endpoint));
         } else {
           const entry = attachedTargets.get(page.id);
           entry.endpoint = endpoint;
-          if (bundleChanged && entry.updateNewDocScript) {
-            await entry.updateNewDocScript();
+          entry.parentId = page.parentId || null;
+          entry.updateTargetUrl?.(page.url);
+          if (entry.hostConfirmed) {
+            if (bundleChanged && entry.updateNewDocScript) {
+              await entry.updateNewDocScript();
+            }
+            if (shouldHeartbeatCheck && entry.checkAndInject) await entry.checkAndInject();
+            if (entry.syncMetricsForSession) await entry.syncMetricsForSession(bundleChanged);
           }
-          if (shouldHeartbeatCheck && entry.checkAndInject) await entry.checkAndInject();
-          if (entry.syncMetricsForSession) await entry.syncMetricsForSession(bundleChanged);
         }
       }
-    }
+      if (attachPromises.length > 0) {
+        await Promise.allSettled(attachPromises);
+      }
+    };
 
-    if (attachPromises.length > 0) {
-      await Promise.allSettled(attachPromises);
-    }
+    // 先同步宿主 page 目标以获取权威深浅色状态，再同步子 Swarm iframe（确保 --once 与冷启动零闪烁）
+    await syncTargetBatch(pendingPages);
+    await syncTargetBatch(pendingIframes);
 
     // 清理已关闭的目标连接
     for (const [id, entry] of attachedTargets.entries()) {
@@ -2150,8 +2646,25 @@ async function sync() {
           entry.ws.close();
         } catch {}
         attachedTargets.delete(id);
+        targetThemeModes.delete(id);
       }
     }
+    if (seenRawTargetIds.size > 0) {
+      for (const id of skippedNonHostTargets.keys()) {
+        if (!seenRawTargetIds.has(id)) {
+          skippedNonHostTargets.delete(id);
+        }
+      }
+      for (const id of targetMetaMap.keys()) {
+        if (!seenRawTargetIds.has(id)) {
+          targetMetaMap.delete(id);
+        }
+      }
+    } else if (attachedTargets.size === 0) {
+      targetMetaMap.clear();
+      skippedNonHostTargets.clear();
+    }
+    syncThemeToChildIframes();
   } finally {
     isSyncing = false;
   }

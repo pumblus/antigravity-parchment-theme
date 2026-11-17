@@ -1207,6 +1207,11 @@ html:not([data-ag-theme-mode="dark"])[data-ag-preset="vintage-deep"] body:not(.d
   --code-foreground: #141413 !important;
 }
 
+/* Swarm 宿主旧内联深色变量的浅色回退；其余颜色由融合版暖纸预设完整覆盖。 */
+html[data-ag-page-type="plugin"][data-ag-theme-mode="light"] {
+  --error: #B84239 !important;
+}
+
 /* 白天模式侧栏选中项与 1px 石色分割细节 */
 body[data-agy-theme][data-newux-theme="onyx"]:not(.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--sidebar-secondary) !important;

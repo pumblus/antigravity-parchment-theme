@@ -26,13 +26,14 @@ async function fixture(t, html) {
   browser ||= await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), headless: true });
   const page = await browser.newPage();
   await page.route('**/*', route => route.fulfill({ contentType: 'text/html', body: html }));
+  await page.addInitScript(() => { window.__APP_CONFIG__ = { productName: 'antigravity' }; });
   await page.goto('http://fixture.invalid/');
   t.after(() => page.close());
   return page;
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.3.0-eric.2');
+  assert.equal(manifest.version, '5.4.2-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);

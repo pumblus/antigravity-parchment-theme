@@ -3,7 +3,7 @@
  * 纯正浏览器端注入脚本（零模板字符串双重转义）。
  * 由 core/daemon.mjs 读取并将文件末尾的启动载荷占位符替换为实时配置与资源对象。
  */
-((boot) => {
+(function runBoot(boot, fromDcl) {
   // 0. 顶层窗口隔离：仅允许主窗口与官方内置 Swarm 协作侧栏插件帧（绝不注入 Artifact / HTML 预览等子 iframe）
   const IS_SWARM_PLUGIN_FRAME = !!(
     window.location &&
@@ -13,7 +13,100 @@
   if (window.top !== window && !IS_SWARM_PLUGIN_FRAME) return;
   if (!boot || typeof boot !== 'object') return;
 
-  const PATCH_VERSION = boot.version || '20261115-v5.3.0-eric.2';
+  if (window.__ag_boot_dcl_handler) {
+    try {
+      window.removeEventListener('DOMContentLoaded', window.__ag_boot_dcl_handler);
+    } catch (e) {}
+    window.__ag_boot_dcl_handler = null;
+  }
+  if (window.__ag_boot_doc_observer) {
+    try {
+      window.__ag_boot_doc_observer.disconnect();
+    } catch (e) {}
+    window.__ag_boot_doc_observer = null;
+  }
+
+  const isPreloadHost = () => {
+    if (IS_SWARM_PLUGIN_FRAME || (window.location && window.location.protocol === 'vscode-file:')) {
+      return true;
+    }
+    if (window.__APP_CONFIG__ && window.__APP_CONFIG__.productName === 'antigravity') {
+      return true;
+    }
+    return !!(
+      window.electronNative &&
+      ((typeof window.electronNative.setTitleBarOverlay === 'function' &&
+        window.nativeStorage &&
+        typeof window.nativeStorage.getItems === 'function') ||
+        (typeof window.electronNative.getZoomLevel === 'function' &&
+          window.electronNative.wcvBrowser &&
+          typeof window.electronNative.wcvBrowser.setThemeColor === 'function'))
+    );
+  };
+
+  const isAntigravityHost = () => {
+    if (isPreloadHost()) return true;
+    return !!(
+      typeof document !== 'undefined' &&
+      typeof document.querySelector === 'function' &&
+      document.querySelector(
+        'link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]'
+      )
+    );
+  };
+
+  const scheduleBootOnDcl = () => {
+    if (typeof window.addEventListener !== 'function') return;
+    window.__ag_boot_dcl_handler = () => {
+      window.__ag_boot_dcl_handler = null;
+      runBoot(boot, true);
+    };
+    window.addEventListener('DOMContentLoaded', window.__ag_boot_dcl_handler, { once: true });
+  };
+
+  if (typeof document === 'undefined' || !document.documentElement) {
+    if (typeof document !== 'undefined') {
+      // 主窗口 Preload 桥接已就绪但 <html> 尚未创建（NewDocument 0ms）：监听节点诞生微秒级瞬时挂载防闪白
+      if (isPreloadHost() && typeof MutationObserver === 'function') {
+        try {
+          const obs = new MutationObserver(() => {
+            if (document.documentElement) {
+              try {
+                obs.disconnect();
+              } catch (e) {}
+              window.__ag_boot_doc_observer = null;
+              runBoot(boot, false);
+            }
+          });
+          window.__ag_boot_doc_observer = obs;
+          obs.observe(document, { childList: true });
+        } catch (e) {}
+      }
+      if (!fromDcl && document.readyState === 'loading') {
+        scheduleBootOnDcl();
+      }
+    }
+    return;
+  }
+
+  if (!isAntigravityHost()) {
+    if (!fromDcl && document.readyState === 'loading') {
+      scheduleBootOnDcl();
+      return;
+    }
+    window.__ag_skip_non_host = true;
+    return;
+  }
+
+  if (window.__ag_skip_non_host) {
+    try {
+      delete window.__ag_skip_non_host;
+    } catch (e) {
+      window.__ag_skip_non_host = false;
+    }
+  }
+
+  const PATCH_VERSION = boot.version || '20261117-v5.4.2-eric.1';
   const DETECTED_OS =
     boot.platform || (/Win/i.test(navigator.platform || '') ? 'win32' : /Mac/i.test(navigator.platform || '') ? 'darwin' : 'linux');
   const ENABLED = boot.enabled !== false;
@@ -450,6 +543,10 @@
     window.__ag_zoom_keydown_fn = null;
     window.__ag_zoom_resize_fn = null;
     window.__ag_settings_click_fn = null;
+    window.__ag_sync_preset_fn = null;
+    window.__ag_host_theme_mode = null;
+    window.__ag_set_host_theme_mode = null;
+    window.__ag_resolved_theme_mode = null;
     window.__ag_body_ready = false;
     applyThemeVars({});
     document.documentElement.removeAttribute('data-ag-preset');
@@ -459,7 +556,22 @@
     document.documentElement.removeAttribute('data-ag-os');
     const restoreNativeSurfaces = () => {
       syncCurtainSurfaceColor(true);
-      if (!IS_SWARM_PLUGIN_FRAME) {
+      if (IS_SWARM_PLUGIN_FRAME) {
+        const saved = window.__ag_swarm_surface;
+        const html = document.documentElement;
+        if (saved && html) {
+          // Restore only values still owned by us; never overwrite a newer native update.
+          if (html.getAttribute('data-theme') === saved.appliedTheme) {
+            if (saved.theme === null) html.removeAttribute('data-theme');
+            else html.setAttribute('data-theme', saved.theme);
+          }
+          if (html.style.getPropertyValue('color-scheme') === saved.appliedScheme) {
+            if (saved.scheme) html.style.setProperty('color-scheme', saved.scheme, saved.schemePriority);
+            else html.style.removeProperty('color-scheme');
+          }
+        }
+        delete window.__ag_swarm_surface;
+      } else {
         const hEl = document.documentElement;
         const bEl = document.body;
         const sysDark = !!(
@@ -1090,6 +1202,8 @@
     } catch (e) {}
   }
 
+  let lastSyncedHostMode = null;
+
   function syncChuanbanPreset() {
     try {
       const storedLight = Storage.prototype.getItem.call(localStorage, 'theme-preset-light');
@@ -1135,27 +1249,39 @@
       );
       let isDark = false;
       if (IS_SWARM_PLUGIN_FRAME) {
-        // Swarm 插件 preload 直接向 html 内联 style 注入宿主 --background（不受样式表 !important 覆盖影响）；
-        // 若后台预热阶段尚未收到宿主 theme-change（hostLum === null），优先对齐 ~/.gemini/config/config.json 的 hostThemeMode
-        const inlineHostBg = htmlEl ? (htmlEl.style.getPropertyValue('--background') || '').trim() : '';
+        // Prefer the owning host's live mode. Saved native values below prevent
+        // our own data-theme/color-scheme writes from latching a stale dark fallback.
+        const liveParentMode = window.__ag_host_theme_mode;
+        const surface = window.__ag_swarm_surface || (window.__ag_swarm_surface = {
+          theme: htmlEl.getAttribute('data-theme'),
+          scheme: htmlEl.style.getPropertyValue('color-scheme'),
+          schemePriority: htmlEl.style.getPropertyPriority('color-scheme'),
+          appliedTheme: undefined, appliedScheme: undefined
+        });
+        if (htmlDataTheme !== surface.appliedTheme) surface.theme = htmlDataTheme;
+        const nativeScheme = htmlEl.style.getPropertyValue('color-scheme');
+        if (nativeScheme !== surface.appliedScheme) {
+          surface.scheme = nativeScheme;
+          surface.schemePriority = htmlEl.style.getPropertyPriority('color-scheme');
+        }
+        const inlineHostBg = (htmlEl.style.getPropertyValue('--background') || '').trim();
         const hostLum = computeColorLuminance(inlineHostBg);
-        if (hostLum !== null) {
+        if (liveParentMode === 'dark' || liveParentMode === 'light') {
+          isDark = liveParentMode === 'dark';
+        } else if (hostThemeMode === 'dark' || hostThemeMode === 'light') {
+          isDark = hostThemeMode === 'dark';
+        } else if (hostLum !== null) {
           isDark = hostLum < 0.5;
-        } else if (hostThemeMode === 'dark') {
+        } else if (surface.theme === 'dark') {
           isDark = true;
-        } else if (hostThemeMode === 'light') {
-          isDark = false;
-        } else if (htmlDataTheme === 'dark') {
-          isDark = true;
-        } else if (htmlDataTheme === 'light') {
-          isDark = false;
         } else {
           isDark = systemPrefersDark;
         }
         const swarmMode = isDark ? 'dark' : 'light';
-        if (htmlEl && htmlEl.getAttribute('data-theme') !== swarmMode) {
-          htmlEl.setAttribute('data-theme', swarmMode);
-        }
+        surface.appliedTheme = swarmMode;
+        surface.appliedScheme = swarmMode;
+        if (htmlEl.getAttribute('data-theme') !== swarmMode) htmlEl.setAttribute('data-theme', swarmMode);
+        if (htmlEl.style.getPropertyValue('color-scheme') !== swarmMode) htmlEl.style.setProperty('color-scheme', swarmMode);
       } else {
         const bodyExplicitDark = !!(
           htmlDataTheme === 'dark' ||
@@ -1209,12 +1335,25 @@
       if (prevMode !== targetMode || prevPreset !== targetPreset) {
         document.documentElement.setAttribute('data-ag-theme-mode', targetMode);
       }
+      window.__ag_resolved_theme_mode = targetMode;
+      if (!IS_SWARM_PLUGIN_FRAME && lastSyncedHostMode !== targetMode &&
+          typeof window.__agSyncHostThemeMode === 'function') {
+        try {
+          window.__agSyncHostThemeMode(targetMode);
+          lastSyncedHostMode = targetMode;
+        } catch (e) {}
+      }
       syncWinTitleBarOverlay(isDark);
       syncCurtainSurfaceColor();
     } catch (e) {}
   }
 
   window.__ag_sync_preset_fn = syncChuanbanPreset;
+  window.__ag_set_host_theme_mode = (mode) => {
+    if (!IS_SWARM_PLUGIN_FRAME || (mode !== null && mode !== 'dark' && mode !== 'light')) return;
+    window.__ag_host_theme_mode = mode;
+    window.__ag_sync_preset_fn?.();
+  };
 
   if (!window.__ag_preset_hook_installed) {
     window.__ag_preset_hook_installed = true;
@@ -3074,4 +3213,5 @@
       console.error('[Antigravity Patch] Error in user/custom.js:', err);
     }
   }
+  if (!IS_SWARM_PLUGIN_FRAME) return window.__ag_resolved_theme_mode || null;
 })(__AG_BOOT_PAYLOAD__);
