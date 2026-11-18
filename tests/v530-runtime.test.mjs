@@ -73,9 +73,11 @@ test('v530 runtime metrics accepts dynamic context/stream/subagent payload and i
   await inject({modules:{metrics:true,deadlockHealer:false,zoomShortcuts:false}});
   await page.evaluate(id=>window.__ag_render_metrics({hasData:true,cascadeId:id,inlineHtml:'Ctx 128k/1M <span class="ag-sub-badge">Sub 2</span>',tooltipHtml:'<div>Stream 80% · subagent 2</div>'}),id);
   assert.match(await page.locator('#ag-live-metrics-text').textContent(),/Ctx 128k\/1M.*Sub 2/);
+  await page.locator('#ag-live-metrics-pill').hover();
   assert.match(await page.locator('#ag-live-metrics-tooltip').textContent(),/Stream 80%/);
   await page.evaluate(()=>window.__ag_render_metrics({hasData:true,cascadeId:'different',inlineHtml:'stale',tooltipHtml:'stale'}));
-  assert.equal(await page.locator('#ag-live-metrics-pill').evaluate(el=>el.style.display),'none');
+  assert.equal(await page.locator('#ag-live-metrics-pill').evaluate(el=>el.style.display),'inline-flex');
+  assert.match(await page.locator('#ag-live-metrics-text').textContent(),/Ctx 128k\/1M.*Sub 2/);
   await page.evaluate(()=>{ window.__ag_metrics_raf=requestAnimationFrame(()=>window.__ag_ensure_metrics_pill_fn?.(true)); });
   await inject({enabled:false});
   await page.waitForTimeout(100);

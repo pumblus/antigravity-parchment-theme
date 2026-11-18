@@ -111,7 +111,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.4.2-eric.1',
+    version: '5.4.3-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -644,29 +644,36 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
             id: 1,
             method: 'Runtime.evaluate',
             params: {
-              expression: `({
-                __isHost: !!(
-                  (window.location && window.location.protocol === 'vscode-file:') ||
-                  (window.__APP_CONFIG__ && window.__APP_CONFIG__.productName === 'antigravity') ||
-                  (window.electronNative && (
-                    (typeof window.electronNative.setTitleBarOverlay === 'function' && window.nativeStorage && typeof window.nativeStorage.getItems === 'function') ||
-                    (typeof window.electronNative.getZoomLevel === 'function' && window.electronNative.wcvBrowser && typeof window.electronNative.wcvBrowser.setThemeColor === 'function')
-                  )) ||
-                  (typeof document !== 'undefined' && typeof document.querySelector === 'function' && document.querySelector('link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]'))
-                ),
-                version: window.__ag_patch_version || null,
-                bodyReady: window.__ag_body_ready === true,
-                hasStyle: !!document.getElementById('ag-custom-fonts'),
-                hasUserStyle: !!document.getElementById('antigravity-user-custom-style'),
-                preset: document.documentElement ? document.documentElement.getAttribute('data-ag-preset') : null,
-                themeMode: document.documentElement ? document.documentElement.getAttribute('data-ag-theme-mode') : null,
-                pageType: document.documentElement ? document.documentElement.getAttribute('data-ag-page-type') : null,
-                waxSeal: document.documentElement ? document.documentElement.getAttribute('data-ag-wax-seal') : null,
-                dictCount: window.__ag_i18n_dict ? Object.keys(window.__ag_i18n_dict).length : 0,
-                protoSafe: window.__ag_i18n_dict ? Object.getPrototypeOf(window.__ag_i18n_dict) === null : false,
-                pillMounted: !!document.getElementById('ag-live-metrics-pill'),
-                pillText: document.getElementById('ag-live-metrics-pill')?.textContent || null
-              })`,
+              expression: `(() => {
+                const pills = typeof document !== 'undefined' && typeof document.querySelectorAll === 'function'
+                  ? Array.from(document.querySelectorAll('[data-ag-metrics-pill="1"], #ag-live-metrics-pill'))
+                  : [];
+                const primaryPill = (typeof document !== 'undefined' && document.getElementById('ag-live-metrics-pill')) || pills[0] || null;
+                return {
+                  __isHost: !!(
+                    (window.location && window.location.protocol === 'vscode-file:') ||
+                    (window.__APP_CONFIG__ && window.__APP_CONFIG__.productName === 'antigravity') ||
+                    (window.electronNative && (
+                      (typeof window.electronNative.setTitleBarOverlay === 'function' && window.nativeStorage && typeof window.nativeStorage.getItems === 'function') ||
+                      (typeof window.electronNative.getZoomLevel === 'function' && window.electronNative.wcvBrowser && typeof window.electronNative.wcvBrowser.setThemeColor === 'function')
+                    )) ||
+                    (typeof document !== 'undefined' && typeof document.querySelector === 'function' && document.querySelector('link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]'))
+                  ),
+                  version: window.__ag_patch_version || null,
+                  bodyReady: window.__ag_body_ready === true,
+                  hasStyle: !!document.getElementById('ag-custom-fonts'),
+                  hasUserStyle: !!document.getElementById('antigravity-user-custom-style'),
+                  preset: document.documentElement ? document.documentElement.getAttribute('data-ag-preset') : null,
+                  themeMode: document.documentElement ? document.documentElement.getAttribute('data-ag-theme-mode') : null,
+                  pageType: document.documentElement ? document.documentElement.getAttribute('data-ag-page-type') : null,
+                  waxSeal: document.documentElement ? document.documentElement.getAttribute('data-ag-wax-seal') : null,
+                  dictCount: window.__ag_i18n_dict ? Object.keys(window.__ag_i18n_dict).length : 0,
+                  protoSafe: window.__ag_i18n_dict ? Object.getPrototypeOf(window.__ag_i18n_dict) === null : false,
+                  pillMounted: pills.length > 0,
+                  pillCount: pills.length,
+                  pillText: primaryPill ? (primaryPill.textContent || null) : null
+                };
+              })()`,
               returnByValue: true
             }
           })

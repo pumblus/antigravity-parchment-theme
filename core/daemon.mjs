@@ -223,7 +223,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261117-v5.4.2-eric.1';
+const BASE_VERSION = '20261118-v5.4.3-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -665,6 +665,18 @@ const NO_META_RESCAN_LOCAL_MS = 2500;
 const NO_META_RESCAN_UNC_MS = 15000;
 const childMetricsCache = new Map(); // dbPath -> { sig, hasData, calls, totalIn, totalCache, totalOut, totalThink, totalResp }
 const lineageStateByDir = new Map(); // conversationsDir -> dirState
+function createMetricsPassBudget() {
+  return { startedAt: performance.now(), opens: 0, directories: new Map() };
+}
+function metricsBudgetAvailable(budget) {
+  return !budget || (budget.opens < LINEAGE_TICK_MAX_OPENS && performance.now() - budget.startedAt < LINEAGE_TICK_MAX_MS);
+}
+function consumeMetricsOpen(budget) {
+  if (!metricsBudgetAvailable(budget)) return false;
+  if (budget) budget.opens += 1;
+  return true;
+}
+
 function setChildMetricsCache(dbPath, entry) {
   if (childMetricsCache.has(dbPath)) childMetricsCache.delete(dbPath);
   childMetricsCache.set(dbPath, entry);
@@ -937,7 +949,7 @@ function rememberNoMetaPending(dirState, uuid, statSig) {
   }
 }
 
-function refreshLineageIndex(conversationsDir) {
+function refreshLineageIndex(conversationsDir, budget = null) {
   if (!conversationsDir || !DatabaseSync) {
     return { dirState: null, isDraining: false, backoffSkipped: false };
   }
@@ -1101,6 +1113,7 @@ function refreshLineageIndex(conversationsDir) {
   const busyRetry = [];
 
   while (qIdx < dirState.unindexedQueue.length) {
+    if (!metricsBudgetAvailable(budget)) break;
     if (opens > 0 && (opens >= LINEAGE_TICK_MAX_OPENS || performance.now() - tPerfStart >= LINEAGE_TICK_MAX_MS)) {
       break;
     }
@@ -1112,6 +1125,7 @@ function refreshLineageIndex(conversationsDir) {
     const item = dirState.unindexedQueue[qIdx++];
     dirState.unindexedSet.delete(item.uuid);
     opens += 1;
+    if (budget) budget.opens += 1;
     const res = readTrajectoryLineage(item.dbPath);
     if (res.ok) {
       if (res.hasMeta) {
@@ -1208,7 +1222,7 @@ function findDescendantIds(cascadeId, dirState) {
   return queue;
 }
 
-function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '') {
+function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '', budget = null) {
   if (!cascadeId || !UUID_RE.test(cascadeId) || !conversationsDir) {
     return {
       conversationsDir: '',
@@ -1220,7 +1234,12 @@ function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '') 
     };
   }
 
-  const { dirState, isDraining, backoffSkipped } = refreshLineageIndex(conversationsDir);
+  let directorySnapshot = budget?.directories.get(conversationsDir);
+  if (!directorySnapshot) {
+    directorySnapshot = refreshLineageIndex(conversationsDir, budget);
+    budget?.directories.set(conversationsDir, directorySnapshot);
+  }
+  const { dirState, isDraining, backoffSkipped } = directorySnapshot;
   const descendantIds = findDescendantIds(cascadeId, dirState);
   const childSigs = new Map();
   const childSigParts = [];
@@ -1249,6 +1268,12 @@ function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '') 
         childSigParts.push(`${cid}=${prev || '0:0|0:0'}`);
         continue;
       }
+      if (!metricsBudgetAvailable(budget)) {
+        partialStale = true;
+        childSigs.set(cid, 'unc_deferred');
+        childSigParts.push(`${cid}=budget_deferred`);
+        continue;
+      }
       const statInfo = getDbStatByPath(path.join(conversationsDir, `${cid}.db`));
       if (unc && Date.now() - t0 > 400) {
         wslUncBackoffUntil = Date.now() + 45000;
@@ -1271,7 +1296,7 @@ function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '') 
   };
 }
 
-function loadChildScalarMetrics(childId, conversationsDir, knownStatSig = null, allowUncachedOpen = true) {
+function loadChildScalarMetrics(childId, conversationsDir, knownStatSig = null, allowUncachedOpen = true, budget = null) {
   if (!UUID_RE.test(childId) || !conversationsDir || knownStatSig === 'missing') return { exists: false };
   const dbPath = path.join(conversationsDir, `${childId}.db`);
   const cached = childMetricsCache.get(dbPath);
@@ -1288,7 +1313,7 @@ function loadChildScalarMetrics(childId, conversationsDir, knownStatSig = null, 
     setChildMetricsCache(dbPath, cached);
     return { exists: true, fromCache: true, metrics: cached };
   }
-  if (!allowUncachedOpen) {
+  if (!allowUncachedOpen || !consumeMetricsOpen(budget)) {
     return { exists: true, deferred: true, staleMetrics: cached || null };
   }
 
@@ -1395,7 +1420,7 @@ function formatContextCeiling(tokens) {
   return `${Math.round(tokens / 1000)}k`;
 }
 
-function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = null, precomputedChildSnap = null) {
+function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = null, precomputedChildSnap = null, budget = null) {
   if (!DatabaseSync) return null;
   if (!cascadeId || !UUID_RE.test(cascadeId)) return null;
   const state = precomputedState || getDbState(cascadeId, endpointOrDir);
@@ -1403,7 +1428,7 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
   const { dbPath, sig } = state;
   const conversationsDir = path.dirname(dbPath);
   const childSnap =
-    precomputedChildSnap || getCompositeChildSnapshot(cascadeId, conversationsDir, state.rawSig || sig);
+    precomputedChildSnap || getCompositeChildSnapshot(cascadeId, conversationsDir, state.rawSig || sig, budget);
   const compositeSig = childSnap?.sig || sig;
 
   const cached = metricsCache.get(dbPath);
@@ -1429,6 +1454,9 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     };
   }
 
+  if (!consumeMetricsOpen(budget)) {
+    return { cascadeId, transientError: true, budgetDeferred: true, cachedPayload: cached?.payload || lastBestEffortPayloadCache.get(dbPath) || null };
+  }
   let db;
   const tParentWallStart = Date.now();
   try {
@@ -1605,7 +1633,8 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
         childId,
         conversationsDir,
         knownChildSig,
-        allowUncachedOpen
+        allowUncachedOpen,
+        budget
       );
       if (!childRes.exists) continue;
       if (!childRes.fromCache && !childRes.deferred) {
@@ -1889,6 +1918,55 @@ function isAllowedOrigin(urlStr) {
   });
 }
 
+const CASCADE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_WATCHED_CASCADES = 12;
+
+function normalizeCascadeIdList(raw) {
+  const candidates = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === 'string') candidates.push(item);
+    }
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed) {
+      let decoded = trimmed;
+      try {
+        decoded = decodeURIComponent(trimmed);
+      } catch {}
+      for (const part of decoded.split(/[+,]/)) {
+        candidates.push(part);
+      }
+    }
+  }
+  const seen = new Set();
+  const out = [];
+  for (const item of candidates) {
+    const clean = String(item || '').trim().toLowerCase();
+    if (!CASCADE_UUID_RE.test(clean) || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+    if (out.length >= MAX_WATCHED_CASCADES) break;
+  }
+  return out;
+}
+
+function parseMetricsSubscriptionPayload(rawPayload) {
+  const raw = String(rawPayload ?? '').trim();
+  if (!raw) return { valid: false, ids: [] };
+  if (raw.startsWith('[')) {
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return { valid: true, ids: normalizeCascadeIdList(arr) };
+      }
+    } catch {}
+    return { valid: false, ids: [] };
+  }
+  const ids = normalizeCascadeIdList(raw);
+  return { valid: ids.length > 0, ids };
+}
+
 function attachTarget(target, endpoint) {
   const wsUrl = target.webSocketDebuggerUrl;
   if (!wsUrl) return Promise.resolve(false);
@@ -1906,9 +1984,28 @@ function attachTarget(target, endpoint) {
     try {
       const ws = new WebSocket(wsUrl);
       let msgId = 1;
-      let activeCascadeId = '';
-      let lastPushedHash = '';
-      let lastRenderedSig = '';
+      let watchedCascadeIds = [];
+      let hasExplicitSubscription = false;
+      let subscriptionGeneration = 0;
+      let metricsCursor = 0;
+      let metricsSyncPromise = null;
+      let metricsQueuedForce = false;
+      const perCascadeState = new Map();
+      const resetMetricsSubscription = () => {
+        subscriptionGeneration += 1;
+        hasExplicitSubscription = false;
+        watchedCascadeIds = [];
+        perCascadeState.clear();
+      };
+      const acceptMetricsSubscription = (ids, explicit = true) => {
+        if (hasExplicitSubscription === explicit && ids.join(',') === watchedCascadeIds.join(',')) return false;
+        subscriptionGeneration += 1;
+        watchedCascadeIds = ids;
+        hasExplicitSubscription = explicit;
+        metricsCursor = 0;
+        perCascadeState.clear();
+        return true;
+      };
       let evalScriptId = null;
       const pendingCallbacks = new Map();
 
@@ -1978,6 +2075,7 @@ function attachTarget(target, endpoint) {
       };
 
       const inject = async () => {
+        resetMetricsSubscription();
         if (!hostConfirmed || nonHostSettled || !isAllowedOrigin(currentTargetUrl)) return false;
         const generation = navigationGeneration;
         const { script } = buildTargetInjectScript();
@@ -2015,72 +2113,141 @@ function attachTarget(target, endpoint) {
         }
       };
 
-      const syncMetricsForSession = async (force = false) => {
-        if (!hostConfirmed || nonHostSettled || target.type === 'iframe' || !DatabaseSync || !activeConfig.modules.metrics || !activeConfig.enabled) return;
-
-        // 仅在尚未获知 activeCascadeId 或强制重同步时向前端发起 Runtime.evaluate，日常靠 __agRequestMetrics 绑定事件实时驱动
-        if (!activeCascadeId || force) {
+      const runMetricsSync = async (force = false, skipDomEval = false) => {
+        const admitted = () => hostConfirmed && !nonHostSettled && ws.readyState === WebSocket.OPEN &&
+          target.type === 'page' && isAllowedOrigin(currentTargetUrl) && DatabaseSync && activeConfig.modules.metrics && activeConfig.enabled;
+        if (!admitted()) return;
+        const navigation = navigationGeneration;
+        let generation = subscriptionGeneration;
+        const version = cachedPatchVersion;
+        const valid = () => admitted() && navigation === navigationGeneration && generation === subscriptionGeneration && version === cachedPatchVersion;
+        if (!skipDomEval && (!hasExplicitSubscription || force)) {
           const evalRes = await send('Runtime.evaluate', {
             expression: `(function(){
-              if (window.__ag_watched_cascade_id) return window.__ag_watched_cascade_id;
-              const m = window.location.pathname.match(/\\/c\\/([0-9a-f-]{36})/i);
-              if (m) return m[1];
-              const el = document.querySelector('[data-testid=conversation-row-sidebar][data-selected=true]');
-              return el ? (el.getAttribute('data-cascade-id') || '') : '';
+              if (Array.isArray(window.__ag_watched_cascade_ids) && typeof window.__ag_watched_cascade_sig === 'string') {
+                return { ids: window.__ag_watched_cascade_ids, signature: window.__ag_watched_cascade_sig };
+              }
+              var out = [];
+              var seen = {};
+              var add = function(v) {
+                var s = String(v || '').trim().toLowerCase();
+                if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) && !seen[s]) {
+                  seen[s] = true;
+                  out.push(s);
+                }
+              };
+              var addTab = function(v) {
+                var m = String(v || '').trim().match(/^(?:side_question|subagent_convo)__([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+                if (m) add(m[1]);
+              };
+              var views = document.querySelectorAll('[data-testid="conversation-view"][data-cascade-id], [data-testid="side-question-tab-conversation"][data-cascade-id], [data-testid="subagent-tab-conversation"][data-cascade-id]');
+              for (var i = 0; i < views.length; i++) add(views[i].getAttribute('data-cascade-id'));
+              var activeTabs = document.querySelectorAll('[data-active-tab-id^="side_question__"], [data-active-tab-id^="subagent_convo__"]');
+              for (var t = 0; t < activeTabs.length; t++) addTab(activeTabs[t].getAttribute('data-active-tab-id'));
+              try {
+                var dec = decodeURIComponent(window.location.pathname || '');
+                var m = dec.match(/\\/c\\/([^/?#]+)/i);
+                if (m) {
+                  var parts = m[1].split(/[+%]/);
+                  for (var j = 0; j < parts.length; j++) add(parts[j]);
+                }
+                var sp = new URLSearchParams(window.location.search || '');
+                add(sp.get('focused'));
+                add(sp.get('cascadeId'));
+                var tabs = sp.getAll('tab');
+                for (var u = 0; u < tabs.length; u++) addTab(tabs[u]);
+              } catch (e) {}
+              if (out.length === 0) {
+                var sel = document.querySelectorAll('[data-testid=conversation-row-sidebar][data-selected=true]');
+                for (var k = 0; k < sel.length; k++) add(sel[k].getAttribute('data-cascade-id'));
+              }
+              return { ids: out };
             })()`,
             returnByValue: true
           });
-          const detected = evalRes?.result?.result?.value;
-          if (detected && /^[0-9a-f-]{36}$/i.test(detected)) {
-            activeCascadeId = detected;
+          if (!valid()) return;
+          const raw = evalRes?.result?.result?.value;
+          if (raw && typeof raw === 'object' && Array.isArray(raw.ids)) {
+            const ids = normalizeCascadeIdList(raw.ids);
+            // DOM fallback is provisional. An empty/unhydrated page must keep being
+            // polled until its runtime supplies a matching explicit signature.
+            const explicit = typeof raw.signature === 'string' && raw.signature === ids.join(',');
+            acceptMetricsSubscription(ids, explicit);
+            generation = subscriptionGeneration;
           }
         }
-        if (!activeCascadeId) return;
-
-        // 先在 Node 本地通过 statSync 检查 .db/.db-wal 与子 Agent 复合签名（兼容 Windows WSL 按需懒探测），未变化则 0 WebSocket 通信直接返回
+        if (!valid() || watchedCascadeIds.length === 0) return;
+        const ids = [...watchedCascadeIds];
+        const subscriptionSig = ids.join(',');
         const currentEndpoint = attachedTargets.get(target.id)?.endpoint || endpoint;
-        const dbState = getDbState(activeCascadeId, currentEndpoint);
-        const conversationsDir = dbState?.dbPath ? path.dirname(dbState.dbPath) : '';
-        const childSnap = conversationsDir
-          ? getCompositeChildSnapshot(activeCascadeId, conversationsDir, dbState.rawSig || dbState.sig)
-          : null;
-        const sig = childSnap?.sig || dbState?.sig || 'empty';
-        const sessionKey = `${activeCascadeId}@${sig}|${metricsConfigEpoch}`;
-        const uncCoolingDown = Boolean(
-          (dbState?.uncDeferred || childSnap?.uncBackoffActive) && Date.now() < wslUncBackoffUntil
-        );
-        if (
-          !force &&
-          ((!childSnap?.isDraining && !childSnap?.partialStale && sessionKey === lastPushedHash) ||
-            (uncCoolingDown && lastRenderedSig !== ''))
-        ) {
-          return;
-        }
-
-        const payload = parseConversationMetrics(activeCascadeId, currentEndpoint, dbState, childSnap);
-        if (!payload || payload.transientError) {
-          if (force && payload?.cachedPayload) {
-            await send('Runtime.evaluate', {
-              expression: `window.__ag_render_metrics && window.__ag_render_metrics(${JSON.stringify(payload.cachedPayload)})`,
-              returnByValue: false
-            });
+        // One shared budget for the entire cascade batch, not one budget per pane.
+        // This is a soft CPU/open budget: a single blocking filesystem/SQLite call is not interruptible.
+        const budget = createMetricsPassBudget();
+        const pendingUpdates = [];
+        const start = metricsCursor % ids.length;
+        for (let i = 0; i < ids.length; i++) {
+          if (!metricsBudgetAvailable(budget)) break;
+          const index = (start + i) % ids.length;
+          const cid = ids[index];
+          metricsCursor = (index + 1) % ids.length;
+          let state = perCascadeState.get(cid);
+          if (!state) { state = { lastPushedHash: '', lastRenderedSig: '' }; perCascadeState.set(cid, state); }
+          const dbState = getDbState(cid, currentEndpoint);
+          const dir = dbState?.dbPath ? path.dirname(dbState.dbPath) : '';
+          const childSnap = dir ? getCompositeChildSnapshot(cid, dir, dbState.rawSig || dbState.sig, budget) : null;
+          const sig = childSnap?.sig || dbState?.sig || 'empty';
+          const sessionKey = `${cid}@${sig}|${metricsConfigEpoch}`;
+          if (!force && !childSnap?.isDraining && !childSnap?.partialStale && sessionKey === state.lastPushedHash) continue;
+          if (!force && (dbState?.uncDeferred || childSnap?.uncBackoffActive) && Date.now() < wslUncBackoffUntil && state.lastRenderedSig) continue;
+          const payload = parseConversationMetrics(cid, currentEndpoint, dbState, childSnap, budget);
+          if (!payload || payload.transientError) {
+            if (force && payload?.cachedPayload) pendingUpdates.push({ cid, payload: payload.cachedPayload });
+            continue;
           }
-          return;
+          const renderedSig = `${payload.hasData ? '1' : '0'}\n${payload.inlineHtml || ''}\n${payload.tooltipHtml || ''}`;
+          if (force || renderedSig !== state.lastRenderedSig) {
+            pendingUpdates.push({ cid, payload, state, renderedSig, sessionKey, canCommitHash: !payload.isDraining && !payload.partialStale });
+          } else state.lastPushedHash = !payload.isDraining && !payload.partialStale ? sessionKey : '';
         }
+        if (!valid() || !pendingUpdates.length) return;
+        const payloads = pendingUpdates.map(u => u.payload);
+        const response = await send('Runtime.evaluate', {
+          expression: `(function(){
+            if (window.__ag_patch_version !== ${JSON.stringify(version)} ||
+                window.__ag_watched_cascade_sig !== ${JSON.stringify(subscriptionSig)} ||
+                typeof window.__ag_render_metrics !== 'function') return [];
+            const ack = [];
+            for (const p of ${JSON.stringify(payloads)}) {
+              if (window.__ag_render_metrics(p) === true) ack.push(p.cascadeId);
+            }
+            return ack;
+          })()`,
+          returnByValue: true
+        });
+        if (!valid() || response?.error || response?.result?.exceptionDetails) return;
+        const ack = response?.result?.result?.value;
+        if (!Array.isArray(ack)) return;
+        const accepted = new Set(ack);
+        for (const u of pendingUpdates) {
+          if (!u.state || !accepted.has(u.cid) || perCascadeState.get(u.cid) !== u.state) continue;
+          u.state.lastRenderedSig = u.renderedSig;
+          u.state.lastPushedHash = u.canCommitHash ? u.sessionKey : '';
+        }
+      };
 
-        const renderedSig = `${payload.hasData ? '1' : '0'}\n${payload.inlineHtml || ''}\n${payload.tooltipHtml || ''}`;
-        if (force || renderedSig !== lastRenderedSig) {
-          await send('Runtime.evaluate', {
-            expression: `window.__ag_render_metrics && window.__ag_render_metrics(${JSON.stringify(payload)})`,
-            returnByValue: false
-          });
-          lastRenderedSig = renderedSig;
+      const syncMetricsForSession = (force = false, skipDomEval = false) => {
+        if (metricsSyncPromise) {
+          metricsQueuedForce ||= force;
+          return metricsSyncPromise;
         }
-        if (!payload.isDraining && !payload.partialStale) {
-          lastPushedHash = sessionKey;
-        } else {
-          lastPushedHash = '';
-        }
+        const requestedForce = force || metricsQueuedForce;
+        metricsQueuedForce = false;
+        metricsSyncPromise = runMetricsSync(requestedForce, skipDomEval).catch(() => {}).finally(() => {
+          metricsSyncPromise = null;
+          // Coalesce subscription bursts. The next normal scheduler pass services the
+          // newest generation; no unbounded immediate retry loop can drain DB budgets.
+        });
+        return metricsSyncPromise;
       };
 
       const checkAndInject = async () => {
@@ -2391,14 +2558,9 @@ function attachTarget(target, endpoint) {
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestMetrics') {
-            if (!hostConfirmed) return;
-            const nextId = String(msg.params.payload || '').trim();
-            if (/^[0-9a-f-]{36}$/i.test(nextId)) {
-              activeCascadeId = nextId;
-              lastPushedHash = '';
-              lastRenderedSig = '';
-              syncMetricsForSession(true);
-            }
+            if (!hostConfirmed || nonHostSettled || target.type !== 'page' || !activeConfig.enabled) return;
+            const parsed = parseMetricsSubscriptionPayload(msg.params.payload);
+            if (parsed.valid && acceptMetricsSubscription(parsed.ids)) syncMetricsForSession(true, true);
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agSyncHostThemeMode') {
@@ -2455,6 +2617,7 @@ function attachTarget(target, endpoint) {
           ) {
             currentTargetUrl = String(msg.params.frame.url);
             navigationGeneration += 1;
+            resetMetricsSubscription();
             hostConfirmed = false;
             pendingProbe = true;
             pendingRetryCount = 0;
@@ -2483,6 +2646,7 @@ function attachTarget(target, endpoint) {
       });
 
       const closeHandler = () => {
+        resetMetricsSubscription();
         clearTimeout(attachTimeout);
         clearPendingTimer();
         pendingProbe = false;
@@ -2521,9 +2685,7 @@ function attachTarget(target, endpoint) {
           if (u) currentTargetUrl = String(u);
         },
         setActiveCascade: (cid) => {
-          activeCascadeId = cid;
-          lastPushedHash = '';
-          lastRenderedSig = '';
+          acceptMetricsSubscription(normalizeCascadeIdList(cid));
         }
       });
     } catch {
