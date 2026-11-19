@@ -548,6 +548,8 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
 }
 
 /* 5. Anthropic 扁平纸张层叠几何 + macOS HIG 同心连续曲率圆角（Zero Box-Shadow + Concentric Continuous Corners） */
+/* 2.33+ omits data-newux-theme; retain the same fusion geometry. */
+body[data-agy-theme],
 body[data-agy-theme][data-newux-theme] {
   --nux-composer-frame-radius: var(--ag-radius-composer-outer, 12px) !important;
   --nux-composer-radius: var(--ag-radius-composer-inner, 11px) !important;
@@ -693,6 +695,7 @@ html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="anti
 }
 
 /* 输入框内部卡片（Ivory Light / Warm Slate 抬升一层，11px 同心内圆角，零阴影） */
+body[data-agy-theme] .surface-composer > .surface-composer-card,
 body[data-agy-theme][data-newux-theme="onyx"] .surface-composer > .surface-composer-card,
 .surface-composer > .surface-composer-card,
 .surface-composer-card.bg-card,
@@ -706,6 +709,7 @@ body[data-agy-theme][data-newux-theme="onyx"] .surface-composer > .surface-compo
   transition: border-color 180ms ease !important;
 }
 
+body[data-agy-theme] .surface-composer:focus-within > .surface-composer-card,
 body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .surface-composer-card,
 .surface-composer:focus-within > .surface-composer-card,
 .surface-composer-card:focus-within,
@@ -1216,6 +1220,7 @@ html[data-ag-page-type="plugin"][data-ag-theme-mode="light"] {
 }
 
 /* 白天模式侧栏选中项与 1px 石色分割细节 */
+body[data-agy-theme]:not(.dark) .agy-sidebar-row[data-selected="true"],
 body[data-agy-theme][data-newux-theme="onyx"]:not(.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--sidebar-secondary) !important;
   --row-bg: var(--sidebar-secondary) !important;
@@ -1334,6 +1339,7 @@ html[data-ag-preset] body[data-agy-theme].dark {
 }
 
 /* 黑夜模式侧栏选中态：扁平暖石板填充，移除立体内发光投影 */
+body[data-agy-theme].dark .agy-sidebar-row[data-selected="true"],
 body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selected="true"],
 :is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--onyx-selected, #2A2926) !important;

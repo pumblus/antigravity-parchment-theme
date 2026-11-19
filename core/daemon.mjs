@@ -223,7 +223,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261118-v5.4.3-eric.1';
+const BASE_VERSION = '20261119-v5.5.0-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -1873,8 +1873,8 @@ function readPort(portFile) {
   try {
     const raw = fs.readFileSync(portFile, 'utf8').trim();
     const lines = raw.split(/\r?\n/);
-    const port = parseInt(lines[0], 10);
-    return Number.isFinite(port) && port > 0 ? port : null;
+    const port = /^\d+$/.test(lines[0]) ? Number(lines[0]) : 0;
+    return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
   } catch {
     return null;
   }
@@ -1889,7 +1889,8 @@ function fetchTargets(port) {
         res.on('data', (chunk) => (data += chunk));
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data));
+            const parsed = JSON.parse(data);
+            resolve(res.statusCode === 200 && Array.isArray(parsed) ? parsed : []);
           } catch {
             resolve([]);
           }

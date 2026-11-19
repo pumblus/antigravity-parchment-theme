@@ -111,7 +111,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.4.3-eric.1',
+    version: '5.5.0-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -308,6 +308,76 @@ function verifyCoreIntegrity(baseDir = __dirname) {
 // ============================================================================
 // 2. 环境、字体、argv.json 与实时 CDP 窗口检查
 // ============================================================================
+// Diagnostics only: never start/stop apps or infer CDP readiness from argv.json.
+function parseDevToolsPort(raw) {
+  const first = String(raw || '').trim().split(/\r?\n/)[0];
+  const port = /^\d+$/.test(first) ? Number(first) : 0;
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
+}
+
+function parseMacHostProcesses(output) {
+  const hosts = [];
+  for (const line of String(output).split('\n')) {
+    const match = line.trim().match(/^(\d+)\s+(.+)$/);
+    if (!match) continue;
+    // Anchor the actual executable, not a shell command mentioning the app.
+    const app = match[2].match(/^(.+\/Antigravity( - Insiders)?\.app\/Contents\/MacOS\/Antigravity)(?:\s+(.*))?$/);
+    if (!app || !app[1].startsWith('/') || /\s-/.test(app[1].slice(0, app[1].indexOf('/Antigravity')))) continue;
+    const argv = app[3] || '';
+    if (/(?:^|\s)--(?:type|import)(?:=|\s)|--ms-enable-electron-run-as-node|sidecar_sdk/.test(argv)) continue;
+    hosts.push({ pid: Number(match[1]), channel: app[2] ? 'insiders' : 'stable',
+      hasCdpFlag: /(?:^|\s)--remote-debugging-port(?:=|\s)\d+(?=\s|$)/.test(argv) });
+  }
+  return hosts;
+}
+
+function probeHostProcesses() {
+  // Other platforms deliberately report unknown, rather than an unsafe guess.
+  if (process.platform !== 'darwin') return { known: false, processes: [] };
+  try {
+    const result = spawnSync('/bin/ps', ['-axo', 'pid=,command='], {
+      encoding: 'utf8', timeout: 1500, maxBuffer: 4 * 1024 * 1024
+    });
+    if (result.error || result.status !== 0) return { known: false, processes: [] };
+    return { known: true, processes: parseMacHostProcesses(result.stdout) };
+  } catch { return { known: false, processes: [] }; }
+}
+
+function probeCdpEndpoint(port) {
+  return new Promise((resolve) => {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return resolve(false);
+    const req = http.get({host: '127.0.0.1', port, path: '/json/version', timeout: 450}, (res) => {
+      let data = '';
+      res.on('error', () => resolve(false));
+      res.on('data', chunk => {
+        data += chunk;
+        if (data.length > 65536) { req.destroy(); resolve(false); }
+      });
+      res.on('end', () => {
+        try {
+          const value = JSON.parse(data);
+          const url = new URL(value.webSocketDebuggerUrl);
+          resolve(res.statusCode === 200 && typeof value.Browser === 'string' &&
+            url.protocol === 'ws:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) &&
+            Number(url.port) === port && !url.username && !url.password && url.pathname.startsWith('/devtools/browser/'));
+        } catch { resolve(false); }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+function classifyCdpStatus({ livePort, portFileExists, processKnown, processes }) {
+  // This establishes a live CDP endpoint, not an authenticated Antigravity host.
+  // Host identity and injection are separately verified by inspectLiveWindow.
+  if (livePort) return 'endpoint_reachable';
+  if (!processKnown) return portFileExists ? 'stale_port_file_process_unknown' : 'process_unknown';
+  if (!processes.length) return portFileExists ? 'stale_port_file_app_not_running' : 'app_not_running';
+  if (processes.some(p => p.hasCdpFlag)) return 'flag_present_endpoint_unreachable';
+  return 'running_without_cdp_flag';
+}
+
 async function detectEnvironment(channel = 'auto') {
   const nodeVer = process.versions.node;
   const [major, minor] = nodeVer.split('.').map((n) => parseInt(n, 10));
@@ -374,9 +444,22 @@ async function detectEnvironment(channel = 'auto') {
     };
   };
 
-  const primaryChannel = channel === 'insiders' ? 'insiders' : 'stable';
-  const chInfo = checkSingleChannel(primaryChannel);
-  const insidersInfo = checkSingleChannel('insiders');
+  const channels = { stable: checkSingleChannel('stable'), insiders: checkSingleChannel('insiders') };
+  const processProbe = probeHostProcesses();
+  const selected = channel === 'auto' ? ['stable', 'insiders'] : [channel === 'insiders' ? 'insiders' : 'stable'];
+  for (const ch of selected) {
+    const info = channels[ch];
+    let recordedPort = null;
+    try { recordedPort = parseDevToolsPort(fs.readFileSync(info.portFile, 'utf8')); } catch {}
+    const candidates = [...new Set([recordedPort, info.appExists ? (ch === 'insiders' ? 9223 : 9222) : null].filter(Boolean))];
+    let livePort = null;
+    for (const port of candidates) if (await probeCdpEndpoint(port)) { livePort = port; break; }
+    const processes = processProbe.processes.filter(p => p.channel === ch);
+    Object.assign(info, { recordedPort, livePort, processKnown: processProbe.known, processes });
+    info.cdpStatus = classifyCdpStatus(info);
+  }
+  const chosen = selected.map(ch => channels[ch]);
+  const chInfo = chosen.find(info => info.livePort) || chosen.find(info => info.portFileExists) || chosen[0];
 
   return {
     nodeVer,
@@ -392,13 +475,12 @@ async function detectEnvironment(channel = 'auto') {
     hasAnthropicFont,
     hasSarasaFont,
     channel,
-    appExists: chInfo.appExists || insidersInfo.appExists,
-    portFile: chInfo.portFileExists ? chInfo.portFile : insidersInfo.portFileExists ? insidersInfo.portFile : chInfo.portFile,
-    portFileExists: chInfo.portFileExists || insidersInfo.portFileExists,
-    channels: {
-      stable: checkSingleChannel('stable'),
-      insiders: insidersInfo
-    }
+    appExists: chosen.some(info => info.appExists),
+    portFile: chInfo.portFile,
+    portFileExists: chosen.some(info => info.portFileExists),
+    cdpStatus: chInfo.cdpStatus,
+    cdpGuidance: 'Antigravity 2.33 requires an explicit launch flag; argv.json is not proof of CDP access. Save work and quit the app yourself before a separately authorized launch with --remote-debugging-port=0. This installer never restarts the app.',
+    channels
   };
 }
 
@@ -549,7 +631,8 @@ function fetchTargetsFromPort(port) {
       res.on('data', (c) => (data += c));
       res.on('end', () => {
         try {
-          resolve(JSON.parse(data));
+          const parsed = JSON.parse(data);
+          resolve(res.statusCode === 200 && Array.isArray(parsed) ? parsed : []);
         } catch {
           resolve([]);
         }
@@ -569,10 +652,10 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
 
   if (portFileOrEnv && typeof portFileOrEnv === 'object' && portFileOrEnv.channels) {
     if (portFileOrEnv.portFile) candidateFiles.push(portFileOrEnv.portFile);
-    if (portFileOrEnv.channels.stable?.portFile) candidateFiles.push(portFileOrEnv.channels.stable.portFile);
-    if (portFileOrEnv.channels.insiders?.portFile) candidateFiles.push(portFileOrEnv.channels.insiders.portFile);
-    if (portFileOrEnv.channels.stable?.appExists !== false) candidatePorts.push(9222);
-    if (portFileOrEnv.channels.insiders?.appExists) candidatePorts.push(9223);
+    if (portFileOrEnv.channel !== 'insiders' && portFileOrEnv.channels.stable?.portFile) candidateFiles.push(portFileOrEnv.channels.stable.portFile);
+    if (portFileOrEnv.channel !== 'stable' && portFileOrEnv.channels.insiders?.portFile) candidateFiles.push(portFileOrEnv.channels.insiders.portFile);
+    if (portFileOrEnv.channel !== 'insiders' && portFileOrEnv.channels.stable?.appExists !== false) candidatePorts.push(9222);
+    if (portFileOrEnv.channel !== 'stable' && portFileOrEnv.channels.insiders?.appExists) candidatePorts.push(9223);
   } else if (typeof portFileOrEnv === 'string' && portFileOrEnv) {
     candidateFiles.push(portFileOrEnv);
     if (fallbackPort > 0) candidatePorts.push(fallbackPort);
@@ -586,28 +669,27 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
 
   for (const pf of candidateFiles) {
     if (pf && fs.existsSync(pf)) {
-      const raw = fs.readFileSync(pf, 'utf8').trim();
-      const parsed = parseInt(raw.split(/\r?\n/)[0], 10);
-      if (parsed > 0 && !triedPorts.has(parsed)) {
+      let first = '';
+      try { first = fs.readFileSync(pf, 'utf8').trim().split(/\r?\n/)[0]; } catch {}
+      const parsed = /^\d+$/.test(first) ? Number(first) : 0;
+      if (parsed > 0 && parsed <= 65535 && !triedPorts.has(parsed)) {
         triedPorts.add(parsed);
         const res = await fetchTargetsFromPort(parsed);
         if (res.length > 0) {
-          port = parsed;
-          targets = res;
-          break;
+          port ||= parsed;
+          targets.push(...res.map(target => ({ ...target, diagnosticPort: parsed })));
         }
       }
     }
   }
-  if (targets.length === 0) {
+  {
     for (const fb of candidatePorts) {
       if (fb > 0 && !triedPorts.has(fb)) {
         triedPorts.add(fb);
         const fbTargets = await fetchTargetsFromPort(fb);
         if (fbTargets.length > 0) {
-          port = fb;
-          targets = fbTargets;
-          break;
+          port ||= fb;
+          targets.push(...fbTargets.map(target => ({ ...target, diagnosticPort: fb })));
         }
       }
     }
@@ -726,7 +808,7 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
 
   return {
     reachable: true,
-    port,
+    port: selected.page.diagnosticPort || port,
     targetId: selected.page.id,
     title: selected.page.title,
     state: selected.state
@@ -744,7 +826,9 @@ async function runDoctor() {
   const live = await inspectLiveWindow(env);
 
   const report = {
-    ok: Boolean(env.nodeBasicOk && integrity.ok),
+    ok: Boolean(env.nodeBasicOk && integrity.ok && live.state?.hasStyle && live.state?.bodyReady),
+    coreReady: Boolean(env.nodeBasicOk && integrity.ok),
+    injectionReady: Boolean(live.state?.hasStyle && live.state?.bodyReady),
     node: {
       version: env.nodeVer,
       execPath: process.execPath,
@@ -760,7 +844,9 @@ async function runDoctor() {
       appExists: env.appExists,
       portFile: env.portFile,
       portFileExists: env.portFileExists,
-      channels: env.channels
+      channels: env.channels,
+      cdpStatus: env.cdpStatus,
+      cdpGuidance: env.cdpGuidance
     },
     coreIntegrity: {
       targetDir,
@@ -1243,8 +1329,8 @@ async function runInstall() {
   let serviceInfo = { skipped: true, reason: 'custom-target-dir' };
 
   if (!isCustomSandboxTarget) {
-    // 自动检查并修补 ~/.antigravity/argv.json (remote-debugging-port)
-    argvStatus = ensureArgvRemoteDebugging(currentCfg.channel);
+    // 2.33 ignores the legacy argv setting. Do not silently change launch/security settings.
+    argvStatus = { skipped: true, reason: 'explicit-launch-opt-in-required', guidance: env.cdpGuidance };
 
     // 创建兼容包装脚本 ~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs（使用 pathToFileURL 兼容 Windows C:\ 路径）
     const scriptsDir = path.join(os.homedir(), '.gemini', 'antigravity', 'scripts');

@@ -1,18 +1,18 @@
-# Antigravity 主题融合分支 · 5.4.3-eric.1
+# Antigravity 主题融合分支 · 5.5.0-eric.1
 
-基于 [Anarcadia 上游 v5.3.0](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/6a263b50cb575b22059f4429a9ba9625c0c540df)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.1 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1806 条，保留上游全部 1790 个词条与新的大小写兜底查找。
+基于 [Anarcadia 上游 v5.3.0](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/commit/6a263b50cb575b22059f4429a9ba9625c0c540df)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2) 并严格对齐 Anthropic 官方设计规范重构全界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.1 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，统一西文 Anthropic 三族 + 中文 `PingFang SC` 优先回退，将输入框、快捷键与指标面板回归 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，改善权限文案与常用汉化。词典共 1876 条，保留上游全部 1860 个词条与新的大小写兜底查找。
 
 **本分支为独立集成版，不是上游发布。** 移除了自动调用仓库外 Python 二进制补丁的行为；不引入 `--sync-user`，安装保留已有用户文件及自定义选择器。变更边界、验证方法与限制见 [FORK.md](FORK.md)。下方截图为上游参考，不代表本分支已完成 Antigravity 实机验收。
 
-本轮在既有融合基线上选择性移植上游 v5.4.3 的多分屏、支线提问及子 Agent 面板指标、窄栏折行和 2.32.2 汉化；保留 v5.4.2 宿主隔离与 Swarm 明暗同步，不是上游所有功能的全量合并。保留既有暖纸/暖墨外观与汉化，不加入新配色切换按钮或配置写回，也暂不带入未验证的 Windows/WSL 大改。
+本轮选择性适配 Antigravity 2.33.0 的无 data-newux-theme 选择器、70 条新增汉化与 CDP 实际可达性诊断。保留既有多分屏指标和宿主隔离，不是上游 5.5 的全量合并。不会自动启动、终止或重启客户端；不采用上游自动启动接力。2.33.0 需要另行授权的显式本地调试启动，单纯更新源码并不会恢复注入。保留既有暖纸/暖墨外观与汉化，不加入新配色切换按钮或配置写回，也暂不带入未验证的 Windows/WSL 大改。
 
-本次更新保存在本机仓库的 `main` 分支，版本 `5.4.3-eric.1`，尚未推送远端。安装请使用已同步的本地源码；不要假定远端 `main` 已包含本次更新。
+本次更新保存在本机仓库的 `main` 分支，版本 `5.5.0-eric.1`，尚未推送远端。安装请使用已同步的本地源码；不要假定远端 `main` 已包含本次更新。
 
 5.3.0 合入 2.32.1 新增翻译、动态上下文窗口、缓冲输出识别、子 Agent 指标汇总与 WSL 慢路径退避；保留 Anthropic/PingFang 字体、暖调配色、macOS 连续圆角和 Turbo 的“完全模式”权限含义。实验性冷启动重载默认关闭，不能将草稿安全视为已在真实客户端充分验证。
 
 此前 5.3.0-eric.2 对上游与旧融合版的全部汉化差异逐项择优，统一 Agent/对话/Artifact 与权限模式名称，补齐权限、遥测和超额使用说明，区分持续态与完成态；完整审计保存在源码仓库的 `translation-review.json`。
 
-安装前请阅读 `SKILL.md`。安装会配置本地调试端口和系统自启服务，不能把 `doctor` 的完整性通过等同于客户端实机生效。
+安装前请阅读 `SKILL.md`。真实安装会配置主题系统自启服务；2.33.0 的本地调试启动须另行授权，不能把 `doctor` 的完整性通过等同于客户端实机生效。
 
 ---
 
@@ -76,13 +76,13 @@ Google Antigravity 原生浅色界面偏冷刺眼、全局仅使用单一无衬�
 2. **复制发给你的 AI Agent（Antigravity / Claude Code / Codex / Cursor 等）**：
 
 > **💬 复制发给 Agent（新用户一键安装）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.4.3-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
 ### 二、老版本用户无缝升级至 v5.3.0
 `node install.mjs install` 会自动备份旧内核、接管旧版常驻服务，并无损保留你在 `~/.gemini/antigravity/theme-patch/user/` 中的个人配置：
 
 > **💬 复制发给 Agent（老用户无缝升级）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.4.3-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.0-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
 ### 三、后续与 Agent 对话定制风格或排障
 - **🎨 切换白天预设、调整字号或微调外观**：
