@@ -1,5 +1,5 @@
 /* 1. Anthropic Serif（Text 光学字号：正文散文、引用、列表、Markdown 小标题）
- * 优先保留上游 Windows/macOS 可变 Web 字体别名，紧接静态 OTF 精确字重与真斜体映射。 */
+ * 优先保留可变 Web 字体别名，紧接静态 OTF 精确字重与真斜体映射（macOS 专用版）。 */
 @font-face {
   font-family: 'Anthropic Serif';
   src: local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text Light'), local('AnthropicSerifText-Light'), local('Anthropic Serif');
@@ -10,7 +10,7 @@
 
 @font-face {
   font-family: 'Anthropic Serif';
-  src: local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular'), local('Anthropic Serif');
+  src: local('AnthropicSerifWebWeb-TextRegular'), local('Anthropic Serif Web'), local('AnthropicSerifWebWeb-TextLight'), local('Anthropic Serif Web Text Light'), local('Anthropic Serif Web Display Light'), local('Anthropic Serif Text'), local('Anthropic Serif Text Regular'), local('AnthropicSerifText-Regular'), local('Anthropic Serif');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -269,9 +269,9 @@
 }
 
 /* ============================================================================
- * PART I. 全局共享层：Anthropic 规范字体体系、字重级阶与 UI 几何形状（昼夜 100% 共用）
+ * PART I. 全局共享层：Anthropic 规范字体体系、字重级阶与 UI 几何形状（昼夜 100% 共用 · macOS）
  * 西文与数字严格遵循 Anthropic 官方三族（Sans / Serif / Mono）及纯西文回退；
- * 中文统一优先回退 PingFang SC（跨平台依次回退 Hiragino / 更纱 / 雅黑）。
+ * 中文统一优先回退 PingFang SC（依次回退 Hiragino / 更纱黑体）。
  * ============================================================================ */
 :root,
 html,
@@ -282,10 +282,10 @@ body[data-agy-font],
 body[data-agy-font="google-sans"],
 body[data-agy-font="inter"],
 body[data-agy-font] :where(.font-sans, .pdf-sdk-root) {
-  --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'Anthropic Sans Web Display Light', 'anthropic-sans', 'Styrene B', 'Styrene', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
-  --font-serif: 'Anthropic Serif', 'Anthropic Serif Text', 'Anthropic Serif Web', 'Anthropic Serif Web Text Light', 'Anthropic Serif Web Display Light', 'anthropic-serif', 'Tiempos Text', 'Tiempos', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
-  --font-serif-display: 'Anthropic Serif Display', 'Anthropic Serif', 'Anthropic Serif Web Display Light', 'Anthropic Serif Web', Georgia, Cambria, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', 'Microsoft YaHei UI', 'Microsoft YaHei', serif !important;
-  --font-mono: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'PingFang SC', 'Sarasa Mono SC', '等距更纱黑体 SC', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', 'Maple Mono NF CN', 'Microsoft YaHei UI', monospace !important;
+  --font-sans: 'Anthropic Sans', 'Anthropic Sans Text', 'Anthropic Sans Web', 'Anthropic Sans Web Text', 'Anthropic Sans Web Display Light', 'anthropic-sans', 'Styrene B', 'Styrene', 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+  --font-serif: 'Anthropic Serif', 'Anthropic Serif Text', 'Anthropic Serif Web', 'Anthropic Serif Web Text Light', 'Anthropic Serif Web Display Light', 'anthropic-serif', 'Tiempos Text', 'Tiempos', Georgia, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', serif !important;
+  --font-serif-display: 'Anthropic Serif Display', 'Anthropic Serif', 'Anthropic Serif Web Display Light', 'Anthropic Serif Web', Georgia, 'Times New Roman', Times, 'PingFang SC', 'Hiragino Sans GB', 'Sarasa UI SC', '更纱黑体 UI SC', serif !important;
+  --font-mono: 'Anthropic Mono', 'Anthropic Mono Web', 'anthropic-mono', SFMono-Regular, 'SF Mono', Menlo, Monaco, 'PingFang SC', 'Sarasa Mono SC', '等距更纱黑体 SC', 'Sarasa Mono Slab SC', '等距更纱黑体 Slab SC', 'Maple Mono NF CN', monospace !important;
   --vscode-font-family: var(--font-sans) !important;
   --editor-font-family: var(--font-mono) !important;
   --default-font-family: var(--font-sans) !important;
@@ -337,12 +337,6 @@ body[data-agy-font] :where(.font-sans, .pdf-sdk-root) {
   --ag-chat-font-size: 16px;
   --ag-wax-seal-hover: #3D3D3A;
   --ag-dark-wax-seal-hover: #87867F;
-  --ag-ink-shadow-xs: none;
-  --ag-ink-shadow-sm: none;
-  --ag-ink-shadow-md: none;
-}
-
-html[data-ag-os="win32"] {
   --ag-ink-shadow-xs: none;
   --ag-ink-shadow-sm: none;
   --ag-ink-shadow-md: none;
@@ -415,37 +409,6 @@ article,
 
 :is([data-markdown-root], .select-text, .prose, .markdown) :is(p, li, blockquote) {
   line-height: 1.62;
-}
-
-/* Windows DirectWrite 可变字体命名实例修正：Windows 版 AnthropicSerif TTF 仅暴露 TextLight (wght=300) 实例名，显式驱动 wght 轴还原 400 正文/斜体、500 中黑与 600 粗体/粗斜体 */
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article),
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(i, em, .italic) {
-  font-variation-settings: 'wght' 400, 'opsz' 16 !important;
-}
-
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) .font-medium,
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) .font-medium :is(i, em, .italic) {
-  font-weight: 500 !important;
-  font-variation-settings: 'wght' 500, 'opsz' 16 !important;
-}
-
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold),
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(strong, b, h1, h2, h3, h4, h5, h6, th, .font-semibold, .font-bold) :is(i, em, .italic),
-html[data-ag-os="win32"][data-ag-page-type="plugin"] :where(h1, h2, h3, h4, h5, h6, b, strong, .swarm-title, .o2 .o2-h, .o2-goal > b, .o2-lb b, .o2-cb b, .o2-tht b) {
-  font-weight: 600 !important;
-  font-variation-settings: 'wght' 600, 'opsz' 16 !important;
-}
-
-html[data-ag-os="win32"] :is(code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm),
-html[data-ag-os="win32"] :is(code, pre, kbd, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm) *,
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, kbd, samp, .font-mono, [class*="language-"]),
-html[data-ag-os="win32"] :is([data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, kbd, samp, .font-mono, [class*="language-"]) :is(*, strong, b, i, em, .italic, .font-medium, .font-semibold, .font-bold) {
-  font-variation-settings: normal !important;
-}
-
-html[data-ag-os="win32"] :is(.katex, .MathJax, math, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror),
-html[data-ag-os="win32"] :is(.katex, .MathJax, math, [class*="file-title"], [class*="file-path"], [data-path], [data-file-path], [contenteditable], textarea, input, [data-lexical-editor], [data-composer], .ProseMirror) :is(*, strong, b, i, em, .italic, .font-medium, .font-semibold, .font-bold) {
-  font-variation-settings: normal !important;
 }
 
 html[data-ag-custom-font-size="true"] :is([data-markdown-root], [data-testid="user-message-content"], [data-testid="user-message-content"] .select-text, .agy-user-bubble, .prose, .markdown, [class*="chat-message"]) {
@@ -898,14 +861,9 @@ button, [role="button"], select {
 }
 
 [role="menu"] :is([role="menuitem"], .agy-overlay-item, [class*="truncate"], [class*="text-xs"], [class*="text-[13px]"], span),
-.agy-overlay .agy-overlay-item {
-  font-weight: 400 !important;
-  letter-spacing: -0.005em !important;
-  color: var(--ag-menu-item-fg, #141413) !important;
-}
-
 [role="menu"] :is([role="menuitem"], .agy-overlay-item) > span,
 [role="menu"] :is([role="menuitem"], .agy-overlay-item) :is(span[class*="flex-1"], span.truncate),
+.agy-overlay .agy-overlay-item,
 .agy-overlay .agy-overlay-item > span,
 .agy-overlay .agy-overlay-item :is(span[class*="flex-1"], span.truncate) {
   font-weight: 400 !important;
@@ -1045,18 +1003,12 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) {
   --ag-composer-tray-bg: #F0EEE6;
   --ag-composer-card-bg: #FAF9F5;
   --ag-composer-card-border: rgba(20, 20, 19, 0.08);
-  --ag-composer-card-shadow: none;
   --ag-composer-card-focus-border: #CCCBC8;
-  --ag-composer-card-focus-shadow: none;
   --ag-seal-home-border: #CCCBC8;
-  --ag-seal-home-shadow: none;
   --ag-seal-home-focus-border: var(--ag-wax-seal-hover, #3D3D3A);
-  --ag-seal-home-focus-shadow: none;
   --ag-seal-chat-border: #CCCBC8;
   --ag-seal-chat-hover-border: #87867F;
-  --ag-seal-chat-shadow: none;
   --ag-seal-chat-focus-border: var(--ag-wax-seal-hover, #3D3D3A);
-  --ag-seal-chat-focus-shadow: none;
   --ag-seal-off-border: #CCCBC8;
   --ag-input-focus-border: #3D3D3A;
   --ag-composer-top-fg: #3D3D3A;
@@ -1065,8 +1017,6 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) {
   --ag-composer-ctrl-fg: #3D3D3A;
   --ag-send-btn-bg: #D97757;
   --ag-send-btn-hover-bg: #C6613F;
-  --ag-send-btn-border: transparent;
-  --ag-send-btn-shadow: none;
   --ag-sidebar-fg: #3D3D3A;
   --ag-sidebar-row-fg: #3D3D3A;
   --ag-sidebar-header-fg: #3D3D3A;
@@ -1296,18 +1246,12 @@ html[data-ag-preset] body[data-agy-theme].dark {
   --ag-composer-tray-bg: #1B1A18;
   --ag-composer-card-bg: #23221F;
   --ag-composer-card-border: rgba(250, 249, 245, 0.07);
-  --ag-composer-card-shadow: none;
   --ag-composer-card-focus-border: #3D3D3A;
-  --ag-composer-card-focus-shadow: none;
   --ag-seal-home-border: #3D3D3A;
-  --ag-seal-home-shadow: none;
   --ag-seal-home-focus-border: var(--ag-dark-wax-seal-hover, #87867F);
-  --ag-seal-home-focus-shadow: none;
   --ag-seal-chat-border: #3D3D3A;
   --ag-seal-chat-hover-border: #5E5D58;
-  --ag-seal-chat-shadow: none;
   --ag-seal-chat-focus-border: var(--ag-dark-wax-seal-hover, #87867F);
-  --ag-seal-chat-focus-shadow: none;
   --ag-seal-off-border: #3D3D3A;
   --ag-input-focus-border: #87867F;
   --ag-composer-top-fg: #B0AEA5;
@@ -1316,8 +1260,6 @@ html[data-ag-preset] body[data-agy-theme].dark {
   --ag-composer-ctrl-fg: #CBC9C0;
   --ag-send-btn-bg: #D97757;
   --ag-send-btn-hover-bg: #C6613F;
-  --ag-send-btn-border: transparent;
-  --ag-send-btn-shadow: none;
   --ag-sidebar-fg: #D5D3CA;
   --ag-sidebar-row-fg: #CBC9C0;
   --ag-sidebar-header-fg: #B0AEA5;

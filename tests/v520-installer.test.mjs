@@ -33,7 +33,7 @@ function harness(t, options = {}) {
   });
   let code = source.replace(/^import .*;\n/gm, '').replace('const __filename = fileURLToPath(import.meta.url);', `const __filename = ${JSON.stringify(path.join(src, 'install.mjs'))};`);
   code = code.slice(0, code.indexOf('switch (subcommand)'));
-  code += `\ndetectEnvironment = async () => { hostCalls.push('detect'); return {nodeBasicOk:true}; }; inspectLiveWindow = async () => { hostCalls.push('inspect'); return {}; }; ensureArgvRemoteDebugging = () => { hostCalls.push('argv'); return {}; }; stopRunningDaemonProcesses = () => hostCalls.push('stop');\nglobalThis.api = {runInstall, runRollback, runUninstall, isValidCoreBackup, canonicalPath, isSameTargetPath, buildDistZip, registerSystemService}; globalThis.setArgs = values => args.splice(0,args.length,...values);`;
+  code += `\ndetectEnvironment = async () => { hostCalls.push('detect'); return {nodeBasicOk:true}; }; inspectLiveWindow = async () => { hostCalls.push('inspect'); return {}; }; stopRunningDaemonProcesses = () => hostCalls.push('stop');\nglobalThis.api = {runInstall, runRollback, runUninstall, isValidCoreBackup, canonicalPath, isSameTargetPath, buildDistZip, registerSystemService}; globalThis.setArgs = values => args.splice(0,args.length,...values);`;
   context.hostCalls = calls;
   vm.runInContext(code, context);
   return { tmp, src, target, home, calls, ctx: context, api: context.api,
@@ -124,11 +124,10 @@ test('v520 LaunchAgent runningNow requires PID, not loaded state', t => {
   h.ctx.pidOutput = 'state = running\npid = 123'; assert.equal(h.api.registerSystemService(h.target, '/fake/wrapper').runningNow, true);
 });
 
-test('v520 keeps PS5.1 flat JSON enumeration, fork packaging and version', () => {
-  assert.ok(source.includes('$items = @(foreach ($x in $parsed) { if ($null -ne $x) { $x } })'));
-  assert.ok(source.includes('$paths = @(foreach ($x in $parsed) { if ($null -ne $x) { [string]$x } })'));
+test('v520 keeps macOS-only fork packaging and version', () => {
+  assert.doesNotMatch(source, /win32|powershell|schtasks|WScript\.Shell|systemd|fc-cache/i);
   assert.doesNotMatch(source, /hasFlag\(['"]--sync-user/);
-  assert.match(source, /version: '5\.5\.0-eric\.1'/);
+  assert.match(source, /version: '5\.5\.2-eric\.1'/);
   assert.match(source, /https:\/\/github.com\/pumblus\/chuanban-antigravity-theme-patch/);
   const pack = source.slice(source.indexOf('function buildDistZip'), source.indexOf('function verifyCoreIntegrity'));
   assert.match(pack, /'FORK\.md'/); assert.match(pack, /'CHANGELOG\.md'/);

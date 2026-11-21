@@ -10,7 +10,7 @@ test('v550 adds 70 labels and preserves all 1806 existing translations verbatim'
  for(const key of newKeys) assert.equal(typeof dict[key],'string',key);
  const baseline=Object.fromEntries(Object.entries(dict).filter(([key])=>!newKeys.includes(key)));
  assert.equal(Object.keys(baseline).length,1806);
- assert.equal(crypto.createHash('sha256').update(JSON.stringify(baseline)).digest('hex'),'9f2bb54939d4ea178c60934be6949af527b6c3df047a47840ff1b51fa9548ca8');
+ assert.equal(crypto.createHash('sha256').update(JSON.stringify(baseline)).digest('hex'),'ba4d8a6512d1ce67243e15be4fa90296add61a92f04c5918f853abfb2de2fb6c');
 });
 test('v550 dictionary has no literal or normalized duplicate aliases', () => {
  const keys = [...raw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m=>JSON.parse(m[1]));

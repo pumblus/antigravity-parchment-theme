@@ -27,7 +27,7 @@ function harness(){
   if(model.hold?.(m)){model.held.push(respond);}else queueMicrotask(respond);
  }}
  const ctx=vm.createContext({URL,path,WebSocket:WS,activeConfig:config,DatabaseSync:{},cachedInjectScript:'TEST_INJECT',cachedPatchVersion:'test',SAFE_MODE:false,
- metricsConfigEpoch:0,wslUncBackoffUntil:0,LINEAGE_TICK_MAX_OPENS:45,LINEAGE_TICK_MAX_MS:60,performance:{now:()=>now},Date:{now:()=>100000},console:{log(){},error(){}},
+ metricsConfigEpoch:0,LINEAGE_TICK_MAX_OPENS:45,LINEAGE_TICK_MAX_MS:60,performance:{now:()=>now},Date:{now:()=>100000},console:{log(){},error(){}},
  setTimeout:(fn,ms)=>{timers.set(++nextTimer,{fn,ms});return nextTimer;},clearTimeout:id=>timers.delete(id),
  getDbState:cid=>({dbPath:'/fixture/'+cid+'.db',sig:'v'+model.dbVersion}),getCompositeChildSnapshot:(_cid,_dir,sig,budget)=>{budgets.push(budget);return {sig};},
  parseConversationMetrics:(cid,_ep,_state,_snap,budget)=>{reads.push(cid);budget.opens+=1;now+=model.cost||0;return {cascadeId:cid,hasData:true,inlineHtml:'v'+model.dbVersion,tooltipHtml:'t'};}});

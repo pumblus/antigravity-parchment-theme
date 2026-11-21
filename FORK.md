@@ -2,10 +2,10 @@
 
 ## 来源与版本
 
-- 版本：`5.5.0-eric.1`。
-- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性移植至 `v5.5.0` / `b3bc3b05afbef244c8cadae08ed04a7bbdb71b1c`，不是完整合并。
+- 版本：`5.5.2-eric.1`（macOS 专用）。
+- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性移植至 `v5.5.2` / `aadfc54ac4e0bf54ff24ffe3f251fae33cc7fee1`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
-- 本次源码更新位于本机 `main`；未推送、未触发远端 CI、未更改已安装皮肤。保留 d0d7d87 及之前的全部用户设计提交。
+- 本次源码更新位于本机 `main`；未推送、未触发远端 CI。保留 d0d7d87 及之前的全部用户设计提交。
 
 ## 融合内容
 
@@ -16,6 +16,24 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 5.5.2-eric.1 源码同步与 macOS 专版收敛边界（2026-11-20 UTC）
+
+- 选择性移植上游 `v5.5.2`（`aadfc54ac4e0bf54ff24ffe3f251fae33cc7fee1`）的四项 macOS 可用改动，不是全量合并：
+  1. **macOS 稳定 Node 软链解析（#20）**：`install.mjs` 新增 `resolveStableNodeExecPath()`，对 Homebrew `Cellar` / keg-only `node@22`/`node@24` 及 `fnm` 默认别名经 `fs.realpathSync` 核验同一实体后写入 `LaunchAgent` plist，并在 `doctor` 输出 `node.serviceExecPath`。
+  2. **Browser 级 CDP 事件驱动目标发现（#21）**：`core/daemon.mjs` 优先读取 `DevToolsActivePort` 第 2 行 `browserWsPath`（兜底 `/json/version` 且校验回环地址与端口），订阅 `Target.setDiscoverTargets` 监听 `Target.targetCreated` / `targetInfoChanged` / `targetDestroyed`；支持 0 窗口菜单栏驻留保活、`attachingTargetIds` / `destroyedWhileAttaching` 并发清理、`syncStartMs` + `attachedAt` 防竞态误杀、`fallbackPort` 外部 Chrome/Edge/Brave 过滤、`PENDING_RETRY_DELAYS_MS = [30, 50, 100, 200]`、`modules.cdpEventDiscovery: false` 开关及 `config.json` `port` 别名。**不带入上游 M2 冷启动自动重启**。
+  3. **冷启动过渡文档防误判 `non_host`（#22）**：`HOST_PROBE_EXPRESSION` 将 `about:`、`chrome-error:`、`data:` 判为 `'pending'`；`isSkippedNonHost()` 结合本地全 URL 变更失效、标题含 `Antigravity` 后 150ms 快速解封与有上限退避复检。
+  4. **`syncChuanbanPreset()` 表面同步签名短路**：`core/runtime.js` 引入 `window.__ag_style_rev` 与 `window.__ag_last_surface_sync_key`，避免弹窗滚动锁修改 `body` 属性时重复调用 `syncCurtainSurfaceColor()` 触发 `getComputedStyle`。
+- **彻底去除 Windows / WSL / Linux 客户端与服务支持**：
+  - `core/daemon.mjs` 移除全部 WSL2 UNC 发现与退避逻辑、Windows `tasklist`/PowerShell WMI PID 校验、`node:child_process` 导入及非 macOS 路径/词典分支；
+  - `install.mjs` 移除 Windows `.NET ZipFile` 打包、CRLF 自愈、VBS/`schtasks`/`HKCU\Run`/注册表字体/`WM_FONTCHANGE`、`spawn` 导入及 Linux `systemd`/`fc-cache`；对全局 `install`/`rollback`/`uninstall` 与 `install-fonts` 强制校验 `process.platform === 'darwin'`，同时保留 `--target-dir` 沙箱、`doctor --target-dir`、`pack`、`build-manifest` 与测试在 Linux CI 运行；
+  - `core/runtime.js` 移除 `syncWinTitleBarOverlay()` 及非 macOS 缩放快捷键分支；`core/theme.css` 移除全部 `html[data-ag-os="win32"]` DirectWrite 规则与纯 Windows 系统回退字体名（`Segoe UI`、`Microsoft YaHei*`、`Consolas`）；
+  - `core/i18n.json` 保留全部 1,876 条静态词条（含 ~10 条 WSL/Windows 界面词条），以便与上游词典对齐。
+- **中文文案复核与代码清理**：
+  - 按 `humanizer-zh` 原则逐项核对 `core/i18n.json` 与 `core/runtime.js` 动态文案，修正 64 条静态译文及 4 处动态模板（修正 URL 读取误译为“文件读取”、移除未在原文出现的“匿名/与提示音/插入/实时/旗舰/内置/编排模型”等增译、修正“以出于法律原因”“法律援助”“无法正常运作”“提升为主对话”“对其产生影响”“方可”等翻译腔，统一“账号”“套餐”“MCP 服务器”“Google Drive”“多方案择优（Best of N）”“暂无受阻项/暂无阻塞项”与双引号样式），保留全部 1,876 键与 `translation-review.json` 已审条目不变；同步精简 `README.md` 与 `SKILL.md` 中的宣传性用语。
+  - 代码优化：`install.mjs` 移除死代码 `ALLOWED_ORIGINS`、`inspectJsoncRootObject()`、`ensureArgvRemoteDebugging()`，提取共享 `httpGetLocalJson()`；`core/daemon.mjs` 移除死函数 `getDbSignature()`，复用 `setBoundedMap()`、`readPortInfo()` 与 `httpGetLocalJson()`；`core/runtime.js` 移除死函数 `extractCascadeId()`，预计算输入框选择器、消除 `ensureMetricsPill()` 重复 `resolveBoxCascadeId()`、`isExcludedElement()` 合并非排除节点的两次 `closest()` 遍历为一次、属性 `MutationObserver` 仅更新变更属性并跳过缺失属性；`core/theme.css` 去除重复 `local('Anthropic Serif Web Text Light')`、16 处未引用阴影/边框变量并合并重复菜单项排版规则。
+- 未带入上游 Windows SuperTTC 卡顿修复/退订、Google Sans Flex 外链清理与暖夜按钮观察器（本分支不存在对应代码）；v5.5.1 TDZ 修复本分支已于 `5.3.0-eric.1` 完成。
+- 验证结果：三项语法检查、`134` 项单测与 `185` 项完整回归（含 `tests/v552.test.mjs` 8 项）全部通过（0 失败 / 0 跳过），`node install.mjs pack` 生成并校验 4 个核心文件 SHA-256。随后按用户明确指令对本机 `~/.gemini/antigravity/theme-patch` 执行了热安装与 `LaunchAgent` 更新。
 
 ## 5.5.0-eric.1 源码同步边界（2026-11-19 UTC）
 

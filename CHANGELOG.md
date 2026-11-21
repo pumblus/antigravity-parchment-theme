@@ -1,5 +1,9 @@
 # Changelog
 
+## 融合版 5.5.2-eric.1（2026-11-20 · macOS 专用）
+
+选择性融合上游 `v5.5.2`（`aadfc54`）的四项 macOS 可用改进：Browser 级 CDP 事件驱动目标发现（`Target.setDiscoverTargets`、`fallbackPort` 外部浏览器过滤、并发附着与竞态防护）、冷启动过渡文档识别（`about:`/`chrome-error:`/`data:` → `pending`）与标题感知 `non_host` 快速复检、macOS Homebrew/fnm 稳定 Node 软链解析（`LaunchAgent` 与 `doctor` `node.serviceExecPath`），以及 `syncChuanbanPreset()` 表面同步签名短路。同时将融合分支精简为 macOS 专用版，移除 Windows/WSL/Linux 客户端、系统服务、字体注册与 DirectWrite CSS 代码（`core/daemon.mjs` 不再导入 `child_process`），保留 `core/i18n.json` 全部 1,876 条静态词条及 Linux CI 校验能力。详见 FORK.md。
+
 ## 融合版 5.5.0-eric.1（2026-11-19）
 
 选择性适配 2.33.0 的无旧主题标记选择器、70 条汉化及实际 CDP 可达性诊断。保留 Eric 的全部字体与视觉声明，不带入上游字体重设或自动终止/重启接力。安装不再默改旧 argv 调试参数；显式调试启动与部署另行授权。源码与实机状态分开，详见 FORK.md。

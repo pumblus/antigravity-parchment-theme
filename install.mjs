@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * chuanban-antigravity-theme-patch · 一键安装、自检、安全模式验证、打包与回滚 CLI (install.mjs)
+ * chuanban-antigravity-theme-patch · macOS 一键安装、自检、安全模式验证、打包与回滚 CLI (install.mjs)
  *
  * 支持子命令：
  *   node install.mjs install [--channel auto|stable|insiders] [--preset high-contrast] [--target-dir <dir>]
@@ -18,7 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { execSync, spawn, spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,14 +35,6 @@ process.emitWarning = function (warning, ...rest) {
 const GOOGLE_DRIVE_URL = 'https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC';
 const NOTION_GUIDE_URL = 'https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554';
 const GITHUB_REPO_URL = 'https://github.com/pumblus/chuanban-antigravity-theme-patch';
-
-const ALLOWED_ORIGINS = [
-  'http://127.0.0.1',
-  'https://127.0.0.1',
-  'http://localhost',
-  'https://localhost',
-  'vscode-file://'
-];
 
 const args = process.argv.slice(2);
 const subcommand = args.find((a) => !a.startsWith('-')) || 'help';
@@ -74,9 +66,15 @@ function canonicalPath(p) {
 function isSameTargetPath(a, b) {
   const pa = canonicalPath(a);
   const pb = canonicalPath(b);
-  return process.platform === 'win32' || process.platform === 'darwin'
+  return process.platform === 'darwin'
     ? pa.toLowerCase() === pb.toLowerCase()
     : pa === pb;
+}
+
+function assertMacOsHost(action) {
+  if (process.platform !== 'darwin') {
+    throw new Error(`This macOS-only fork does not support ${action} on ${process.platform}.`);
+  }
 }
 
 function resolveGlobalInstallDir() {
@@ -111,7 +109,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.5.0-eric.1',
+    version: '5.5.2-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -168,102 +166,24 @@ function buildDistZip(baseDir = __dirname) {
     collectEntries(item.replace(/\\/g, '/'));
   }
 
-  if (process.platform === 'win32') {
-    const listTmpPath = path.join(os.tmpdir(), `ag-pack-entries-${process.pid}-${Date.now()}.json`);
-    fs.writeFileSync(listTmpPath, JSON.stringify(entriesToPack), 'utf8');
-    try {
-      const psScript = [
-        '$ErrorActionPreference = "Stop"',
-        'Add-Type -AssemblyName System.IO.Compression',
-        'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-        `$zipPath = '${zipPath.replace(/'/g, "''")}'`,
-        `$listPath = '${listTmpPath.replace(/'/g, "''")}'`,
-        '$parsed = Get-Content -LiteralPath $listPath -Raw -Encoding UTF8 | ConvertFrom-Json',
-        '$items = @(foreach ($x in $parsed) { if ($null -ne $x) { $x } })',
-        '$zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)',
-        'try {',
-        '  foreach ($it in $items) {',
-        '    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, [string]$it.abs, [string]$it.entry, [System.IO.Compression.CompressionLevel]::Optimal)',
-        '  }',
-        '} finally {',
-        '  $zip.Dispose()',
-        '}',
-        '$zr = [System.IO.Compression.ZipFile]::OpenRead($zipPath)',
-        '$sha = [System.Security.Cryptography.SHA256]::Create()',
-        '$out = @{ hasBackslash = $false; core = @{} }',
-        'try {',
-        '  foreach ($e in $zr.Entries) {',
-        '    if ($e.FullName.Contains("\\")) { $out.hasBackslash = $true }',
-        '    if ($e.FullName.StartsWith("core/") -and $e.Name -ne "") {',
-        '      $s = $e.Open()',
-        '      $ms = New-Object System.IO.MemoryStream',
-        '      try { $s.CopyTo($ms) } finally { $s.Dispose() }',
-        '      $bytes = $ms.ToArray()',
-        '      $ms.Dispose()',
-        '      $hash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()',
-        '      $out.core[$e.Name] = @{ sha256 = $hash; bytes = $bytes.Length }',
-        '    }',
-        '  }',
-        '} finally {',
-        '  $sha.Dispose()',
-        '  $zr.Dispose()',
-        '}',
-        '$out | ConvertTo-Json -Compress -Depth 4'
-      ].join('; ');
-
-      const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript], {
-        cwd: baseDir,
-        encoding: 'utf8',
-        windowsHide: true,
-        maxBuffer: 10 * 1024 * 1024
-      });
-      if (r.status !== 0) {
-        if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-        throw new Error(`ZipArchive pack failed: ${(r.stderr || r.stdout || '').trim()}`);
-      }
-      const verifyData = JSON.parse(String(r.stdout || '').trim());
-      if (verifyData.hasBackslash) {
-        fs.unlinkSync(zipPath);
-        throw new Error(`Verification failed: backslash path detected in ${zipName}`);
-      }
-      for (const [name, meta] of Object.entries(manifest.files)) {
-        const actual = verifyData.core?.[name];
-        if (!actual) {
-          fs.unlinkSync(zipPath);
-          throw new Error(`Verification failed: missing core/${name} in ${zipName}`);
-        }
-        if (actual.sha256 !== meta.sha256 || actual.bytes !== meta.bytes) {
-          fs.unlinkSync(zipPath);
-          throw new Error(
-            `Verification failed for core/${name} in ${zipName}: expected ${meta.sha256} (${meta.bytes}B), got ${actual.sha256} (${actual.bytes}B)`
-          );
-        }
-      }
-    } finally {
-      try {
-        if (fs.existsSync(listTmpPath)) fs.unlinkSync(listTmpPath);
-      } catch {}
+  const r = spawnSync('zip', ['-q', zipPath, ...entriesToPack.map((e) => e.entry)], {
+    cwd: baseDir,
+    stdio: 'inherit'
+  });
+  if (r.status !== 0) throw new Error('zip command failed');
+  // 逐文件校验 zip 内 core/* 的 SHA-256 与字节数与 manifest 完全一致，杜绝脏包发布
+  for (const [name, meta] of Object.entries(manifest.files)) {
+    const uz = spawnSync('unzip', ['-p', zipPath, `core/${name}`], { maxBuffer: 20 * 1024 * 1024 });
+    if (uz.status !== 0) {
+      fs.unlinkSync(zipPath);
+      throw new Error(`Verification failed: missing core/${name} in ${zipName}`);
     }
-  } else {
-    const r = spawnSync('zip', ['-q', zipPath, ...entriesToPack.map((e) => e.entry)], {
-      cwd: baseDir,
-      stdio: 'inherit'
-    });
-    if (r.status !== 0) throw new Error('zip command failed');
-    // 逐文件校验 zip 内 core/* 的 SHA-256 与字节数与 manifest 完全一致，杜绝脏包发布
-    for (const [name, meta] of Object.entries(manifest.files)) {
-      const uz = spawnSync('unzip', ['-p', zipPath, `core/${name}`], { maxBuffer: 20 * 1024 * 1024 });
-      if (uz.status !== 0) {
-        fs.unlinkSync(zipPath);
-        throw new Error(`Verification failed: missing core/${name} in ${zipName}`);
-      }
-      const actualSha = crypto.createHash('sha256').update(uz.stdout).digest('hex');
-      if (actualSha !== meta.sha256 || uz.stdout.length !== meta.bytes) {
-        fs.unlinkSync(zipPath);
-        throw new Error(
-          `Verification failed for core/${name} in ${zipName}: expected ${meta.sha256} (${meta.bytes}B), got ${actualSha} (${uz.stdout.length}B)`
-        );
-      }
+    const actualSha = crypto.createHash('sha256').update(uz.stdout).digest('hex');
+    if (actualSha !== meta.sha256 || uz.stdout.length !== meta.bytes) {
+      fs.unlinkSync(zipPath);
+      throw new Error(
+        `Verification failed for core/${name} in ${zipName}: expected ${meta.sha256} (${meta.bytes}B), got ${actualSha} (${uz.stdout.length}B)`
+      );
     }
   }
   return { zipPath, version: manifest.version, filesVerified: Object.keys(manifest.files).length };
@@ -283,21 +203,7 @@ function verifyCoreIntegrity(baseDir = __dirname) {
       modified.push({ file: name, status: 'missing' });
       continue;
     }
-    let actualHash = sha256File(p);
-    if (actualHash !== meta.sha256) {
-      // 自动自愈 Windows Git core.autocrlf=true 导致的 CRLF 换行符哈希差异
-      try {
-        const rawText = fs.readFileSync(p, 'utf8');
-        if (rawText.includes('\r\n')) {
-          const lfText = rawText.replace(/\r\n/g, '\n');
-          const lfHash = crypto.createHash('sha256').update(Buffer.from(lfText, 'utf8')).digest('hex');
-          if (lfHash === meta.sha256) {
-            fs.writeFileSync(p, lfText, 'utf8');
-            actualHash = lfHash;
-          }
-        }
-      } catch {}
-    }
+    const actualHash = sha256File(p);
     if (actualHash !== meta.sha256) {
       modified.push({ file: name, status: 'modified', expected: meta.sha256, actual: actualHash });
     }
@@ -343,29 +249,66 @@ function probeHostProcesses() {
   } catch { return { known: false, processes: [] }; }
 }
 
-function probeCdpEndpoint(port) {
+function httpGetLocalJson(port, urlPath, timeoutMs = 450, maxBytes = 0) {
   return new Promise((resolve) => {
-    if (!Number.isInteger(port) || port < 1 || port > 65535) return resolve(false);
-    const req = http.get({host: '127.0.0.1', port, path: '/json/version', timeout: 450}, (res) => {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return resolve({ ok: false, statusCode: 0, value: null });
+    }
+    let settled = false;
+    const done = (val) => {
+      if (!settled) {
+        settled = true;
+        resolve(val);
+      }
+    };
+    const req = http.get({ host: '127.0.0.1', port, path: urlPath, timeout: timeoutMs }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume?.();
+        return done({ ok: false, statusCode: res.statusCode || 0, value: null });
+      }
       let data = '';
-      res.on('error', () => resolve(false));
-      res.on('data', chunk => {
+      res.on('error', () => done({ ok: false, statusCode: res.statusCode || 0, value: null }));
+      res.on('data', (chunk) => {
         data += chunk;
-        if (data.length > 65536) { req.destroy(); resolve(false); }
+        if (maxBytes > 0 && data.length > maxBytes) {
+          req.destroy();
+          done({ ok: false, statusCode: res.statusCode || 0, value: null });
+        }
       });
       res.on('end', () => {
         try {
-          const value = JSON.parse(data);
-          const url = new URL(value.webSocketDebuggerUrl);
-          resolve(res.statusCode === 200 && typeof value.Browser === 'string' &&
-            url.protocol === 'ws:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) &&
-            Number(url.port) === port && !url.username && !url.password && url.pathname.startsWith('/devtools/browser/'));
-        } catch { resolve(false); }
+          done({ ok: true, statusCode: res.statusCode || 0, value: JSON.parse(data) });
+        } catch {
+          done({ ok: false, statusCode: res.statusCode || 0, value: null });
+        }
       });
     });
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => done({ ok: false, statusCode: 0, value: null }));
+    req.on('timeout', () => {
+      req.destroy();
+      done({ ok: false, statusCode: 0, value: null });
+    });
   });
+}
+
+async function probeCdpEndpoint(port) {
+  const res = await httpGetLocalJson(port, '/json/version', 450, 65536);
+  if (!res.ok || !res.value || typeof res.value !== 'object' || Array.isArray(res.value)) return false;
+  try {
+    const value = res.value;
+    const url = new URL(value.webSocketDebuggerUrl);
+    return (
+      typeof value.Browser === 'string' &&
+      url.protocol === 'ws:' &&
+      ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) &&
+      Number(url.port) === port &&
+      !url.username &&
+      !url.password &&
+      url.pathname.startsWith('/devtools/browser/')
+    );
+  } catch {
+    return false;
+  }
 }
 
 function classifyCdpStatus({ livePort, portFileExists, processKnown, processes }) {
@@ -392,15 +335,7 @@ async function detectEnvironment(channel = 'auto') {
   }
 
   const home = os.homedir();
-  const fontDirs =
-    process.platform === 'darwin'
-      ? [path.join(home, 'Library/Fonts'), '/Library/Fonts']
-      : process.platform === 'win32'
-      ? [
-          path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData/Local'), 'Microsoft/Windows/Fonts'),
-          'C:\\Windows\\Fonts'
-        ]
-      : [path.join(home, '.local/share/fonts'), '/usr/local/share/fonts', '/usr/share/fonts'];
+  const fontDirs = [path.join(home, 'Library/Fonts'), '/Library/Fonts'];
 
   let allFontFiles = [];
   for (const d of fontDirs) {
@@ -417,25 +352,10 @@ async function detectEnvironment(channel = 'auto') {
   const checkSingleChannel = (ch) => {
     const isInsiders = ch === 'insiders';
     const appDirName = isInsiders ? 'Antigravity - Insiders' : 'Antigravity';
-    const dotDir = path.join(home, isInsiders ? '.antigravity-insiders' : '.antigravity');
-    let portFile;
-    let appPath;
-    if (process.platform === 'darwin') {
-      portFile = path.join(home, 'Library/Application Support', appDirName, 'DevToolsActivePort');
-      appPath = isInsiders ? '/Applications/Antigravity - Insiders.app' : '/Applications/Antigravity.app';
-    } else if (process.platform === 'win32') {
-      const appData = process.env.APPDATA || path.join(home, 'AppData/Roaming');
-      portFile = path.join(appData, appDirName, 'DevToolsActivePort');
-      appPath = '';
-    } else {
-      const xdg = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
-      portFile = path.join(xdg, appDirName, 'DevToolsActivePort');
-      appPath = '';
-    }
+    const portFile = path.join(home, 'Library/Application Support', appDirName, 'DevToolsActivePort');
+    const appPath = isInsiders ? '/Applications/Antigravity - Insiders.app' : '/Applications/Antigravity.app';
     const portFileExists = fs.existsSync(portFile);
-    const appExists = appPath
-      ? fs.existsSync(appPath)
-      : portFileExists || fs.existsSync(path.dirname(portFile)) || fs.existsSync(dotDir);
+    const appExists = fs.existsSync(appPath);
     return {
       channel: ch,
       appExists,
@@ -484,137 +404,6 @@ async function detectEnvironment(channel = 'auto') {
   };
 }
 
-function inspectJsoncRootObject(raw) {
-  let i = 0;
-  const len = raw.length;
-  let depth = 0;
-  let openBraceIdx = -1;
-  let closeBraceIdx = -1;
-  let hasTopProps = false;
-  let hasRemoteDebuggingPort = false;
-
-  while (i < len) {
-    const ch = raw[i];
-    const next = i + 1 < len ? raw[i + 1] : '';
-
-    if (ch === '/' && next === '/') {
-      i += 2;
-      while (i < len && raw[i] !== '\n') i++;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      i += 2;
-      while (i + 1 < len && !(raw[i] === '*' && raw[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    if (ch === '"') {
-      i++;
-      let val = '';
-      while (i < len) {
-        if (raw[i] === '\\') {
-          val += raw.slice(i, i + 2);
-          i += 2;
-          continue;
-        }
-        if (raw[i] === '"') {
-          i++;
-          break;
-        }
-        val += raw[i++];
-      }
-      if (depth === 1 && openBraceIdx !== -1 && closeBraceIdx === -1) {
-        hasTopProps = true;
-        if (val === 'remote-debugging-port') {
-          let k = i;
-          while (k < len) {
-            if (/\s/.test(raw[k])) {
-              k++;
-            } else if (raw[k] === '/' && raw[k + 1] === '/') {
-              k += 2;
-              while (k < len && raw[k] !== '\n') k++;
-            } else if (raw[k] === '/' && raw[k + 1] === '*') {
-              k += 2;
-              while (k + 1 < len && !(raw[k] === '*' && raw[k + 1] === '/')) k++;
-              k += 2;
-            } else {
-              break;
-            }
-          }
-          if (raw[k] === ':') {
-            hasRemoteDebuggingPort = true;
-          }
-        }
-      }
-      continue;
-    }
-
-    if (ch === '{') {
-      if (depth === 0 && openBraceIdx === -1) {
-        openBraceIdx = i;
-      }
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0 && openBraceIdx !== -1 && closeBraceIdx === -1) {
-        closeBraceIdx = i;
-      }
-    } else if (depth === 1 && openBraceIdx !== -1 && closeBraceIdx === -1 && !/\s/.test(ch)) {
-      hasTopProps = true;
-    }
-    i++;
-  }
-
-  return { openBraceIdx, closeBraceIdx, hasTopProps, hasRemoteDebuggingPort };
-}
-
-function ensureArgvRemoteDebugging(channel = 'auto') {
-  const home = os.homedir();
-  const dirs =
-    channel === 'insiders'
-      ? ['.antigravity-insiders']
-      : channel === 'stable'
-      ? ['.antigravity']
-      : ['.antigravity', '.antigravity-insiders'];
-
-  const results = [];
-  for (const d of dirs) {
-    const defaultPort = d === '.antigravity-insiders' ? 9223 : 9222;
-    const argvDir = path.join(home, d);
-    const argvPath = path.join(argvDir, 'argv.json');
-    if (!fs.existsSync(argvDir)) continue;
-    try {
-      if (!fs.existsSync(argvPath)) {
-        fs.writeFileSync(argvPath, JSON.stringify({ 'remote-debugging-port': defaultPort }, null, 2) + '\n', 'utf8');
-        results.push({ path: argvPath, port: defaultPort, action: 'created' });
-        continue;
-      }
-      const raw = fs.readFileSync(argvPath, 'utf8');
-      const parsedInfo = inspectJsoncRootObject(raw);
-      if (parsedInfo.hasRemoteDebuggingPort) {
-        results.push({ path: argvPath, action: 'already-present' });
-        continue;
-      }
-      if (parsedInfo.openBraceIdx !== -1 && parsedInfo.closeBraceIdx > parsedInfo.openBraceIdx) {
-        const afterOpen = raw.slice(parsedInfo.openBraceIdx + 1);
-        const comma = parsedInfo.hasTopProps ? ',' : '';
-        const trailingNl = afterOpen.startsWith('\n') || afterOpen.startsWith('\r') ? '' : '\n';
-        const patched =
-          raw.slice(0, parsedInfo.openBraceIdx + 1) +
-          `\n\t"remote-debugging-port": ${defaultPort}${comma}${trailingNl}` +
-          afterOpen;
-        fs.writeFileSync(argvPath, patched, 'utf8');
-        results.push({ path: argvPath, port: defaultPort, action: 'patched' });
-      } else {
-        results.push({ path: argvPath, action: 'skipped', error: 'root JSON object not found' });
-      }
-    } catch (e) {
-      results.push({ path: argvPath, action: 'skipped', error: e.message });
-    }
-  }
-  return results;
-}
-
 function isAllowedOrigin(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return false;
   try {
@@ -625,25 +414,7 @@ function isAllowedOrigin(urlStr) {
 }
 
 function fetchTargetsFromPort(port) {
-  return new Promise((resolve) => {
-    const req = http.get({ host: '127.0.0.1', port, path: '/json/list', timeout: 450 }, (res) => {
-      let data = '';
-      res.on('data', (c) => (data += c));
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(res.statusCode === 200 && Array.isArray(parsed) ? parsed : []);
-        } catch {
-          resolve([]);
-        }
-      });
-    });
-    req.on('error', () => resolve([]));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve([]);
-    });
-  });
+  return httpGetLocalJson(port, '/json/list', 450).then((res) => (res.ok && Array.isArray(res.value) ? res.value : []));
 }
 
 async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
@@ -832,6 +603,7 @@ async function runDoctor() {
     node: {
       version: env.nodeVer,
       execPath: process.execPath,
+      serviceExecPath: resolveStableNodeExecPath(),
       tier: env.tier
     },
     fonts: {
@@ -884,57 +656,6 @@ function checkDaemonPidState(pid) {
   } catch (err) {
     return err && err.code === 'EPERM' ? 'uncertain' : 'not_daemon';
   }
-  if (process.platform === 'win32') {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-          windowsHide: true,
-          encoding: 'utf8',
-          timeout: 4000
-        });
-        if (res.status === 0) {
-          const out = String(res.stdout || '').toLowerCase();
-          if (!out.includes('node.exe')) return 'not_daemon';
-        } else if (attempt === 0) {
-          continue;
-        } else {
-          return 'uncertain';
-        }
-        const cimRes = spawnSync(
-          'powershell',
-          [
-            '-NoProfile',
-            '-NonInteractive',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-Command',
-            `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${Number(pid)}" -ErrorAction SilentlyContinue; if ($p) { $p.CommandLine }`
-          ],
-          {
-            windowsHide: true,
-            encoding: 'utf8',
-            timeout: 12000
-          }
-        );
-        if (cimRes.status === 0) {
-          const cmdLine = String(cimRes.stdout || '').trim().toLowerCase();
-          if (!cmdLine) {
-            try {
-              process.kill(pid, 0);
-              return 'uncertain';
-            } catch {
-              return 'not_daemon';
-            }
-          }
-          if (cmdLine.includes('daemon.mjs') || cmdLine.includes('antigravity-font-daemon')) {
-            return 'confirmed';
-          }
-          return 'not_daemon';
-        }
-      } catch {}
-    }
-    return 'uncertain';
-  }
   return 'confirmed';
 }
 
@@ -953,7 +674,7 @@ function stopRunningDaemonProcesses() {
             stopped.push(pid);
           } catch {}
         } else if (pidState === 'uncertain') {
-          console.warn(`[Install] Skipping PID file unlink for active node.exe PID ${pid} (WMI check inconclusive).`);
+          console.warn(`[Install] Skipping PID file unlink for PID ${pid} (EPERM).`);
           continue;
         }
         try {
@@ -965,17 +686,70 @@ function stopRunningDaemonProcesses() {
   return stopped;
 }
 
-function registerSystemService(targetDir, wrapperDaemon) {
-  const home = os.homedir();
-  if (process.platform === 'darwin') {
-    const launchAgentsDir = path.join(home, 'Library', 'LaunchAgents');
-    fs.mkdirSync(launchAgentsDir, { recursive: true });
-    const existingCustomFontPlist = path.join(launchAgentsDir, 'com.antigravity.customfont.plist');
-    const themePlist = path.join(launchAgentsDir, 'com.antigravity.theme.plist');
-    const activePlist = fs.existsSync(existingCustomFontPlist) ? existingCustomFontPlist : themePlist;
-    const label = path.basename(activePlist, '.plist');
+function resolveStableNodeExecPath(execPath = process.execPath, platform = process.platform, home = os.homedir()) {
+  if (platform !== 'darwin') return execPath;
+  let realExec = '';
+  try {
+    realExec = fs.realpathSync(execPath);
+  } catch {
+    return execPath;
+  }
 
-    const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
+  const dynamicCellarCandidates = [];
+  for (const probePath of [execPath, realExec]) {
+    const m = String(probePath || '').match(/^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/(node)$/i);
+    if (m) {
+      const brewPrefix = m[1];
+      const formula = m[2];
+      const binName = m[3];
+      dynamicCellarCandidates.push(path.join(brewPrefix, 'bin', binName));
+      dynamicCellarCandidates.push(path.join(brewPrefix, 'opt', formula, 'bin', binName));
+    }
+  }
+
+  const envExtra = process.env.AG_STABLE_NODE_CANDIDATES
+    ? String(process.env.AG_STABLE_NODE_CANDIDATES)
+        .split(path.delimiter)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  const staticCandidates = [
+    '/opt/homebrew/bin/node',
+    '/usr/local/bin/node',
+    '/opt/homebrew/opt/node/bin/node',
+    '/usr/local/opt/node/bin/node',
+    '/opt/homebrew/opt/node@22/bin/node',
+    '/opt/homebrew/opt/node@24/bin/node',
+    path.join(home, 'Library', 'Application Support', 'fnm', 'aliases', 'default', 'bin', 'node'),
+    path.join(home, '.local', 'share', 'fnm', 'aliases', 'default', 'bin', 'node')
+  ];
+
+  const seen = new Set();
+  for (const cand of [...envExtra, ...dynamicCellarCandidates, ...staticCandidates]) {
+    if (!cand || seen.has(cand)) continue;
+    seen.add(cand);
+    try {
+      if (fs.existsSync(cand) && fs.realpathSync(cand) === realExec) {
+        return cand;
+      }
+    } catch {}
+  }
+  return execPath;
+}
+
+function registerSystemService(targetDir, wrapperDaemon) {
+  assertMacOsHost('LaunchAgent registration');
+  const home = os.homedir();
+  const serviceNodeExec = resolveStableNodeExecPath();
+  const launchAgentsDir = path.join(home, 'Library', 'LaunchAgents');
+  fs.mkdirSync(launchAgentsDir, { recursive: true });
+  const existingCustomFontPlist = path.join(launchAgentsDir, 'com.antigravity.customfont.plist');
+  const themePlist = path.join(launchAgentsDir, 'com.antigravity.theme.plist');
+  const activePlist = fs.existsSync(existingCustomFontPlist) ? existingCustomFontPlist : themePlist;
+  const label = path.basename(activePlist, '.plist');
+
+  const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -983,7 +757,7 @@ function registerSystemService(targetDir, wrapperDaemon) {
     <string>${label}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${process.execPath}</string>
+        <string>${serviceNodeExec}</string>
         <string>--disable-warning=ExperimentalWarning</string>
         <string>${wrapperDaemon}</string>
     </array>
@@ -1003,217 +777,60 @@ function registerSystemService(targetDir, wrapperDaemon) {
 </dict>
 </plist>
 `;
-    const prevPlist = fs.existsSync(activePlist) ? fs.readFileSync(activePlist, 'utf8') : '';
-    const plistChanged = prevPlist !== plistContent;
-    if (plistChanged) {
-      fs.writeFileSync(activePlist, plistContent, 'utf8');
-    }
+  const prevPlist = fs.existsSync(activePlist) ? fs.readFileSync(activePlist, 'utf8') : '';
+  const plistChanged = prevPlist !== plistContent;
+  if (plistChanged) {
+    fs.writeFileSync(activePlist, plistContent, 'utf8');
+  }
 
-    const uid = process.getuid ? process.getuid() : 501;
-    const domainTarget = `gui/${uid}/${label}`;
-    const sleepSync = (ms) => {
-      try {
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-      } catch {}
-    };
-    const queryServiceState = () => {
-      const r = spawnSync('launchctl', ['print', domainTarget], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      const out = String(r.stdout || '');
-      return { loaded: r.status === 0, running: r.status === 0 && /\bpid\s*=\s*\d+/i.test(out) };
-    };
-
-    let runningNow = false;
+  const uid = process.getuid ? process.getuid() : 501;
+  const domainTarget = `gui/${uid}/${label}`;
+  const sleepSync = (ms) => {
     try {
-      const initial = queryServiceState();
-      if (initial.loaded && !plistChanged) {
-        spawnSync('launchctl', ['kickstart', '-k', domainTarget], { stdio: 'ignore' });
-      } else {
-        if (initial.loaded) {
-          spawnSync('launchctl', ['bootout', domainTarget], { stdio: 'ignore' });
-          for (let i = 0; i < 20 && queryServiceState().loaded; i++) {
-            sleepSync(100);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    } catch {}
+  };
+  const queryServiceState = () => {
+    const r = spawnSync('launchctl', ['print', domainTarget], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const out = String(r.stdout || '');
+    return { loaded: r.status === 0, running: r.status === 0 && /\bpid\s*=\s*\d+/i.test(out) };
+  };
+
+  let runningNow = false;
+  try {
+    const initial = queryServiceState();
+    if (initial.loaded && !plistChanged) {
+      spawnSync('launchctl', ['kickstart', '-k', domainTarget], { stdio: 'ignore' });
+    } else {
+      if (initial.loaded) {
+        spawnSync('launchctl', ['bootout', domainTarget], { stdio: 'ignore' });
+        for (let i = 0; i < 20 && queryServiceState().loaded; i++) {
+          sleepSync(100);
+        }
+      }
+      for (let i = 0; i < 6; i++) {
+        if (!queryServiceState().loaded) {
+          const bootRes = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, activePlist], { stdio: 'ignore' });
+          if (bootRes.status !== 0 && !queryServiceState().loaded) {
+            spawnSync('launchctl', ['load', '-w', activePlist], { stdio: 'ignore' });
           }
         }
-        for (let i = 0; i < 6; i++) {
-          if (!queryServiceState().loaded) {
-            const bootRes = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, activePlist], { stdio: 'ignore' });
-            if (bootRes.status !== 0 && !queryServiceState().loaded) {
-              spawnSync('launchctl', ['load', '-w', activePlist], { stdio: 'ignore' });
-            }
-          }
-          if (queryServiceState().loaded) break;
-          sleepSync(120);
-        }
-        spawnSync('launchctl', ['kickstart', '-k', domainTarget], { stdio: 'ignore' });
+        if (queryServiceState().loaded) break;
+        sleepSync(120);
       }
-      for (let i = 0; i < 5; i++) {
-        const st = queryServiceState();
-        if (st.running) {
-          runningNow = true;
-          break;
-        }
-        sleepSync(60);
+      spawnSync('launchctl', ['kickstart', '-k', domainTarget], { stdio: 'ignore' });
+    }
+    for (let i = 0; i < 5; i++) {
+      const st = queryServiceState();
+      if (st.running) {
+        runningNow = true;
+        break;
       }
-      if (!runningNow) runningNow = queryServiceState().running;
-    } catch {}
-    return { platform: 'darwin', serviceFile: activePlist, label, runningNow };
-  }
-
-  if (process.platform === 'linux') {
-    const systemdDir = path.join(home, '.config', 'systemd', 'user');
-    fs.mkdirSync(systemdDir, { recursive: true });
-    const serviceFile = path.join(systemdDir, 'antigravity-theme.service');
-    const unitContent = `[Unit]
-Description=Chuanban Antigravity Theme & Live Metrics Daemon
-After=default.target
-
-[Service]
-ExecStart="${process.execPath}" --disable-warning=ExperimentalWarning "${wrapperDaemon}"
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=default.target
-`;
-    fs.writeFileSync(serviceFile, unitContent, 'utf8');
-    try {
-      execSync('systemctl --user daemon-reload && systemctl --user enable --now antigravity-theme.service 2>/dev/null || true');
-    } catch {}
-    return { platform: 'linux', serviceFile, runningNow: true };
-  }
-
-  if (process.platform === 'win32') {
-    stopRunningDaemonProcesses();
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const startupDir = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-    const vbsFile = path.join(startupDir, 'AntigravityThemeDaemon.vbs');
-    const localVbsFile = path.join(targetDir, 'AntigravityThemeDaemon.vbs');
-    const cmd = `""${process.execPath}"" --disable-warning=ExperimentalWarning ""${wrapperDaemon}""`;
-    const vbsContent = `\uFEFFSet WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run "${cmd}", 0, False\r\n`;
-    try {
-      // 使用 UTF-16LE (带 BOM) 写入本地启动跳板 VBS，彻底兼容 Windows 中文用户名路径 (wscript.exe 原生支持 UTF-16LE)
-      fs.writeFileSync(localVbsFile, vbsContent, 'utf16le');
-    } catch {}
-
-    // 单一权威自启策略：优先使用 Windows 计划任务 (schtasks ONLOGON)，由系统 Schedule 服务拉起、
-    // 脱离沙盒 Win32 Job Object；注册成功后主动清理旧版遗留的 HKCU\...\Run 与 Startup\*.vbs，避免开机三路并发争抢！
-    let autostartMethod = 'none';
-    let scheduledTaskStarted = false;
-    let taskSettingsUpdated = false;
-    try {
-      const createRes = spawnSync(
-        'schtasks',
-        [
-          '/Create',
-          '/TN',
-          'AntigravityThemeDaemon',
-          '/SC',
-          'ONLOGON',
-          '/TR',
-          `wscript.exe //B //NoLogo "${localVbsFile}"`,
-          '/F'
-        ],
-        { stdio: 'ignore', windowsHide: true }
-      );
-      if (createRes.status === 0) {
-        autostartMethod = 'schtasks';
-        // 修正 Windows 计划任务默认策略：允许电池供电启动与持续运行、解除 72 小时超时强杀、允许重装时并发拉起新实例
-        try {
-          const settingsRes = spawnSync(
-            'powershell',
-            [
-              '-NoProfile',
-              '-NonInteractive',
-              '-ExecutionPolicy',
-              'Bypass',
-              '-Command',
-              "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances Parallel; Set-ScheduledTask -TaskName 'AntigravityThemeDaemon' -Settings $s -ErrorAction Stop | Out-Null"
-            ],
-            { stdio: 'ignore', windowsHide: true, timeout: 12000 }
-          );
-          taskSettingsUpdated = settingsRes.status === 0;
-        } catch {}
-        // 清理旧版多重自启残留
-        try {
-          if (fs.existsSync(vbsFile)) fs.unlinkSync(vbsFile);
-        } catch {}
-        try {
-          spawnSync(
-            'reg',
-            ['delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'AntigravityThemeDaemon', '/f'],
-            { stdio: 'ignore', windowsHide: true }
-          );
-        } catch {}
-
-        const runRes = spawnSync('schtasks', ['/Run', '/TN', 'AntigravityThemeDaemon'], {
-          stdio: 'ignore',
-          windowsHide: true
-        });
-        scheduledTaskStarted = runRes.status === 0;
-      }
-    } catch {}
-
-    // 仅当组策略等禁用了 schtasks 时，按 HKCU\Run -> Startup 目录顺序单路降级自启
-    if (autostartMethod === 'none') {
-      try {
-        const regRes = spawnSync(
-          'reg',
-          [
-            'add',
-            'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-            '/v',
-            'AntigravityThemeDaemon',
-            '/t',
-            'REG_SZ',
-            '/d',
-            `wscript.exe //B //NoLogo "${localVbsFile}"`,
-            '/f'
-          ],
-          { stdio: 'ignore', windowsHide: true }
-        );
-        if (regRes.status === 0) {
-          autostartMethod = 'registry-run';
-          try {
-            if (fs.existsSync(vbsFile)) fs.unlinkSync(vbsFile);
-          } catch {}
-        }
-      } catch {}
+      sleepSync(60);
     }
-    if (autostartMethod === 'none') {
-      try {
-        fs.mkdirSync(startupDir, { recursive: true });
-        fs.writeFileSync(vbsFile, vbsContent, 'utf16le');
-        autostartMethod = 'startup-vbs';
-      } catch {}
-    }
-
-    // 若计划任务未能即时拉起后台进程，回退到 detached spawn 直接拉起
-    let spawnedPid = null;
-    if (!scheduledTaskStarted) {
-      try {
-        const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', wrapperDaemon], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true
-        });
-        child.unref();
-        spawnedPid = child.pid || null;
-      } catch {}
-    }
-    return {
-      platform: 'win32',
-      autostartMethod,
-      serviceFile: autostartMethod === 'startup-vbs' ? vbsFile : localVbsFile,
-      localVbsFile,
-      scheduledTask: autostartMethod === 'schtasks' ? 'AntigravityThemeDaemon' : null,
-      taskSettingsUpdated,
-      scheduledTaskStarted,
-      spawnedPid,
-      runningNow: Boolean(scheduledTaskStarted || spawnedPid)
-    };
-  }
-
-  return { platform: process.platform, serviceFile: null };
+    if (!runningNow) runningNow = queryServiceState().running;
+  } catch {}
+  return { platform: 'darwin', serviceFile: activePlist, label, nodeExec: serviceNodeExec, runningNow };
 }
 
 async function runInstall() {
@@ -1226,6 +843,9 @@ async function runInstall() {
     hasFlag('--target-dir') || !isSameTargetPath(targetDir, defaultTarget);
   if (isCustomSandboxTarget && hasFlag('--register-service')) {
     throw new Error('--register-service is not supported for an isolated --target-dir; omit --target-dir for a global install.');
+  }
+  if (!isCustomSandboxTarget) {
+    assertMacOsHost('install');
   }
 
   assertTargetContained(targetDir);
@@ -1332,7 +952,7 @@ async function runInstall() {
     // 2.33 ignores the legacy argv setting. Do not silently change launch/security settings.
     argvStatus = { skipped: true, reason: 'explicit-launch-opt-in-required', guidance: env.cdpGuidance };
 
-    // 创建兼容包装脚本 ~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs（使用 pathToFileURL 兼容 Windows C:\ 路径）
+    // 创建兼容包装脚本 ~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs
     const scriptsDir = path.join(os.homedir(), '.gemini', 'antigravity', 'scripts');
     fs.mkdirSync(scriptsDir, { recursive: true });
     const wrapperDaemon = path.join(scriptsDir, 'antigravity-font-daemon.mjs');
@@ -1343,7 +963,7 @@ async function runInstall() {
       { encoding: 'utf8', mode: 0o755 }
     );
 
-    // 注册/更新跨平台自启服务
+    // 注册/更新 macOS LaunchAgent 自启服务
     serviceInfo = registerSystemService(targetDir, wrapperDaemon);
 
     // 立即执行一次 --once 同步注入
@@ -1457,6 +1077,9 @@ async function runRollback() {
   if (isCustomSandboxTarget && hasFlag('--register-service')) {
     throw new Error('--register-service is not supported for an isolated --target-dir; omit --target-dir for a global install.');
   }
+  if (!isCustomSandboxTarget) {
+    assertMacOsHost('rollback');
+  }
   assertTargetContained(targetDir);
   const targetCore = path.join(targetDir, 'core');
   const targetPrev = path.join(targetDir, 'core.prev');
@@ -1504,38 +1127,11 @@ async function runRollback() {
 
   // 重启守护进程并立即执行一次 --once 重新注入（沙箱 --target-dir 隔离模式下跳过全局服务干预）
   const realDaemon = path.join(targetCore, 'daemon.mjs');
-  const wrapperDaemon = path.join(os.homedir(), '.gemini', 'antigravity', 'scripts', 'antigravity-font-daemon.mjs');
   if (!isCustomSandboxTarget) {
-    if (process.platform === 'darwin') {
-      const uid = process.getuid ? process.getuid() : 501;
-      try {
-        execSync(`launchctl kickstart -k gui/${uid}/com.antigravity.customfont 2>/dev/null || launchctl kickstart -k gui/${uid}/com.antigravity.theme 2>/dev/null || true`);
-      } catch {}
-    } else if (process.platform === 'linux') {
-      try {
-        execSync('systemctl --user restart antigravity-theme.service 2>/dev/null || true');
-      } catch {}
-    } else if (process.platform === 'win32') {
-      stopRunningDaemonProcesses();
-      let restartedViaTask = false;
-      try {
-        const r = spawnSync('schtasks', ['/Run', '/TN', 'AntigravityThemeDaemon'], {
-          stdio: 'ignore',
-          windowsHide: true
-        });
-        restartedViaTask = r.status === 0;
-      } catch {}
-      if (!restartedViaTask) {
-        try {
-          const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fs.existsSync(wrapperDaemon) ? wrapperDaemon : realDaemon], {
-            detached: true,
-            stdio: 'ignore',
-            windowsHide: true
-          });
-          child.unref();
-        } catch {}
-      }
-    }
+    const uid = process.getuid ? process.getuid() : 501;
+    try {
+      execSync(`launchctl kickstart -k gui/${uid}/com.antigravity.customfont 2>/dev/null || launchctl kickstart -k gui/${uid}/com.antigravity.theme 2>/dev/null || true`);
+    } catch {}
     spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', realDaemon, '--once'], {
       stdio: 'inherit'
     });
@@ -1558,22 +1154,18 @@ async function runRollback() {
 }
 
 function runInstallFonts() {
+  assertMacOsHost('install-fonts');
   const fromDir = getArg('--from', null);
   if (!fromDir || !fs.existsSync(fromDir)) {
     console.error('Usage: node install.mjs install-fonts --from <font-folder-path>');
     process.exit(1);
   }
   const home = os.homedir();
-  const destDir =
-    process.platform === 'darwin'
-      ? path.join(home, 'Library', 'Fonts')
-      : process.platform === 'win32'
-      ? path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Microsoft', 'Windows', 'Fonts')
-      : path.join(home, '.local', 'share', 'fonts');
+  const destDir = path.join(home, 'Library', 'Fonts');
 
   fs.mkdirSync(destDir, { recursive: true });
   const installed = [];
-  const skippedLocked = [];
+  const skippedSamePath = [];
 
   const walkFonts = (dir) => {
     for (const entry of fs.readdirSync(dir)) {
@@ -1583,103 +1175,17 @@ function runInstallFonts() {
         walkFonts(full);
       } else if (/\.(ttf|otf|ttc)$/i.test(entry)) {
         const destPath = path.join(destDir, entry);
-        let copied = false;
         if (isSameTargetPath(full, destPath)) {
-          skippedLocked.push(destPath);
+          skippedSamePath.push(destPath);
         } else {
-          try {
-            fs.copyFileSync(full, destPath);
-            copied = true;
-          } catch (err) {
-            if (
-              process.platform === 'win32' &&
-              (err?.code === 'EBUSY' || err?.code === 'EPERM' || err?.code === 'EACCES') &&
-              fs.existsSync(destPath)
-            ) {
-              skippedLocked.push(destPath);
-            } else {
-              throw err;
-            }
-          }
+          fs.copyFileSync(full, destPath);
+          installed.push(destPath);
         }
-        if (process.platform === 'win32') {
-          const ext = path.extname(entry).toLowerCase();
-          const typeSuffix = ext === '.otf' ? ' (OpenType)' : ' (TrueType)';
-          const fontTitle = entry.replace(/\.(ttf|otf|ttc)$/i, '') + typeSuffix;
-          try {
-            spawnSync(
-              'reg',
-              [
-                'add',
-                'HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts',
-                '/v',
-                fontTitle,
-                '/t',
-                'REG_SZ',
-                '/d',
-                destPath,
-                '/f'
-              ],
-              { stdio: 'ignore', windowsHide: true }
-            );
-          } catch {}
-        }
-        if (copied) installed.push(destPath);
       }
     }
   };
 
   walkFonts(path.resolve(fromDir));
-  let fontBroadcastOk = process.platform !== 'win32';
-  let fontRegisteredCount = 0;
-  if (process.platform === 'win32' && (installed.length > 0 || skippedLocked.length > 0)) {
-    fontBroadcastOk = false;
-    try {
-      const fontListJson = JSON.stringify(Array.from(new Set([...installed, ...skippedLocked])));
-      const listTmp = path.join(os.tmpdir(), `ag-fonts-${process.pid}-${Date.now()}.json`);
-      fs.writeFileSync(listTmp, fontListJson, 'utf8');
-      try {
-        const psNotify = [
-          '$ErrorActionPreference = "Stop"',
-          'Add-Type -TypeDefinition @"',
-          'using System; using System.Runtime.InteropServices;',
-          'public static class AgFontBroadcast {',
-          '  [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int AddFontResource(string lpFileName);',
-          '  [DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern bool SendNotifyMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);',
-          '}',
-          '"@',
-          `$parsed = Get-Content -LiteralPath '${listTmp.replace(/'/g, "''")}' -Raw -Encoding UTF8 | ConvertFrom-Json`,
-          '$paths = @(foreach ($x in $parsed) { if ($null -ne $x) { [string]$x } })',
-          '$added = 0',
-          'foreach ($fp in $paths) { if ($fp -and ([AgFontBroadcast]::AddFontResource($fp) -gt 0)) { $added++ } }',
-          '$notified = [AgFontBroadcast]::SendNotifyMessage([IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero)',
-          '@{ added = $added; notified = [bool]$notified } | ConvertTo-Json -Compress'
-        ].join('\n');
-        const psRes = spawnSync(
-          'powershell',
-          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psNotify],
-          {
-            encoding: 'utf8',
-            windowsHide: true,
-            timeout: 25000
-          }
-        );
-        if (psRes.status === 0) {
-          const notifyData = JSON.parse(String(psRes.stdout || '').trim() || '{}');
-          fontRegisteredCount = Number(notifyData.added) || 0;
-          fontBroadcastOk = fontRegisteredCount > 0 && Boolean(notifyData.notified);
-        }
-      } finally {
-        try {
-          if (fs.existsSync(listTmp)) fs.unlinkSync(listTmp);
-        } catch {}
-      }
-    } catch {}
-  } else if (process.platform === 'linux') {
-    try {
-      execSync('fc-cache -f 2>/dev/null || true');
-    } catch {}
-  }
   console.log(
     JSON.stringify(
       {
@@ -1687,11 +1193,9 @@ function runInstallFonts() {
         platform: process.platform,
         destDir,
         installedCount: installed.length,
-        skippedLockedCount: skippedLocked.length,
-        fontRegisteredCount,
-        fontBroadcastOk,
+        skippedCount: skippedSamePath.length,
         installed,
-        skippedLocked
+        skippedSamePath
       },
       null,
       2
@@ -1712,58 +1216,26 @@ async function runUninstall() {
   const realDaemon = path.join(targetDir, 'core', 'daemon.mjs');
 
   if (isCustomSandboxTarget) {
-    const localVbs = path.join(targetDir, 'AntigravityThemeDaemon.vbs');
-    try {
-      if (fs.existsSync(localVbs)) fs.unlinkSync(localVbs);
-    } catch {}
     console.log(`[Uninstall] Cleaned custom sandbox target (${targetDir}); global daemon and services were left untouched.`);
     return;
   }
+  assertMacOsHost('uninstall');
 
-  // 1. 先移除跨平台开机自启服务（防止 KeepAlive/Restart 自动拉起），再彻底终止残留后台守护进程，消除与 --once 还原注入的并发竞态
-  if (process.platform === 'darwin') {
-    const uid = process.getuid ? process.getuid() : 501;
-    const launchAgentsDir = path.join(home, 'Library', 'LaunchAgents');
-    for (const label of ['com.antigravity.customfont', 'com.antigravity.theme']) {
-      try {
-        execSync(`launchctl bootout gui/${uid}/${label} 2>/dev/null || true`);
-      } catch {}
-      for (let i = 0; i < 15; i++) {
-        const res = spawnSync('launchctl', ['print', `gui/${uid}/${label}`], { stdio: 'ignore' });
-        if (res.status !== 0) break;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
-      }
-      try {
-        const plistFile = path.join(launchAgentsDir, `${label}.plist`);
-        if (fs.existsSync(plistFile)) fs.unlinkSync(plistFile);
-      } catch {}
+  // 1. 先移除 macOS LaunchAgent 自启服务（防止 KeepAlive 自动拉起），再终止残留后台守护进程，消除与 --once 还原注入的并发竞态
+  const uid = process.getuid ? process.getuid() : 501;
+  const launchAgentsDir = path.join(home, 'Library', 'LaunchAgents');
+  for (const label of ['com.antigravity.customfont', 'com.antigravity.theme']) {
+    try {
+      execSync(`launchctl bootout gui/${uid}/${label} 2>/dev/null || true`);
+    } catch {}
+    for (let i = 0; i < 15; i++) {
+      const res = spawnSync('launchctl', ['print', `gui/${uid}/${label}`], { stdio: 'ignore' });
+      if (res.status !== 0) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
     }
-  } else if (process.platform === 'linux') {
     try {
-      execSync('systemctl --user disable --now antigravity-theme.service 2>/dev/null || true');
-      const serviceFile = path.join(home, '.config', 'systemd', 'user', 'antigravity-theme.service');
-      if (fs.existsSync(serviceFile)) fs.unlinkSync(serviceFile);
-      execSync('systemctl --user daemon-reload 2>/dev/null || true');
-    } catch {}
-  } else if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const vbsFile = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'AntigravityThemeDaemon.vbs');
-    const localVbs = path.join(targetDir, 'AntigravityThemeDaemon.vbs');
-    try {
-      spawnSync('schtasks', ['/Delete', '/TN', 'AntigravityThemeDaemon', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true
-      });
-    } catch {}
-    try {
-      spawnSync('reg', ['delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'AntigravityThemeDaemon', '/f'], {
-        stdio: 'ignore',
-        windowsHide: true
-      });
-    } catch {}
-    try {
-      if (fs.existsSync(vbsFile)) fs.unlinkSync(vbsFile);
-      if (fs.existsSync(localVbs)) fs.unlinkSync(localVbs);
+      const plistFile = path.join(launchAgentsDir, `${label}.plist`);
+      if (fs.existsSync(plistFile)) fs.unlinkSync(plistFile);
     } catch {}
   }
   stopRunningDaemonProcesses();
@@ -1778,14 +1250,13 @@ async function runUninstall() {
       fs.writeFileSync(userConfigPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
       temporarilyDisabled = true;
       spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', realDaemon, '--once'], {
-        stdio: 'ignore',
-        windowsHide: true
+        stdio: 'ignore'
       });
     } finally {
       if (temporarilyDisabled) fs.writeFileSync(userConfigPath, origRaw, 'utf8');
     }
   }
-  console.log('[Uninstall] Stopped daemon, removed autostart services, and unloaded live styles. User config in ~/.gemini/antigravity/theme-patch/user/ is preserved.');
+  console.log('[Uninstall] Stopped daemon, removed LaunchAgent, and unloaded live styles. User config in ~/.gemini/antigravity/theme-patch/user/ is preserved.');
 }
 
 // ============================================================================

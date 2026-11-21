@@ -84,7 +84,7 @@ test('daemon explicit origin arrays remain restrictive and defaults include Swar
 // All filesystem/service operations are in-memory stubs. No launchctl or real sleeps.
 test('macOS service status requires a PID, not merely a loaded job', () => {
   const installer = fs.readFileSync(new URL('../install.mjs', import.meta.url), 'utf8');
-  const code = section(installer, 'function registerSystemService(', 'async function runInstall(');
+  const code = section(installer, 'function resolveStableNodeExecPath(', 'async function runInstall(');
   for (const [status, stdout, expected] of [
     [0, 'state = waiting\n', false],
     [0, 'state = running\npid = 12345\n', true],
@@ -93,7 +93,8 @@ test('macOS service status requires a PID, not merely a loaded job', () => {
     const calls = [], files = new Map();
     const ctx = vm.createContext({
       path, os: { homedir: () => '/fake-home' },
-      process: { platform: 'darwin', execPath: '/fake-node', getuid: () => 501 },
+      assertMacOsHost() {},
+      process: { platform: 'darwin', execPath: '/fake-node', env: {}, getuid: () => 501 },
       fs: { mkdirSync() {}, existsSync: p => files.has(p), readFileSync: p => files.get(p), writeFileSync: (p, value) => files.set(p, value) },
       Atomics: { wait() {} },
       spawnSync: (bin, args) => {

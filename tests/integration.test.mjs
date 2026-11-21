@@ -33,7 +33,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.5.0-eric.1');
+  assert.equal(manifest.version, '5.5.2-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -219,7 +219,7 @@ function isolatedInstaller(sourceDir, targetDir, home, extraArgs = []) {
   let code = fs.readFileSync(path.join(sourceDir, 'install.mjs'), 'utf8');
   code = code.replace(/^import .*;\r?\n/gm, '').replace('const __filename = fileURLToPath(import.meta.url);', `const __filename = ${JSON.stringify(path.join(sourceDir, 'install.mjs'))};`);
   code = code.slice(0, code.indexOf('switch (subcommand) {'));
-  code += '\ndetectEnvironment = async () => ({nodeBasicOk:true}); inspectLiveWindow = async () => ({reachable:false}); ensureArgvRemoteDebugging = () => []; registerSystemService = () => ({stubbed:true}); globalThis.run = runInstall;';
+  code += '\ndetectEnvironment = async () => ({nodeBasicOk:true}); inspectLiveWindow = async () => ({reachable:false}); registerSystemService = () => ({stubbed:true}); globalThis.run = runInstall;';
   const deny = () => { throw new Error('Unexpected OS subprocess'); };
   const ctx = vm.createContext({ fs, path, crypto, os: { ...os, homedir: () => home }, fileURLToPath, pathToFileURL, http: {},
     execSync: deny, spawn: deny, spawnSync: () => ({status:0}),

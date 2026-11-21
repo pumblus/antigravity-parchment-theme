@@ -77,15 +77,6 @@ test('v530 config hot reload invalidates rendered payload cache and applies over
  const cfg=path.join(h.tmp,'user/config.json');fs.writeFileSync(cfg,JSON.stringify({contextLimitOverride:500000}));const future=new Date(Date.now()+5000);fs.utimesSync(cfg,future,future);
  assert.equal(h.api.rebuildBundleIfNeeded(),true);assert.equal(h.api.metricsCache.size,0);const next=h.api.parseConversationMetrics(parent,h.dir);assert.match(next.inlineHtml,/\/500k/);
 });
-test('v530 UNC cooldown covers explicit and array paths, and slow probes activate backoff',()=>{
- let probes=0,now=1000;const ctx=vm.createContext({path:path.win32,TextDecoder,Uint8Array,process:{platform:'win32'},Date:{now:()=>now},fs:{existsSync:()=>{probes++;now+=500;return false;}},wslUncBackoffUntil:2000,resolveWin32WslConversationsDirs:()=>{throw Error('discovery during cooldown');}});
- const a=source.indexOf('const resolvedCascadeDbCache'),b=source.indexOf('\nfunction getDbState',a);
- vm.runInContext(source.slice(a,b)+'\nglobalThis.resolve=resolveConversationDbPath;',ctx);
- const unc='\\\\wsl.localhost\\Ubuntu\\conversations';
- ctx.resolve(parent,{conversationsDir:unc,explicitConvDir:true,portFile:'port'});ctx.resolve(parent,[unc]);assert.equal(probes,0);
- now=3000;ctx.resolve(parent,{conversationsDir:unc,explicitConvDir:true});assert.equal(probes,1);
- ctx.resolve(child,[unc]);assert.equal(probes,1);assert.ok(ctx.wslUncBackoffUntil>now);
-});
 test('v530 lineage rotation rechecks >64 placeholders and corrects existing parent relationships',async t=>{
  const h=await harness(t);h.makeDb(parent);h.makeDb(grand);const ids=[];
  for(let i=100;i<170;i++){const id=`${i.toString().padStart(8,'0')}-1111-4111-8111-111111111111`;ids.push(id);h.makeDb(id);}
@@ -150,19 +141,18 @@ test('v530 emitted bundle preserves explicit exclusion provenance without inject
  for(const selector of ['.monaco-editor','.monaco-diff-editor','.xterm','[data-markdown-root]','[data-testid="user-message-content"]','.agy-user-bubble','[class*="onyx-key"]'])assert.ok(defaults.includes(selector),selector);
  assert.match(runtime,/splitTopLevelSelectors\(DEFAULT_EXCLUDE_I18N\)/);
 });
-test('translation review platform trash defaults preserve exact personal overrides', async t => {
- for(const platform of ['darwin','win32','linux']) {
-  const h=await harness(t);h.context.process.platform=platform;
-  fs.writeFileSync(path.join(h.tmp,'core/i18n.json'),JSON.stringify({Trash:'废纸篓','Move to Trash':'移到废纸篓'}));
-  const stamp=new Date(Date.now()+7000);fs.utimesSync(path.join(h.tmp,'core/i18n.json'),stamp,stamp);
-  assert.equal(h.api.rebuildBundleIfNeeded(),true);
-  const browser=vm.createContext({});vm.runInContext(h.api.getBundle(),browser);
-  assert.equal(browser.__testBoot.i18nDict.Trash,platform==='darwin'?'废纸篓':'回收站');
-  assert.equal(browser.__testBoot.i18nDict['Move to Trash'],platform==='darwin'?'移到废纸篓':'移到回收站');
-  fs.writeFileSync(path.join(h.tmp,'user/i18n.override.json'),JSON.stringify({exact:{Trash:'我的自定义名称'}}));
-  assert.equal(h.api.rebuildBundleIfNeeded(),true);vm.runInContext(h.api.getBundle(),browser);
-  assert.equal(browser.__testBoot.i18nDict.Trash,'我的自定义名称');
- }
+test('translation review macOS trash defaults preserve exact personal overrides', async t => {
+ const h=await harness(t);
+ fs.writeFileSync(path.join(h.tmp,'core/i18n.json'),JSON.stringify({Trash:'废纸篓','Move to Trash':'移到废纸篓'}));
+ const stamp=new Date(Date.now()+7000);fs.utimesSync(path.join(h.tmp,'core/i18n.json'),stamp,stamp);
+ assert.equal(h.api.rebuildBundleIfNeeded(),true);
+ const browser=vm.createContext({});vm.runInContext(h.api.getBundle(),browser);
+ assert.equal(browser.__testBoot.platform,'darwin');
+ assert.equal(browser.__testBoot.i18nDict.Trash,'废纸篓');
+ assert.equal(browser.__testBoot.i18nDict['Move to Trash'],'移到废纸篓');
+ fs.writeFileSync(path.join(h.tmp,'user/i18n.override.json'),JSON.stringify({exact:{Trash:'我的自定义名称'}}));
+ assert.equal(h.api.rebuildBundleIfNeeded(),true);vm.runInContext(h.api.getBundle(),browser);
+ assert.equal(browser.__testBoot.i18nDict.Trash,'我的自定义名称');
 });
 test('translation review metrics labels distinguish model capacity from compression and parent totals', async t => {
  const h=await harness(t);h.makeDb(parent);h.makeDb(child,generation(200),parent,parent);

@@ -106,9 +106,8 @@
     }
   }
 
-  const PATCH_VERSION = boot.version || '20261119-v5.5.0-eric.1';
-  const DETECTED_OS =
-    boot.platform || (/Win/i.test(navigator.platform || '') ? 'win32' : /Mac/i.test(navigator.platform || '') ? 'darwin' : 'linux');
+  const PATCH_VERSION = boot.version || '20261120-v5.5.2-eric.1';
+  const DETECTED_OS = 'darwin';
   const ENABLED = boot.enabled !== false;
   const CSS_TEXT = boot.cssText || '';
   const CUSTOM_CSS_TEXT = boot.customCss || '';
@@ -293,7 +292,10 @@
 
     let varStyle = document.getElementById('ag-user-theme-vars');
     if (globalDecls.length === 0 && lightDecls.length === 0 && darkDecls.length === 0) {
-      if (varStyle) varStyle.remove();
+      if (varStyle) {
+        varStyle.remove();
+        window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
+      }
     } else {
       const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
       if (!varStyle) {
@@ -327,6 +329,7 @@
       const nextCss = blocks.join('\n');
       if (varStyle.textContent !== nextCss) {
         varStyle.textContent = nextCss;
+        window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
       }
     }
 
@@ -445,25 +448,6 @@
     } catch (e) {
       return fallbackHex;
     }
-  }
-
-  function syncWinTitleBarOverlay(isDark, force = false, customFallbacks = null) {
-    if (IS_SWARM_PLUGIN_FRAME || DETECTED_OS !== 'win32') return;
-    try {
-      const setOverlay = window.electronNative?.setTitleBarOverlay;
-      if (typeof setOverlay !== 'function') return;
-      const targetEl = document.body || document.documentElement;
-      if (!targetEl || typeof getComputedStyle !== 'function') return;
-      const fbBg = (customFallbacks && customFallbacks.bg) || (isDark ? '#191917' : '#F0EEE6');
-      const fbFg = (customFallbacks && customFallbacks.fg) || (isDark ? '#FAF9F5' : '#141413');
-      const bgHex = resolveCssColorToHex6('--sidebar', targetEl, fbBg);
-      const fgHex = resolveCssColorToHex6('--foreground', targetEl, fbFg);
-      const sig = bgHex + '|' + fgHex;
-      if (force || window.__ag_last_overlay_sig !== sig) {
-        window.__ag_last_overlay_sig = sig;
-        Promise.resolve(setOverlay({ color: bgHex, symbolColor: fgHex })).catch(() => {});
-      }
-    } catch (e) {}
   }
 
   function syncCurtainSurfaceColor(force = false) {
@@ -586,6 +570,7 @@
     window.__ag_host_theme_mode = null;
     window.__ag_set_host_theme_mode = null;
     window.__ag_resolved_theme_mode = null;
+    window.__ag_last_surface_sync_key = '';
     window.__ag_body_ready = false;
     applyThemeVars({});
     document.documentElement.removeAttribute('data-ag-preset');
@@ -610,42 +595,6 @@
           }
         }
         delete window.__ag_swarm_surface;
-      } else {
-        const hEl = document.documentElement;
-        const bEl = document.body;
-        const sysDark = !!(
-          typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
-        );
-        const hDataTheme = hEl ? hEl.getAttribute('data-theme') : null;
-        const bHydrated = !!(bEl && (bEl.hasAttribute('data-agy-theme') || bEl.hasAttribute('data-newux-theme')));
-        let nativeDark = false;
-        if (
-          hDataTheme === 'dark' ||
-          (bEl && (bEl.classList.contains('dark') || bEl.classList.contains('theme-dark') || bEl.classList.contains('dark-theme')))
-        ) {
-          nativeDark = true;
-        } else if (
-          hDataTheme === 'light' ||
-          (bEl && (bEl.classList.contains('theme-light') || bEl.classList.contains('light-theme') || bEl.classList.contains('light')))
-        ) {
-          nativeDark = false;
-        } else if (hEl && hEl.style.colorScheme === 'dark') {
-          nativeDark = true;
-        } else if (hEl && hEl.style.colorScheme === 'light') {
-          nativeDark = false;
-        } else if (bHydrated) {
-          nativeDark = false;
-        } else if (boot.hostThemeMode === 'dark') {
-          nativeDark = true;
-        } else if (boot.hostThemeMode === 'light') {
-          nativeDark = false;
-        } else {
-          nativeDark = sysDark;
-        }
-        syncWinTitleBarOverlay(nativeDark, true, {
-          bg: nativeDark ? '#131313' : '#FAFAFA',
-          fg: nativeDark ? '#FAFAFA' : '#383A42'
-        });
       }
     };
     restoreAllTranslations(document.body);
@@ -683,6 +632,7 @@
   }
   if (style && style.textContent !== CSS_TEXT) {
     style.textContent = CSS_TEXT;
+    window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
   }
 
   document.documentElement.setAttribute('data-ag-wax-seal', MODULES.composerWaxSeal === false ? 'off' : 'on');
@@ -699,9 +649,11 @@
     }
     if (userStyle.textContent !== CUSTOM_CSS_TEXT) {
       userStyle.textContent = CUSTOM_CSS_TEXT;
+      window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
     }
   } else if (userStyle) {
     userStyle.remove();
+    window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
   }
 
   function ensureStylesAtEndOfHead() {
@@ -1039,7 +991,7 @@
   }
 
   // ============================================================================
-  // 2.1 缩放快捷键修复与 2.31.2 原生菜单快捷键防双倍缩放保护（兼容 Numpad、欧式键盘与 Windows BaseWindow）
+  // 2.1 缩放快捷键修复与 2.31.2 macOS 原生菜单快捷键防双倍缩放保护（兼容 Numpad 与欧式键盘）
   // ============================================================================
   try {
     const initZoom = window.electronNative?.getZoomLevel?.();
@@ -1069,8 +1021,7 @@
   window.__ag_zoom_keydown_fn = (e) => {
     if (MODULES.zoomShortcuts === false || MODULES.deadlockHealer === false) return;
     if (e.isComposing) return;
-    const isMac = detectedOs === 'darwin';
-    const modKey = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+    const modKey = e.metaKey && !e.ctrlKey;
     if (!modKey || e.altKey) return;
 
     const k = String(e.key || '');
@@ -1153,7 +1104,7 @@
     if (
       !window.__ag_self_zooming &&
       ((typeof curFactor === 'number' && typeof settledBefore === 'number' && Math.abs(curFactor - settledBefore) > 0.003) ||
-        nowTs - (window.__ag_last_ext_zoom_ts || 0) < (isMac ? 80 : 40))
+        nowTs - (window.__ag_last_ext_zoom_ts || 0) < 80)
     ) {
       if (typeof curFactor === 'number') window.__ag_settled_zoom = curFactor;
       return;
@@ -1207,8 +1158,8 @@
       }
     };
 
-    // Windows / Linux 无 NSMenu 加速器竞态，且 macOS 原生菜单未绑定小键盘与 '_'：零延迟即时执行，确保长按连发 (e.repeat) 丝滑不吞键
-    if (!isMac || String(e.code || '').startsWith('Numpad') || k === '_') {
+    // macOS 原生菜单未绑定小键盘与 '_'：零延迟即时执行，确保长按连发 (e.repeat) 丝滑不吞键
+    if (String(e.code || '').startsWith('Numpad') || k === '_') {
       runZoomAction();
       return;
     }
@@ -1421,8 +1372,18 @@
           lastSyncedHostMode = targetMode;
         } catch (e) {}
       }
-      syncWinTitleBarOverlay(isDark);
-      syncCurtainSurfaceColor();
+      const bodyStateFlag = bodyEl
+        ? bodyEl.hasAttribute('data-agy-theme') || bodyEl.hasAttribute('data-newux-theme')
+          ? 2
+          : 1
+        : 0;
+      const surfaceSyncKey = `${targetMode}|${targetPreset}|${bodyStateFlag}|${window.__ag_style_rev || 0}`;
+      if (window.__ag_last_surface_sync_key !== surfaceSyncKey) {
+        if (bodyEl) {
+          window.__ag_last_surface_sync_key = surfaceSyncKey;
+        }
+        syncCurtainSurfaceColor();
+      }
     } catch (e) {}
   }
 
@@ -1616,12 +1577,18 @@
     return pill.querySelector('[data-ag-metrics-text="1"], .ag-live-metrics-text, #ag-live-metrics-text');
   }
 
+  const ESCAPED_INPUT_BOX_ID = String(SELECTORS.inputBoxId || '').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const INPUT_BOX_SELECTOR = ESCAPED_INPUT_BOX_ID ? '[id="' + ESCAPED_INPUT_BOX_ID + '"]' : '';
+  const METRICS_FOCUSIN_BASE_SELECTOR =
+    '[data-pane-id], [data-testid="conversation-view"], [data-testid="side-question-tab-content"], [data-media-drop-scope="subpane"], [data-side-panel-strip]';
+  const METRICS_FOCUSIN_MATCH_SELECTOR = INPUT_BOX_SELECTOR
+    ? `${METRICS_FOCUSIN_BASE_SELECTOR}, ${INPUT_BOX_SELECTOR}`
+    : METRICS_FOCUSIN_BASE_SELECTOR;
+
   function getAllInputBoxes() {
     try {
-      const rawId = String(SELECTORS.inputBoxId || '').trim();
-      if (!rawId || typeof document.querySelectorAll !== 'function') return [];
-      const escId = rawId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return Array.from(document.querySelectorAll('[id="' + escId + '"]')).filter(box =>
+      if (!INPUT_BOX_SELECTOR || typeof document.querySelectorAll !== 'function') return [];
+      return Array.from(document.querySelectorAll(INPUT_BOX_SELECTOR)).filter(box =>
         box.isConnected && !box.closest('[hidden], [aria-hidden="true"], [inert]') && box.getClientRects().length > 0
       );
     } catch (e) {
@@ -1677,10 +1644,6 @@
       }
     } catch (e) {}
     return '';
-  }
-
-  function extractCascadeId() {
-    return extractFocusedOrPrimaryCascadeId();
   }
 
   function resolveBoxCascadeId(box, totalBoxes) {
@@ -2202,12 +2165,13 @@
     }
     const boxes = getAllInputBoxes();
     const totalBoxes = boxes.length;
-    const allowed = new Set([...new Set(boxes.map(box => resolveBoxCascadeId(box, totalBoxes)).filter(Boolean))].slice(0, 12));
+    const resolvedIds = boxes.map(box => resolveBoxCascadeId(box, totalBoxes));
+    const allowed = new Set([...new Set(resolvedIds.filter(Boolean))].slice(0, 12));
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
       const pill = ensureMetricsPillForBox(box, forceLayout, resetHysteresis);
       if (pill) {
-        const cid = resolveBoxCascadeId(box, totalBoxes);
+        const cid = resolvedIds[i];
         syncPillForResolvedCascade(box, pill, allowed.has(cid) ? cid : '');
       }
     }
@@ -2341,11 +2305,7 @@
   window.__ag_metrics_focusin_fn = (e) => {
     const t = e && e.target;
     if (!t || !t.closest) return;
-    const rawId = String(SELECTORS.inputBoxId || '').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const baseSel =
-      '[data-pane-id], [data-testid="conversation-view"], [data-testid="side-question-tab-content"], [data-media-drop-scope="subpane"], [data-side-panel-strip]';
-    const matchSel = rawId ? `${baseSel}, [id="${rawId}"]` : baseSel;
-    if (t.closest(matchSel)) {
+    if (t.closest(METRICS_FOCUSIN_MATCH_SELECTOR)) {
       scheduleRouteCheck();
     }
   };
@@ -2491,8 +2451,10 @@
       const exactNorm = DICT[sNorm];
       if (typeof exactNorm === 'string') return exactNorm;
     }
-    const aposAlias = DICT_APOS.get(sNorm);
-    if (typeof aposAlias === 'string') return aposAlias;
+    if (DICT_APOS.size > 0) {
+      const aposAlias = DICT_APOS.get(sNorm);
+      if (typeof aposAlias === 'string') return aposAlias;
+    }
     const c0 = sNorm.charCodeAt(0);
     if (c0 < 65 || c0 > 90) return undefined;
     return DICT_CI.get(sNorm.toLowerCase());
@@ -2894,11 +2856,15 @@
       if (!el || el.nodeType !== 1) return true;
       if (immutableTextExclCache.get(el) === true) return true;
       if (batchSafeSet && batchSafeSet.has(el)) return false;
-      if (el.closest(TEXT_IMMUTABLE_EXCLUDE_SELECTOR)) {
-        if (el.isConnected) immutableTextExclCache.set(el, true);
-        return true;
-      }
-      if (el.closest(EXCLUDE_SELECTOR)) {
+      const excludedAncestor = el.closest(EXCLUDE_SELECTOR);
+      if (excludedAncestor) {
+        if (
+          el.isConnected &&
+          ((excludedAncestor.matches && excludedAncestor.matches(TEXT_IMMUTABLE_EXCLUDE_SELECTOR)) ||
+            el.closest(TEXT_IMMUTABLE_EXCLUDE_SELECTOR))
+        ) {
+          immutableTextExclCache.set(el, true);
+        }
         return true;
       }
       if (batchSafeSet) batchSafeSet.add(el);
@@ -3064,7 +3030,7 @@
           if (mOvNotes) {
             const rRaw = mOvNotes[1] ? mOvNotes[1].trim() : '';
             const rZh = rRaw ? dictLookup(rRaw) || rRaw : '';
-            return raw.replace(trimmed, () => '概览 · 来自纪要员笔记' + (rZh ? ' · ' + rZh : ''));
+            return raw.replace(trimmed, () => '概览 · 来自纪要员记录' + (rZh ? ' · ' + rZh : ''));
           }
         }
         if (firstUpper === 'F' && contextEl && contextEl.tagName === 'OPTION' && RE_SWARM_FROM_OPT.test(trimmed)) {
@@ -3197,7 +3163,7 @@
         }
       } else if (firstUpper === 'U') {
         if (RE_USING_BROWSER_SEC.test(trimmed)) {
-          return raw.replace(RE_USING_BROWSER_SEC, '正在操作浏览器 ($1s)');
+          return raw.replace(RE_USING_BROWSER_SEC, '正在操作浏览器（$1 秒）');
         }
         if (RE_UP_NEXT_COUNT.test(trimmed)) {
           return raw.replace(RE_UP_NEXT_COUNT, '接下来 · $1');
@@ -3281,7 +3247,7 @@
               (dictLookup(m.trim()) || computeTextTranslation(m.trim(), contextEl) || m.trim()) +
               ' 配额将于 ' +
               dt +
-              ' 重置，请切换至其他可用模型以继续。'
+              ' 重置，请切换到其他可用模型继续。'
           );
         }
         if (RE_QUOTA_REACHED_SWITCH.test(trimmed)) {
@@ -3290,7 +3256,7 @@
             (_, m) =>
               '您的 ' +
               (dictLookup(m.trim()) || computeTextTranslation(m.trim(), contextEl) || m.trim()) +
-              ' 配额已用尽，请切换至其他可用模型以继续。'
+              ' 配额已用尽，请切换到其他可用模型继续。'
           );
         }
         const mNeedCred = trimmed.match(RE_NEED_CREDITS_MODEL);
@@ -3344,11 +3310,10 @@
           return raw.replace(
             trimmed,
             () =>
-              '可将常规步骤分流至 ' +
-              mOffload[2] +
-              ' 执行的 ' +
               mOffload[1] +
-              ' 编排模型。保持 ' +
+              ' 模型，可将常规步骤分流到 ' +
+              mOffload[2] +
+              ' 执行。保持 ' +
               mOffload[3] +
               ' 同等质量，消耗更少 Token。'
           );
@@ -3420,15 +3385,18 @@
     }
 
     function translateSingleAttr(el, attrName, origDataAttr, customResolver) {
-      const verProp = '__ag_attr_ver_' + attrName;
-      const lastDataAttr = origDataAttr + '-last';
       const cur = el.getAttribute(attrName);
       if (!cur) {
-        if (el.hasAttribute(origDataAttr)) el.removeAttribute(origDataAttr);
+        if (!el.hasAttribute(origDataAttr)) return;
+        const verProp = '__ag_attr_ver_' + attrName;
+        const lastDataAttr = origDataAttr + '-last';
+        el.removeAttribute(origDataAttr);
         if (el.hasAttribute(lastDataAttr)) el.removeAttribute(lastDataAttr);
         delete el[verProp];
         return;
       }
+      const verProp = '__ag_attr_ver_' + attrName;
+      const lastDataAttr = origDataAttr + '-last';
       const savedOrig = el.getAttribute(origDataAttr);
       const savedLast = el.getAttribute(lastDataAttr);
       if (savedOrig !== null && savedLast === cur && el[verProp] === PATCH_VERSION) {
@@ -3613,8 +3581,19 @@
       return computeTextTranslation(atrim, el);
     }
 
-    function translateElementAttrs(el) {
+    const ATTR_TO_ORIG = {
+      title: 'data-ag-orig-title',
+      placeholder: 'data-ag-orig-placeholder',
+      'aria-label': 'data-ag-orig-aria-label'
+    };
+
+    function translateElementAttrs(el, onlyAttrName) {
       if (!el || el.nodeType !== 1) return;
+      if (onlyAttrName) {
+        const origDataAttr = ATTR_TO_ORIG[onlyAttrName];
+        if (origDataAttr) translateSingleAttr(el, onlyAttrName, origDataAttr, resolveAttrTranslation);
+        return;
+      }
       translateSingleAttr(el, 'title', 'data-ag-orig-title', resolveAttrTranslation);
       translateSingleAttr(el, 'placeholder', 'data-ag-orig-placeholder', resolveAttrTranslation);
       translateSingleAttr(el, 'aria-label', 'data-ag-orig-aria-label', resolveAttrTranslation);
@@ -3775,7 +3754,7 @@
           const el = m.target;
           if (el && el.nodeType === 1 && canTranslateElementAttrs(el, batchSafeSet)) {
             try {
-              translateElementAttrs(el);
+              translateElementAttrs(el, m.attributeName);
             } catch (e) {}
           }
         } else if (m.type === 'childList' && m.addedNodes.length > 0) {

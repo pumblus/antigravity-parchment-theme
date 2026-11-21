@@ -72,17 +72,19 @@ test('cold healer disabled for Swarm, subframes and existing conversation routes
  for(const options of [{swarm:true},{child:true}])assert.equal(page({optIn:true,...options}).time.timers.size,0);
  const p=page({optIn:true});p.window.location.pathname='/c/abc';p.fire();assert.equal(p.fetches(),0);
 });
-test('Windows process validation fails closed on uncertain WMI and rejects unrelated node',()=>{
+test('macOS PID validation distinguishes live, missing, self and EPERM states without spawning',()=>{
  const code=slice(daemon,'function checkDaemonPidState(', '\nconst pidKey');
- for(const [commandLine,expected] of [['node unrelated.js','not_daemon'],['node daemon.mjs','confirmed'],['','uncertain']]){
- const ctx=vm.createContext({process:{pid:1,platform:'win32',kill(){}},spawnSync:(bin)=>({status:0,stdout:bin==='tasklist'?'node.exe':commandLine})});
- vm.runInContext(code+'globalThis.check=checkDaemonPidState;',ctx);assert.equal(ctx.check(123),expected);
- }
+ const run=(pid,killImpl)=>{const ctx=vm.createContext({process:{pid:10,kill:killImpl}});vm.runInContext(code+'globalThis.check=checkDaemonPidState;',ctx);return ctx.check(pid);};
+ assert.equal(run(10,()=>{}),'not_daemon');
+ assert.equal(run(123,()=>{}),'confirmed');
+ assert.equal(run(123,()=>{const e=Error('perm');e.code='EPERM';throw e;}),'uncertain');
+ assert.equal(run(123,()=>{const e=Error('missing');e.code='ESRCH';throw e;}),'not_daemon');
 });
-test('WSL metrics explicit directory suppresses UNC discovery',()=>{
- let probes=0;const ctx=vm.createContext({path,TextDecoder,fs:{existsSync:()=>false},process:{platform:'win32'},wslUncBackoffUntil:0,resolveWin32WslConversationsDirs:()=>{probes++;return [];}});
+test('local metrics directory resolution resolves primary path cleanly without WSL code',()=>{
+ assert.doesNotMatch(daemon,/resolveWin32WslConversationsDirs|wslUncBackoffUntil|isUncPath|spawnSync/);
+ const ctx=vm.createContext({path,TextDecoder,fs:{existsSync:()=>false},process:{platform:'darwin'}});
  vm.runInContext(slice(daemon,'const resolvedCascadeDbCache', '\nfunction getDbState')+'globalThis.resolve=resolveConversationDbPath;',ctx);
- assert.equal(ctx.resolve('a',{conversationsDir:'/explicit',explicitConvDir:true,portFile:'/port'}),path.join('/explicit','a.db'));assert.equal(probes,0);
+ assert.equal(ctx.resolve('a',{conversationsDir:'/explicit',explicitConvDir:true,portFile:'/port'}),path.join('/explicit','a.db'));
 });
 
 test('cold healer session-storage failure and missing binding never use fallback reload', async()=>{

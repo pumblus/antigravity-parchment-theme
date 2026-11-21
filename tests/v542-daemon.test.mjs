@@ -47,10 +47,12 @@ test('v542 daemon denies ordinary localhost page without adding injection script
 });
 test('v542 loading host retries then promotes; pending never receives skin payload',async()=>{
  const h=harness(),t=await h.attach('host',{kind:'pending'});assert.equal(h.sent.some(m=>m.method==='Page.addScriptToEvaluateOnNewDocument'),false);
- t.model.kind='host';await h.fire(200);assert.equal(await t.promise,true);assert.equal(h.api.attachedTargets.get('host').hostConfirmed,true);
+ t.model.kind='host';await h.fire(30);assert.equal(await t.promise,true);assert.equal(h.api.attachedTargets.get('host').hostConfirmed,true);
 });
 test('v542 pending probes are bounded and closing cleans connection timers',async()=>{
- const h=harness(),t=await h.attach('host',{kind:'pending'});for(let i=0;i<40&&t.ws.readyState===1;i++)await h.fire(200);
+ const h=harness(),t=await h.attach('host',{kind:'pending'});
+ const delays=[30,50,100,200];
+ for(let i=0;i<40&&t.ws.readyState===1;i++)await h.fire(delays[Math.min(i,delays.length-1)]);
  assert.equal(t.ws.readyState,3);assert.equal(h.api.attachedTargets.size,0);assert.equal(h.timers.size,0);
 });
 test('v542 navigation from host to preview revokes admission and unregisters future script',async()=>{
@@ -112,16 +114,18 @@ test('v542 BOM-safe config reader accepts only objects and never writes config',
  }
  assert.doesNotMatch(source,/persistDarkPresetToUserConfig|__agSetDarkPreset|execFile|ensureZhTitlePatch|['"]Page\.reload['"]/);
 });
-test('v542 skipped cache retries same URL after TTL and immediately retries same-origin navigation',async()=>{
+test('v542 skipped cache retries same URL after backoff and immediately retries same-origin navigation',async()=>{
  const h=harness();h.config.endpoints=[{fallbackPort:123,channel:'stable'}];
  h.context.testTargets=[{id:'preview',type:'page',url:'http://localhost:3000/preview',webSocketDebuggerUrl:'ws://mock/preview'}];h.context.attempts=[];
- vm.runInContext('fetchTargets=async()=>testTargets;attachTarget=async target=>{attempts.push(target.id);return false;};',h.context);
- h.api.skippedNonHostTargets.set('preview',{url:'http://localhost:3000/preview',skippedAt:100000});
+ vm.runInContext('fetchTargetsResult=async()=>({reachable:true,targets:testTargets});fetchBrowserVersionInfo=async()=>({wsUrl:"",externalBrowser:false});ensureBrowserWatcher=async()=>false;attachTarget=async target=>{attempts.push(target.id);return false;};',h.context);
+ h.api.skippedNonHostTargets.set('preview',{url:'http://localhost:3000/preview',origin:'http://localhost:3000',skippedAt:100000,attempts:1,titleHadAg:false});
  await h.api.sync();assert.equal(h.context.attempts.length,0);
- h.advance(15000);await h.api.sync();assert.equal(h.context.attempts.length,1);
- h.api.skippedNonHostTargets.set('preview',{url:'http://localhost:3000/preview',skippedAt:115000});h.context.testTargets[0].url='http://localhost:3000/app';
+ h.advance(8000);await h.api.sync();assert.equal(h.context.attempts.length,1);
+ h.api.skippedNonHostTargets.set('preview',{url:'http://localhost:3000/preview',origin:'http://localhost:3000',skippedAt:108000,attempts:3,titleHadAg:false});
+ await h.api.sync();assert.equal(h.context.attempts.length,1);
+ h.context.testTargets[0].url='http://localhost:3000/app';
  await h.api.sync();assert.equal(h.context.attempts.length,2);
- h.context.testTargets=[];await h.api.sync();assert.equal(h.api.skippedNonHostTargets.size,0);assert.equal(h.api.targetMetaMap.size,0);
+ h.context.testTargets=[];h.advance(10);await h.api.sync();assert.equal(h.api.skippedNonHostTargets.size,0);assert.equal(h.api.targetMetaMap.size,0);
 });
 test('v542 delayed promotion cannot inject across navigation while Page.enable is pending',async()=>{
  const h=harness(),t=await h.attach('race',{hold:m=>m.method==='Page.enable'});assert.equal(h.sent.some(m=>m.params.expression==='TEST_INJECT'),false);

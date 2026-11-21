@@ -2,9 +2,9 @@
 /**
  * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（融合版 v5.4.2-eric.1）：
+ * 架构特性（融合版 v5.5.2-eric.1 · macOS 专用）：
  * 1. 动态 Node 分级：
- *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、死锁修复与实验性冷启动普通重载（默认关闭）及 2.32.1/2.32.0 curtainView/Swarm 适配。
+ *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、宿主隔离、Browser 级 CDP 事件发现、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）；低版本优雅降级绝不崩溃。
  * 2. 模块化与热重载：
  *    - 周期性检测 `user/config.json`、`user/custom.css`、`user/i18n.override.json`、`user/custom.js` 的 mtime，
@@ -20,7 +20,6 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -87,91 +86,12 @@ function getFileMtimeSig(filePath) {
   }
 }
 
-const wslDirsCache = new Map(); // cacheKey -> { sig, distro, dirs, probedAt }
-let wslUncBackoffUntil = 0;
-
-function resolveWin32WslConversationsDirs(portFile, geminiSubDir) {
-  if (process.platform !== 'win32' || !portFile || !geminiSubDir) return [];
-  const now = Date.now();
-  if (now < wslUncBackoffUntil) return [];
-  try {
-    const wslStatePath = path.join(path.dirname(portFile), 'wsl_state.json');
-    const fileSig = getFileMtimeSig(wslStatePath);
-    const envDistro = String(process.env.ANTIGRAVITY_WSL_DISTRO || '').trim();
-    const compositeSig = `${fileSig}|env:${envDistro}`;
-    if (fileSig === '0:0' && !envDistro) {
-      wslDirsCache.delete(wslStatePath);
-      return [];
-    }
-    const cached = wslDirsCache.get(wslStatePath);
-    if (
-      cached &&
-      cached.sig === compositeSig &&
-      (!cached.distro ||
-        (cached.dirs.length > 0 && now - cached.probedAt < 60000) ||
-        now - cached.probedAt < 15000)
-    ) {
-      return cached.dirs;
-    }
-
-    const wslState = fileSig !== '0:0' ? readJsonSafe(wslStatePath, {}) : {};
-    const persistedDistro = String(wslState?.distro || wslState?.distroName || wslState?.defaultDistro || '').trim();
-    const rawDistro = persistedDistro || envDistro;
-    if (!rawDistro || !/^[A-Za-z0-9._-]+$/.test(rawDistro)) {
-      wslDirsCache.set(wslStatePath, { sig: compositeSig, distro: '', dirs: [], probedAt: now });
-      return [];
-    }
-
-    const t0 = Date.now();
-    const subParts = geminiSubDir.split('/');
-    const found = [];
-    for (const uncHost of ['wsl.localhost', 'wsl$']) {
-      const distroRoot = `\\\\${uncHost}\\${rawDistro}`;
-      if (!fs.existsSync(distroRoot)) {
-        if (Date.now() - t0 > 400) break;
-        continue;
-      }
-      const homeRoot = path.join(distroRoot, 'home');
-      if (fs.existsSync(homeRoot)) {
-        try {
-          for (const userEntry of fs.readdirSync(homeRoot)) {
-            const convDir = path.join(homeRoot, userEntry, ...subParts, 'conversations');
-            if (fs.existsSync(convDir)) found.push(convDir);
-          }
-        } catch {}
-      }
-      const rootConvDir = path.join(distroRoot, 'root', ...subParts, 'conversations');
-      if (fs.existsSync(rootConvDir)) found.push(rootConvDir);
-      if (found.length > 0 || Date.now() - t0 > 400) break;
-    }
-    if (Date.now() - t0 > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-    }
-    const uniqueDirs = Array.from(new Set(found));
-    wslDirsCache.set(wslStatePath, { sig: compositeSig, distro: rawDistro, dirs: uniqueDirs, probedAt: Date.now() });
-    return uniqueDirs;
-  } catch {
-    wslUncBackoffUntil = Date.now() + 45000;
-    return [];
-  }
-}
-
 function resolveChannelPaths(singleChannel = 'stable', userCfg = {}) {
   const home = os.homedir();
   const isInsiders = singleChannel === 'insiders';
   const appDirName = isInsiders ? 'Antigravity - Insiders' : 'Antigravity';
   const geminiSubDir = isInsiders ? '.gemini/antigravity-insiders' : '.gemini/antigravity';
-
-  let defaultPortFile;
-  if (process.platform === 'darwin') {
-    defaultPortFile = path.join(home, 'Library', 'Application Support', appDirName, 'DevToolsActivePort');
-  } else if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    defaultPortFile = path.join(appData, appDirName, 'DevToolsActivePort');
-  } else {
-    const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
-    defaultPortFile = path.join(xdgConfig, appDirName, 'DevToolsActivePort');
-  }
+  const defaultPortFile = path.join(home, 'Library', 'Application Support', appDirName, 'DevToolsActivePort');
 
   const defaultConvDir = path.join(home, geminiSubDir, 'conversations');
   const dotDir = path.join(home, isInsiders ? '.antigravity-insiders' : '.antigravity');
@@ -183,7 +103,10 @@ function resolveChannelPaths(singleChannel = 'stable', userCfg = {}) {
         .readFileSync(argvPath, 'utf8')
         .replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '');
       const m = stripped.match(/"remote-debugging-port"\s*:\s*(\d+)/);
-      if (m && parseInt(m[1], 10) > 0) fallbackPort = parseInt(m[1], 10);
+      const parsedArgvPort = m ? parseInt(m[1], 10) : 0;
+      if (Number.isInteger(parsedArgvPort) && parsedArgvPort > 0 && parsedArgvPort <= 65535) {
+        fallbackPort = parsedArgvPort;
+      }
     }
   } catch {}
 
@@ -193,12 +116,21 @@ function resolveChannelPaths(singleChannel = 'stable', userCfg = {}) {
   const explicitConvDir = getArg('--conversations-dir', userCfg.conversationsDir || '');
   const primaryConvDir = explicitConvDir || defaultConvDir;
 
+  const rawFallbackPort = Number(userCfg.fallbackPort);
+  const rawPort = Number(userCfg.port);
+  const customFallbackPort =
+    Number.isInteger(rawFallbackPort) && rawFallbackPort > 0 && rawFallbackPort <= 65535
+      ? rawFallbackPort
+      : Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535
+        ? rawPort
+        : 0;
+
   return {
     channel: singleChannel,
     portFile,
     geminiSubDir,
     explicitConvDir: Boolean(explicitConvDir),
-    fallbackPort: Number(userCfg.fallbackPort) > 0 ? Number(userCfg.fallbackPort) : fallbackPort,
+    fallbackPort: customFallbackPort || fallbackPort,
     channelInstalled,
     conversationsDir: primaryConvDir
   };
@@ -223,7 +155,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261119-v5.5.0-eric.1';
+const BASE_VERSION = '20261120-v5.5.2-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedPatchVersion = '';
@@ -267,6 +199,7 @@ let activeConfig = {
     deadlockHealer: true,
     coldBootHealer: false,
     zoomShortcuts: true,
+    cdpEventDiscovery: true,
     customCss: true,
     customJs: true
   },
@@ -374,6 +307,7 @@ function rebuildBundleIfNeeded() {
       deadlockHealer: true,
       coldBootHealer: false,
       zoomShortcuts: true,
+      cdpEventDiscovery: true,
       customCss: true,
       customJs: true
     },
@@ -431,8 +365,7 @@ function rebuildBundleIfNeeded() {
   const baseDict = readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {});
   const rawOverrideDict = !SAFE_MODE ? readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {}) : {};
   const overrideDict = normalizeOverrideDict(rawOverrideDict);
-  const platformDict = process.platform === 'darwin' ? {} : { Trash: '回收站', 'Move to Trash': '移到回收站' };
-  const mergedDict = Object.assign({}, baseDict, platformDict, overrideDict);
+  const mergedDict = Object.assign({}, baseDict, overrideDict);
 
   const customJs = !SAFE_MODE && modules.customJs ? readTextSafe(path.join(USER_DIR, 'custom.js'), '') : '';
   const runtimeTemplate = readTextSafe(path.join(CORE_DIR, 'runtime.js'), '');
@@ -454,7 +387,7 @@ function rebuildBundleIfNeeded() {
 
   const bootPayload = {
     version: cachedPatchVersion,
-    platform: process.platform,
+    platform: 'darwin',
     hostThemeMode,
     enabled,
     preset,
@@ -484,7 +417,7 @@ function rebuildBundleIfNeeded() {
 rebuildBundleIfNeeded();
 
 // ============================================================================
-// 3. 单实例 PID 锁（防止重复启动守护进程，Windows 校验 node.exe 防止 PID 复用误杀）
+// 3. 单实例 PID 锁（防止重复启动守护进程）
 // ============================================================================
 function checkDaemonPidState(pid) {
   if (!pid || pid <= 0 || pid === process.pid) return 'not_daemon';
@@ -492,57 +425,6 @@ function checkDaemonPidState(pid) {
     process.kill(pid, 0);
   } catch (err) {
     return err && err.code === 'EPERM' ? 'uncertain' : 'not_daemon';
-  }
-  if (process.platform === 'win32') {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-          windowsHide: true,
-          encoding: 'utf8',
-          timeout: 4000
-        });
-        if (res.status === 0) {
-          const out = String(res.stdout || '').toLowerCase();
-          if (!out.includes('node.exe')) return 'not_daemon';
-        } else if (attempt === 0) {
-          continue;
-        } else {
-          return 'uncertain';
-        }
-        const cimRes = spawnSync(
-          'powershell',
-          [
-            '-NoProfile',
-            '-NonInteractive',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-Command',
-            `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${Number(pid)}" -ErrorAction SilentlyContinue; if ($p) { $p.CommandLine }`
-          ],
-          {
-            windowsHide: true,
-            encoding: 'utf8',
-            timeout: 12000
-          }
-        );
-        if (cimRes.status === 0) {
-          const cmdLine = String(cimRes.stdout || '').trim().toLowerCase();
-          if (!cmdLine) {
-            try {
-              process.kill(pid, 0);
-              return 'uncertain';
-            } catch {
-              return 'not_daemon';
-            }
-          }
-          if (cmdLine.includes('daemon.mjs') || cmdLine.includes('antigravity-font-daemon')) {
-            return 'confirmed';
-          }
-          return 'not_daemon';
-        }
-      } catch {}
-    }
-    return 'uncertain';
   }
   return 'confirmed';
 }
@@ -559,7 +441,7 @@ if (!RUN_ONCE) {
           process.kill(oldPid, 'SIGTERM');
         } catch {}
       } else if (pidState === 'uncertain') {
-        console.warn(`[Daemon] Existing node.exe PID ${oldPid} still active while WMI busy; skipping duplicate startup.`);
+        console.warn(`[Daemon] Existing PID ${oldPid} could not be signaled (EPERM); skipping duplicate startup.`);
         process.exit(0);
       }
     }
@@ -573,10 +455,14 @@ if (!RUN_ONCE) {
     };
     process.on('exit', cleanPid);
     process.on('SIGINT', () => {
+      daemonExiting = true;
+      closeAllBrowserWatchers();
       cleanPid();
       process.exit(0);
     });
     process.on('SIGTERM', () => {
+      daemonExiting = true;
+      closeAllBrowserWatchers();
       cleanPid();
       process.exit(0);
     });
@@ -652,7 +538,6 @@ function fmtNum(n) {
 }
 
 const resolvedCascadeDbCache = new Map();
-const negativeCascadeWslCache = new Map(); // cacheKey -> expireAtMs
 const lastKnownDbStateCache = new Map(); // dbPath -> { dbPath, rawSig, sig }
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 const DB_FILE_RE = /^([0-9a-f-]{36})\.db$/i;
@@ -662,7 +547,6 @@ const MAX_NO_META_PENDING_IDS = 64;
 const LINEAGE_TICK_MAX_OPENS = 45;
 const LINEAGE_TICK_MAX_MS = 60;
 const NO_META_RESCAN_LOCAL_MS = 2500;
-const NO_META_RESCAN_UNC_MS = 15000;
 const childMetricsCache = new Map(); // dbPath -> { sig, hasData, calls, totalIn, totalCache, totalOut, totalThink, totalResp }
 const lineageStateByDir = new Map(); // conversationsDir -> dirState
 function createMetricsPassBudget() {
@@ -678,23 +562,7 @@ function consumeMetricsOpen(budget) {
 }
 
 function setChildMetricsCache(dbPath, entry) {
-  if (childMetricsCache.has(dbPath)) childMetricsCache.delete(dbPath);
-  childMetricsCache.set(dbPath, entry);
-  if (childMetricsCache.size > MAX_CHILD_METRICS_CACHE_SIZE) {
-    const oldestKey = childMetricsCache.keys().next().value;
-    if (oldestKey !== undefined) childMetricsCache.delete(oldestKey);
-  }
-}
-
-function isUncPath(p) {
-  if (!p || process.platform !== 'win32') return false;
-  return (
-    p.startsWith('\\\\wsl.localhost\\') ||
-    p.startsWith('\\\\wsl$\\') ||
-    p.startsWith('\\\\?\\UNC\\') ||
-    p.startsWith('\\\\') ||
-    p.startsWith('//wsl')
-  );
+  setBoundedMap(childMetricsCache, dbPath, entry, MAX_CHILD_METRICS_CACHE_SIZE);
 }
 
 function setBoundedMap(map, key, val, maxEntries = 64) {
@@ -729,24 +597,13 @@ function getDbStatByPath(dbPath) {
   }
 }
 
-// UNC probes obey the same cooldown in every resolution branch. The time budget
-// is cooperative: a synchronous filesystem call itself cannot be preempted.
-function metricPathExists(file) {
-  const unc = isUncPath(file);
-  if (unc && Date.now() < wslUncBackoffUntil) return false;
-  const start = Date.now();
-  try { return fs.existsSync(file); }
-  catch { return false; }
-  finally { if (unc && Date.now() - start > 400) wslUncBackoffUntil = Date.now() + 45000; }
-}
-
 function resolveConversationDbPath(cascadeId, endpointOrDir) {
   if (!cascadeId || !endpointOrDir) return '';
   if (Array.isArray(endpointOrDir)) {
     const dirs = endpointOrDir.filter(Boolean);
     for (let i = 0; i < dirs.length; i++) {
       const candidate = path.join(dirs[i], `${cascadeId}.db`);
-      if (metricPathExists(candidate)) return candidate;
+      if (fs.existsSync(candidate)) return candidate;
     }
     return dirs.length > 0 ? path.join(dirs[0], `${cascadeId}.db`) : '';
   }
@@ -758,95 +615,34 @@ function resolveConversationDbPath(cascadeId, endpointOrDir) {
   const cacheKey = `${endpointOrDir.channel || 'default'}|${primaryDir}|${cascadeId}`;
   const cachedPath = resolvedCascadeDbCache.get(cacheKey);
   if (cachedPath) {
-    const cachedUnc = isUncPath(cachedPath);
-    if (cachedUnc && Date.now() < wslUncBackoffUntil) {
-      return cachedPath;
-    }
-    const tCheck = Date.now();
-    const exists = metricPathExists(cachedPath);
-    if (cachedUnc && Date.now() - tCheck > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-    }
-    if (exists) {
+    if (fs.existsSync(cachedPath)) {
       return cachedPath;
     }
     resolvedCascadeDbCache.delete(cacheKey);
   }
 
-  const remember = (foundPath) => {
-    negativeCascadeWslCache.delete(cacheKey);
-    if (resolvedCascadeDbCache.size >= 64) {
-      const oldestKey = resolvedCascadeDbCache.keys().next().value;
-      if (oldestKey !== undefined) resolvedCascadeDbCache.delete(oldestKey);
-    }
-    resolvedCascadeDbCache.set(cacheKey, foundPath);
-    return foundPath;
-  };
-
   if (primaryDir) {
     const primaryCandidate = path.join(primaryDir, `${cascadeId}.db`);
-    if (metricPathExists(primaryCandidate)) {
-      return remember(primaryCandidate);
+    if (fs.existsSync(primaryCandidate)) {
+      setBoundedMap(resolvedCascadeDbCache, cacheKey, primaryCandidate, 64);
+      return primaryCandidate;
     }
+    return primaryCandidate;
   }
 
-  const now = Date.now();
-  if (
-    process.platform === 'win32' &&
-    !endpointOrDir.explicitConvDir &&
-    endpointOrDir.portFile &&
-    now >= wslUncBackoffUntil &&
-    (negativeCascadeWslCache.get(cacheKey) || 0) <= now
-  ) {
-    const t0 = Date.now();
-    const wslDirs = resolveWin32WslConversationsDirs(
-      endpointOrDir.portFile,
-      endpointOrDir.geminiSubDir || '.gemini/antigravity'
-    );
-    for (let i = 0; i < wslDirs.length; i++) {
-      const wslCandidate = path.join(wslDirs[i], `${cascadeId}.db`);
-      if (metricPathExists(wslCandidate)) {
-        return remember(wslCandidate);
-      }
-      if (Date.now() - t0 > 400) break;
-    }
-    if (Date.now() - t0 > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-    }
-    if (negativeCascadeWslCache.size >= 128) {
-      negativeCascadeWslCache.clear();
-    }
-    negativeCascadeWslCache.set(cacheKey, Date.now() + 10000);
-  }
-
-  return primaryDir ? path.join(primaryDir, `${cascadeId}.db`) : '';
+  return '';
 }
 
 function getDbState(cascadeId, endpointOrDir) {
   try {
     const dbPath = resolveConversationDbPath(cascadeId, endpointOrDir);
     if (!dbPath) return null;
-    const unc = isUncPath(dbPath);
-    if (unc && Date.now() < wslUncBackoffUntil) {
-      const prev = lastKnownDbStateCache.get(dbPath);
-      return prev ? { ...prev, uncDeferred: true } : { dbPath, rawSig: 'unc_deferred', sig: `${dbPath}#unc_deferred`, uncDeferred: true };
-    }
-    const t0 = Date.now();
     const st = fs.statSync(dbPath, { throwIfNoEntry: false });
-    if (unc && Date.now() - t0 > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-    }
     if (!st) {
       lastKnownDbStateCache.delete(dbPath);
       return null;
     }
-    let wst = null;
-    if (!unc || Date.now() >= wslUncBackoffUntil) {
-      wst = fs.statSync(`${dbPath}-wal`, { throwIfNoEntry: false });
-      if (unc && Date.now() - t0 > 400) {
-        wslUncBackoffUntil = Date.now() + 45000;
-      }
-    }
+    const wst = fs.statSync(`${dbPath}-wal`, { throwIfNoEntry: false });
     const walSig = wst ? `${wst.mtimeMs}:${wst.size}` : '0:0';
     const rawSig = `${st.mtimeMs}:${st.size}|${walSig}`;
     const stateObj = {
@@ -859,10 +655,6 @@ function getDbState(cascadeId, endpointOrDir) {
   } catch {
     return null;
   }
-}
-
-function getDbSignature(cascadeId, endpointOrDir) {
-  return getDbState(cascadeId, endpointOrDir)?.sig || null;
 }
 
 function readTrajectoryLineage(dbPath) {
@@ -970,47 +762,28 @@ function refreshLineageIndex(conversationsDir, budget = null) {
     lineageStateByDir.set(conversationsDir, dirState);
   }
 
-  const unc = isUncPath(conversationsDir);
   const nowMs = Date.now();
-  if (unc && nowMs < wslUncBackoffUntil) {
-    return {
-      dirState,
-      isDraining: dirState.unindexedQueue.length > 0,
-      backoffSkipped: true
-    };
-  }
 
   let dirSt;
   try { dirSt = fs.statSync(conversationsDir, { throwIfNoEntry: false }); }
-  catch { return { dirState, isDraining: dirState.unindexedQueue.length > 0, backoffSkipped: true }; }
+  catch { return { dirState, isDraining: dirState.unindexedQueue.length > 0 }; }
   if (!dirSt || !dirSt.isDirectory()) {
-    return { dirState, isDraining: false, backoffSkipped: false };
+    return { dirState, isDraining: false };
   }
 
   const dirChanged = dirSt.mtimeMs !== dirState.dirMtimeMs && dirSt.mtimeMs !== dirState.scanningDirMtimeMs;
-  const tWallStart = nowMs;
-  let backoffSkipped = false;
 
   if (dirChanged) {
     let entries;
     try {
       entries = fs.readdirSync(conversationsDir);
     } catch {
-      if (unc && Date.now() - tWallStart > 400) {
-        wslUncBackoffUntil = Date.now() + 45000;
-        backoffSkipped = true;
-      }
-      return { dirState, isDraining: dirState.unindexedQueue.length > 0, backoffSkipped };
+      return { dirState, isDraining: dirState.unindexedQueue.length > 0 };
     }
 
     const seenIds = new Set();
     let enqueued = false;
     for (let i = 0; i < entries.length; i++) {
-      if (unc && Date.now() - tWallStart > 400) {
-        wslUncBackoffUntil = Date.now() + 45000;
-        backoffSkipped = true;
-        break;
-      }
       const m = entries[i].match(DB_FILE_RE);
       if (!m) continue;
       const uuid = m[1];
@@ -1031,34 +804,29 @@ function refreshLineageIndex(conversationsDir, budget = null) {
       enqueued = true;
     }
 
-    if (!backoffSkipped) {
-      for (const existingId of Array.from(dirState.nodes.keys())) {
-        if (!seenIds.has(existingId)) {
-          deleteNodeLineage(dirState, existingId);
-        }
+    for (const existingId of Array.from(dirState.nodes.keys())) {
+      if (!seenIds.has(existingId)) {
+        deleteNodeLineage(dirState, existingId);
       }
-      if (dirState.unindexedQueue.length > 0) {
-        const nextQueue = [];
-        for (let i = 0; i < dirState.unindexedQueue.length; i++) {
-          const item = dirState.unindexedQueue[i];
-          if (seenIds.has(item.uuid)) {
-            nextQueue.push(item);
-          } else {
-            dirState.unindexedSet.delete(item.uuid);
-          }
-        }
-        if (enqueued || nextQueue.length !== dirState.unindexedQueue.length) {
-          nextQueue.sort((a, b) => b.mtimeMs - a.mtimeMs);
-        }
-        dirState.unindexedQueue = nextQueue;
-      }
-      dirState.scanningDirMtimeMs = dirSt.mtimeMs;
-    } else if (enqueued && dirState.unindexedQueue.length > 1) {
-      dirState.unindexedQueue.sort((a, b) => b.mtimeMs - a.mtimeMs);
     }
+    if (dirState.unindexedQueue.length > 0) {
+      const nextQueue = [];
+      for (let i = 0; i < dirState.unindexedQueue.length; i++) {
+        const item = dirState.unindexedQueue[i];
+        if (seenIds.has(item.uuid)) {
+          nextQueue.push(item);
+        } else {
+          dirState.unindexedSet.delete(item.uuid);
+        }
+      }
+      if (enqueued || nextQueue.length !== dirState.unindexedQueue.length) {
+        nextQueue.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      }
+      dirState.unindexedQueue = nextQueue;
+    }
+    dirState.scanningDirMtimeMs = dirSt.mtimeMs;
   } else if (dirState.unindexedQueue.length === 0) {
-    const pendingRescanMs = unc ? NO_META_RESCAN_UNC_MS : NO_META_RESCAN_LOCAL_MS;
-    if (dirState.nodes.size > 0 && nowMs - dirState.lastPendingScanAt >= pendingRescanMs) {
+    if (dirState.nodes.size > 0 && nowMs - dirState.lastPendingScanAt >= NO_META_RESCAN_LOCAL_MS) {
       dirState.lastPendingScanAt = nowMs;
       const newlyChanged = [];
       // Rotate over ALL known nodes, not only the bounded pending cache. Metadata
@@ -1068,15 +836,10 @@ function refreshLineageIndex(conversationsDir, budget = null) {
       for (let scan = 0; scan < count; scan++) {
         const [uuid, node] = known[dirState.recheckCursor++ % known.length];
         const prevSig = node.statSig;
-        if (unc && Date.now() - tWallStart > 400) {
-          wslUncBackoffUntil = Date.now() + 45000;
-          backoffSkipped = true;
-          break;
-        }
         const dbPath = path.join(conversationsDir, `${uuid}.db`);
         const statInfo = getDbStatByPath(dbPath);
         if (!statInfo) {
-          // A failed stat can be transient (permissions/network). Keep the node
+          // A failed stat can be transient (permissions/lock). Keep the node
           // eligible for rotation; only a complete directory scan proves deletion.
           continue;
         }
@@ -1093,18 +856,10 @@ function refreshLineageIndex(conversationsDir, budget = null) {
   }
 
   if (dirState.unindexedQueue.length === 0) {
-    if (!backoffSkipped && dirState.scanningDirMtimeMs >= 0) {
+    if (dirState.scanningDirMtimeMs >= 0) {
       dirState.dirMtimeMs = dirState.scanningDirMtimeMs;
     }
-    return { dirState, isDraining: false, backoffSkipped };
-  }
-
-  if (backoffSkipped || (unc && Date.now() < wslUncBackoffUntil)) {
-    return {
-      dirState,
-      isDraining: dirState.unindexedQueue.length > 0,
-      backoffSkipped: true
-    };
+    return { dirState, isDraining: false };
   }
 
   const tPerfStart = performance.now();
@@ -1115,11 +870,6 @@ function refreshLineageIndex(conversationsDir, budget = null) {
   while (qIdx < dirState.unindexedQueue.length) {
     if (!metricsBudgetAvailable(budget)) break;
     if (opens > 0 && (opens >= LINEAGE_TICK_MAX_OPENS || performance.now() - tPerfStart >= LINEAGE_TICK_MAX_MS)) {
-      break;
-    }
-    if (unc && Date.now() - tWallStart > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-      backoffSkipped = true;
       break;
     }
     const item = dirState.unindexedQueue[qIdx++];
@@ -1164,19 +914,13 @@ function refreshLineageIndex(conversationsDir, budget = null) {
     dirState.unindexedQueue = remaining;
   }
 
-  if (unc && !backoffSkipped && Date.now() - tWallStart > 400) {
-    wslUncBackoffUntil = Date.now() + 45000;
-    backoffSkipped = true;
-  }
-
-  if (dirState.unindexedQueue.length === 0 && !backoffSkipped && dirState.scanningDirMtimeMs >= 0) {
+  if (dirState.unindexedQueue.length === 0 && dirState.scanningDirMtimeMs >= 0) {
     dirState.dirMtimeMs = dirState.scanningDirMtimeMs;
   }
 
   return {
     dirState,
-    isDraining: dirState.unindexedQueue.length > 0,
-    backoffSkipped
+    isDraining: dirState.unindexedQueue.length > 0
   };
 }
 
@@ -1239,59 +983,31 @@ function getCompositeChildSnapshot(cascadeId, conversationsDir, parentSig = '', 
     directorySnapshot = refreshLineageIndex(conversationsDir, budget);
     budget?.directories.set(conversationsDir, directorySnapshot);
   }
-  const { dirState, isDraining, backoffSkipped } = directorySnapshot;
+  const { dirState, isDraining } = directorySnapshot;
   const descendantIds = findDescendantIds(cascadeId, dirState);
   const childSigs = new Map();
   const childSigParts = [];
-  let partialStale = Boolean(backoffSkipped);
-  const unc = isUncPath(conversationsDir);
-  const t0 = Date.now();
+  let partialStale = false;
 
-  if (unc && Date.now() < wslUncBackoffUntil) {
-    partialStale = true;
-    for (let i = 0; i < descendantIds.length; i++) {
-      const cid = descendantIds[i];
-      const prev = childMetricsCache.get(path.join(conversationsDir, `${cid}.db`))?.sig || '';
-      childSigs.set(cid, prev || 'unc_deferred');
-      childSigParts.push(`${cid}=${prev || '0:0|0:0'}`);
+  for (let i = 0; i < descendantIds.length; i++) {
+    const cid = descendantIds[i];
+    if (!metricsBudgetAvailable(budget)) {
+      partialStale = true;
+      childSigs.set(cid, 'budget_deferred');
+      childSigParts.push(`${cid}=budget_deferred`);
+      continue;
     }
-  } else {
-    for (let i = 0; i < descendantIds.length; i++) {
-      const cid = descendantIds[i];
-      if (unc && (Date.now() < wslUncBackoffUntil || Date.now() - t0 > 400)) {
-        if (Date.now() >= wslUncBackoffUntil) {
-          wslUncBackoffUntil = Date.now() + 45000;
-        }
-        partialStale = true;
-        const prev = childMetricsCache.get(path.join(conversationsDir, `${cid}.db`))?.sig || '';
-        childSigs.set(cid, prev || 'unc_deferred');
-        childSigParts.push(`${cid}=${prev || '0:0|0:0'}`);
-        continue;
-      }
-      if (!metricsBudgetAvailable(budget)) {
-        partialStale = true;
-        childSigs.set(cid, 'unc_deferred');
-        childSigParts.push(`${cid}=budget_deferred`);
-        continue;
-      }
-      const statInfo = getDbStatByPath(path.join(conversationsDir, `${cid}.db`));
-      if (unc && Date.now() - t0 > 400) {
-        wslUncBackoffUntil = Date.now() + 45000;
-        partialStale = true;
-      }
-      childSigs.set(cid, statInfo ? statInfo.sig : 'missing');
-      childSigParts.push(`${cid}=${statInfo ? statInfo.sig : '0:0|0:0'}`);
-    }
+    const statInfo = getDbStatByPath(path.join(conversationsDir, `${cid}.db`));
+    childSigs.set(cid, statInfo ? statInfo.sig : 'missing');
+    childSigParts.push(`${cid}=${statInfo ? statInfo.sig : '0:0|0:0'}`);
   }
 
-  const uncBackoffActive = Boolean(unc && Date.now() < wslUncBackoffUntil);
   return {
     conversationsDir,
     descendantIds,
     childSigs,
     isDraining: Boolean(isDraining),
     partialStale,
-    uncBackoffActive,
     sig: `${parentSig}|children:${childSigParts.join(',')}${isDraining ? '|draining' : ''}${partialStale ? '|stale' : ''}`
   };
 }
@@ -1300,7 +1016,7 @@ function loadChildScalarMetrics(childId, conversationsDir, knownStatSig = null, 
   if (!UUID_RE.test(childId) || !conversationsDir || knownStatSig === 'missing') return { exists: false };
   const dbPath = path.join(conversationsDir, `${childId}.db`);
   const cached = childMetricsCache.get(dbPath);
-  if (knownStatSig === 'unc_deferred') {
+  if (knownStatSig === 'budget_deferred') {
     return { exists: true, deferred: true, staleMetrics: cached || null };
   }
   if (!knownStatSig && !allowUncachedOpen) {
@@ -1436,29 +1152,10 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     return cached.payload;
   }
 
-  const uncParent = isUncPath(dbPath);
-  if (uncParent && Date.now() < wslUncBackoffUntil) {
-    const bestEffort = cached?.payload || lastBestEffortPayloadCache.get(dbPath) || null;
-    if (bestEffort) {
-      return {
-        ...bestEffort,
-        partialStale: true,
-        uncBackoffActive: true
-      };
-    }
-    return {
-      cascadeId,
-      transientError: true,
-      uncBackoffActive: true,
-      cachedPayload: null
-    };
-  }
-
   if (!consumeMetricsOpen(budget)) {
     return { cascadeId, transientError: true, budgetDeferred: true, cachedPayload: cached?.payload || lastBestEffortPayloadCache.get(dbPath) || null };
   }
   let db;
-  const tParentWallStart = Date.now();
   try {
     db = new DatabaseSync(dbPath, { readOnly: true, timeout: 200 });
     const metaStat = db.prepare('SELECT COUNT(*) AS cnt, COALESCE(MAX(idx), -1) AS maxIdx FROM gen_metadata').get();
@@ -1579,9 +1276,6 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
 
     db.close();
     db = null;
-    if (uncParent && Date.now() - tParentWallStart > 400) {
-      wslUncBackoffUntil = Date.now() + 45000;
-    }
     setIncrementalMetrics(dbPath, inc);
 
     const { validItems: valid, totalIn, totalCache, totalOut, totalThink, totalResp } = inc;
@@ -1611,24 +1305,15 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     let childResp = 0;
     let childSqlOpens = 0;
     const tChildPerfStart = performance.now();
-    const tChildWallStart = Date.now();
-    const uncChildren = isUncPath(conversationsDir);
 
     for (let i = 0; i < descendantIds.length; i++) {
       const childId = descendantIds[i];
       if (childId === cascadeId) continue;
 
       const knownChildSig = childSnap.childSigs?.get(childId) || null;
-      const uncNowBlocked =
-        uncChildren && (Date.now() < wslUncBackoffUntil || Date.now() - tChildWallStart > 400);
-      if (uncChildren && Date.now() - tChildWallStart > 400 && Date.now() >= wslUncBackoffUntil) {
-        wslUncBackoffUntil = Date.now() + 45000;
-      }
       const allowUncachedOpen =
-        !uncNowBlocked &&
-        (childSqlOpens === 0 ||
-          (childSqlOpens < LINEAGE_TICK_MAX_OPENS &&
-            performance.now() - tChildPerfStart < LINEAGE_TICK_MAX_MS));
+        childSqlOpens === 0 ||
+        (childSqlOpens < LINEAGE_TICK_MAX_OPENS && performance.now() - tChildPerfStart < LINEAGE_TICK_MAX_MS);
       const childRes = loadChildScalarMetrics(
         childId,
         conversationsDir,
@@ -1639,9 +1324,6 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       if (!childRes.exists) continue;
       if (!childRes.fromCache && !childRes.deferred) {
         childSqlOpens += 1;
-        if (uncChildren && Date.now() - tChildWallStart > 400) {
-          wslUncBackoffUntil = Date.now() + 45000;
-        }
       }
 
       let cm = null;
@@ -1749,16 +1431,12 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     ];
     const tooltipHtml = tooltipRows.join('');
 
-    const uncBackoffActive = Boolean(
-      childSnap?.uncBackoffActive || (uncParent && Date.now() < wslUncBackoffUntil)
-    );
     const payload = {
       cascadeId,
       hasData: true,
       sig: compositeSig,
       isDraining,
       partialStale,
-      uncBackoffActive,
       inlineHtml,
       tooltipHtml
     };
@@ -1787,7 +1465,24 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
 const attachedTargets = new Map();
 const targetThemeModes = new Map();
 const targetMetaMap = new Map();
-const skippedNonHostTargets = new Map(); // targetId -> { url, skippedAt }
+const skippedNonHostTargets = new Map(); // targetId -> { url, origin, skippedAt, attempts, titleHadAg }
+const browserWatchers = new Map(); // `${channel}:${port}` -> { ws, wsUrl, port, channel, endpoint, reconnectAfterMs, closing }
+const browserWatcherBackoffUntil = new Map(); // `${channel}:${port}` -> timestamp ms
+const attachingTargetIds = new Set();
+const destroyedWhileAttaching = new Set();
+let daemonExiting = false;
+
+function getTargetOriginKey(urlStr) {
+  const raw = String(urlStr || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    if (u.origin && u.origin !== 'null') return u.origin.toLowerCase();
+    return `${u.protocol}//${u.host}`.toLowerCase();
+  } catch {
+    return raw.slice(0, 120).toLowerCase();
+  }
+}
 
 // CDP may omit parentId. Never guess between multiple host windows.
 function resolveParentThemeTarget(target, endpoint) {
@@ -1860,7 +1555,12 @@ const HOST_PROBE_EXPRESSION = `(function(){
       typeof document.querySelector === 'function' &&
       document.querySelector('link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]')
     ) return 'host';
-    if (typeof document === 'undefined' || !document.documentElement || document.readyState === 'loading') {
+    if (
+      typeof document === 'undefined' ||
+      !document.documentElement ||
+      document.readyState === 'loading' ||
+      (loc && (loc.protocol === 'chrome-error:' || loc.protocol === 'about:' || loc.protocol === 'data:'))
+    ) {
       return 'pending';
     }
     return 'non_host';
@@ -1870,39 +1570,110 @@ const HOST_PROBE_EXPRESSION = `(function(){
 })()`;
 
 function readPort(portFile) {
+  return readPortInfo(portFile).port;
+}
+
+function readPortInfo(portFile) {
   try {
     const raw = fs.readFileSync(portFile, 'utf8').trim();
     const lines = raw.split(/\r?\n/);
     const port = /^\d+$/.test(lines[0]) ? Number(lines[0]) : 0;
-    return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
+    const validPort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
+    const wsPath = (lines[1] || '').trim();
+    return {
+      port: validPort,
+      browserWsPath: wsPath.startsWith('/') ? wsPath : ''
+    };
   } catch {
-    return null;
+    return { port: null, browserWsPath: '' };
   }
 }
 
-function fetchTargets(port) {
-  return new Promise((resolve) => {
-    const req = http.get(
-      { host: '127.0.0.1', port, path: '/json/list', timeout: 450 },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            resolve(res.statusCode === 200 && Array.isArray(parsed) ? parsed : []);
-          } catch {
-            resolve([]);
-          }
-        });
-      }
+function isExternalNonHostBrowserProduct(browserStr, userAgentStr = '') {
+  const b = String(browserStr || '').trim();
+  const ua = String(userAgentStr || '').trim();
+  if (!b && !ua) return false;
+  if (/electron|antigravity/i.test(b) || /electron\/|antigravity\//i.test(ua)) return false;
+  return /^(?:Headless)?Chrome\/|^Edg\/|^Brave\//i.test(b);
+}
+
+function isValidLoopbackWsUrl(rawWs, port) {
+  try {
+    const u = new URL(String(rawWs || '').trim());
+    return (
+      (u.protocol === 'ws:' || u.protocol === 'wss:') &&
+      (u.hostname === '127.0.0.1' || u.hostname === 'localhost') &&
+      Number(u.port) === Number(port) &&
+      !u.username &&
+      !u.password
     );
-    req.on('error', () => resolve([]));
+  } catch {
+    return false;
+  }
+}
+
+function httpGetLocalJson(port, urlPath, timeoutMs = 450) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (val) => {
+      if (!settled) {
+        settled = true;
+        resolve(val);
+      }
+    };
+    const req = http.get({ host: '127.0.0.1', port, path: urlPath, timeout: timeoutMs }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume?.();
+        return done({ ok: false, value: null });
+      }
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try {
+          done({ ok: true, value: JSON.parse(data) });
+        } catch {
+          done({ ok: false, value: null });
+        }
+      });
+      res.on('error', () => done({ ok: false, value: null }));
+    });
+    req.on('error', () => done({ ok: false, value: null }));
     req.on('timeout', () => {
       req.destroy();
-      resolve([]);
+      done({ ok: false, value: null });
     });
   });
+}
+
+async function fetchBrowserVersionInfo(port) {
+  const res = await httpGetLocalJson(port, '/json/version', 450);
+  const parsed = res.value;
+  if (!res.ok || !parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { wsUrl: '', externalBrowser: false };
+  }
+  const rawWs = typeof parsed.webSocketDebuggerUrl === 'string' ? parsed.webSocketDebuggerUrl.trim() : '';
+  return {
+    wsUrl: isValidLoopbackWsUrl(rawWs, port) ? rawWs : '',
+    externalBrowser: isExternalNonHostBrowserProduct(parsed.Browser, parsed['User-Agent'])
+  };
+}
+
+async function fetchBrowserWsUrl(port, rejectExternal = false) {
+  const info = await fetchBrowserVersionInfo(port);
+  if (rejectExternal && info.externalBrowser) return '';
+  return info.wsUrl;
+}
+
+async function fetchTargetsResult(port) {
+  const res = await httpGetLocalJson(port, '/json/list', 450);
+  if (res.ok && Array.isArray(res.value)) {
+    return { reachable: true, targets: res.value };
+  }
+  return { reachable: false, targets: [] };
+}
+
+function fetchTargets(port) {
+  return fetchTargetsResult(port).then((res) => res.targets);
 }
 
 function isAllowedOrigin(urlStr) {
@@ -1917,6 +1688,268 @@ function isAllowedOrigin(urlStr) {
     }
     return urlStr.startsWith(prefix);
   });
+}
+
+function isEventDiscoveryEnabled() {
+  const isRunOnce = typeof RUN_ONCE !== 'undefined' && Boolean(RUN_ONCE);
+  return Boolean(
+    !isRunOnce &&
+      !daemonExiting &&
+      activeConfig.enabled &&
+      activeConfig.modules?.cdpEventDiscovery !== false
+  );
+}
+
+function closeAllBrowserWatchers() {
+  for (const [, entry] of browserWatchers.entries()) {
+    entry.closing = true;
+    try {
+      entry.ws?.close();
+    } catch {}
+  }
+  browserWatchers.clear();
+  browserWatcherBackoffUntil.clear();
+}
+
+function isSkippedNonHost(t, nowMs = Date.now()) {
+  const id = String(t?.id || t?.targetId || '').trim();
+  if (!id) return false;
+  const skipped = skippedNonHostTargets.get(id);
+  if (!skipped) return false;
+  const url = String(t.url || '');
+  if (skipped.url && url && skipped.url !== url) return false;
+  const originKey = getTargetOriginKey(url);
+  if (skipped.origin && originKey && skipped.origin !== originKey) return false;
+  const attempts = skipped.attempts || 1;
+  const ageMs = nowMs - (skipped.skippedAt || 0);
+  const titleHasAg = String(t.title || '').includes('Antigravity');
+  if (titleHasAg && !skipped.titleHadAg && attempts < 6 && ageMs >= 150) return false;
+  if (titleHasAg && attempts < 6 && ageMs >= 3000) return false;
+  if (attempts < 3 && ageMs >= 8000) return false;
+  return true;
+}
+
+function isCandidateTargetInfo(t, nowMs = Date.now()) {
+  if (!t || typeof t !== 'object') return false;
+  const id = String(t.id || t.targetId || '').trim();
+  if (!id) return false;
+  const type = String(t.type || '');
+  const url = String(t.url || '');
+  if (!(type === 'page' || (type === 'iframe' && url.startsWith('plugin://swarm--')))) {
+    return false;
+  }
+  if (url.startsWith('devtools://')) return false;
+  if (!isAllowedOrigin(url)) return false;
+  if (String(t.title || '').includes('Launchpad')) return false;
+  if (isSkippedNonHost(t, nowMs)) return false;
+  return true;
+}
+
+function handleBrowserTargetUpsert(info, watcherEntry) {
+  if (!isEventDiscoveryEnabled()) return;
+  if (!info || typeof info !== 'object') return;
+  const targetId = String(info.targetId || info.id || '').trim();
+  if (!targetId) return;
+
+  const url = String(info.url || '');
+  const title = String(info.title || '');
+  const prevMeta = targetMetaMap.get(targetId);
+  const nextParentId = info.parentId || prevMeta?.parentId || null;
+  targetMetaMap.set(targetId, {
+    type: info.type || prevMeta?.type || '',
+    parentId: nextParentId,
+    channel: watcherEntry.channel || prevMeta?.channel || 'stable',
+    updatedAt: Date.now()
+  });
+
+  const skipped = skippedNonHostTargets.get(targetId);
+  if (
+    skipped &&
+    (!isAllowedOrigin(url) ||
+      (skipped.url && url && skipped.url !== url) ||
+      (skipped.origin && getTargetOriginKey(url) !== skipped.origin))
+  ) {
+    skippedNonHostTargets.delete(targetId);
+  }
+
+  const existingAttached = attachedTargets.get(targetId);
+  if (existingAttached) {
+    if (url || title) {
+      existingAttached.updateTargetUrl?.(url, title);
+    }
+    return;
+  }
+
+  if (attachingTargetIds.has(targetId)) return;
+  if (!isCandidateTargetInfo(info, Date.now())) return;
+
+  const syntheticTarget = {
+    id: targetId,
+    type: info.type,
+    title: info.title || '',
+    url,
+    parentId: nextParentId,
+    webSocketDebuggerUrl: `ws://127.0.0.1:${watcherEntry.port}/devtools/page/${targetId}`
+  };
+  void attachTarget(syntheticTarget, watcherEntry.endpoint);
+}
+
+function handleBrowserTargetDestroyed(rawTargetId) {
+  const targetId = String(rawTargetId || '').trim();
+  if (!targetId) return;
+  if (attachingTargetIds.has(targetId)) {
+    destroyedWhileAttaching.add(targetId);
+  }
+  const entry = attachedTargets.get(targetId);
+  if (entry) {
+    attachedTargets.delete(targetId);
+    try {
+      entry.ws?.close();
+    } catch {}
+  }
+  targetThemeModes.delete(targetId);
+  targetMetaMap.delete(targetId);
+  skippedNonHostTargets.delete(targetId);
+  syncThemeToChildIframes();
+}
+
+async function ensureBrowserWatcher(endpoint, port, browserWsPath = '', isFallbackPort = false) {
+  if (!isEventDiscoveryEnabled() || !port) return false;
+  const channel = endpoint?.channel || 'stable';
+  const watcherKey = `${channel}:${port}`;
+
+  // 同通道切换了新端口时，主动关闭旧端口上的残留 BrowserWatcher
+  for (const [key, entry] of Array.from(browserWatchers.entries())) {
+    if (entry.channel === channel && entry.port !== port) {
+      entry.closing = true;
+      browserWatchers.delete(key);
+      browserWatcherBackoffUntil.delete(key);
+      try {
+        entry.ws?.close();
+      } catch {}
+    }
+  }
+
+  const desiredWsUrl = browserWsPath && browserWsPath.startsWith('/') ? `ws://127.0.0.1:${port}${browserWsPath}` : '';
+  const existing = browserWatchers.get(watcherKey);
+  if (existing && existing.ws) {
+    const isAlive = existing.ws.readyState === WebSocket.CONNECTING || existing.ws.readyState === WebSocket.OPEN;
+    const sameEndpointUrl = !desiredWsUrl || existing.wsUrl === desiredWsUrl;
+    if (isAlive && sameEndpointUrl) {
+      existing.endpoint = endpoint;
+      return true;
+    }
+    existing.closing = true;
+    browserWatchers.delete(watcherKey);
+    try {
+      existing.ws.close();
+    } catch {}
+  }
+
+  const backoffUntil = browserWatcherBackoffUntil.get(watcherKey) || 0;
+  if (Date.now() < backoffUntil) {
+    return false;
+  }
+
+  const wsUrl = desiredWsUrl || (await fetchBrowserWsUrl(port, isFallbackPort));
+  if (!wsUrl || !isEventDiscoveryEnabled()) return false;
+
+  const existingAfterAwait = browserWatchers.get(watcherKey);
+  if (
+    existingAfterAwait &&
+    existingAfterAwait.ws &&
+    (existingAfterAwait.ws.readyState === WebSocket.CONNECTING || existingAfterAwait.ws.readyState === WebSocket.OPEN) &&
+    existingAfterAwait.wsUrl === wsUrl
+  ) {
+    existingAfterAwait.endpoint = endpoint;
+    return true;
+  }
+
+  try {
+    const ws = new WebSocket(wsUrl);
+    const watcherEntry = {
+      ws,
+      wsUrl,
+      port,
+      channel,
+      endpoint,
+      reconnectAfterMs: 0,
+      closing: false
+    };
+    browserWatchers.set(watcherKey, watcherEntry);
+
+    let msgId = 1;
+    let disconnected = false;
+    const handleDisconnect = () => {
+      if (disconnected) return;
+      disconnected = true;
+      clearTimeout(watcherConnectTimer);
+      if (browserWatchers.get(watcherKey) === watcherEntry) {
+        browserWatchers.delete(watcherKey);
+      }
+      if (!watcherEntry.closing && isEventDiscoveryEnabled()) {
+        const until = Date.now() + 5000;
+        watcherEntry.reconnectAfterMs = until;
+        browserWatcherBackoffUntil.set(watcherKey, until);
+      }
+    };
+
+    const watcherConnectTimer = setTimeout(() => {
+      if (!disconnected && ws.readyState === WebSocket.CONNECTING) {
+        try {
+          ws.close();
+        } catch {}
+        handleDisconnect();
+      }
+    }, 3000);
+
+    ws.addEventListener('open', () => {
+      clearTimeout(watcherConnectTimer);
+      if (watcherEntry.closing || !isEventDiscoveryEnabled()) {
+        try {
+          ws.close();
+        } catch {}
+        return;
+      }
+      browserWatcherBackoffUntil.delete(watcherKey);
+      watcherEntry.reconnectAfterMs = 0;
+      try {
+        ws.send(
+          JSON.stringify({
+            id: msgId++,
+            method: 'Target.setDiscoverTargets',
+            params: { discover: true }
+          })
+        );
+        console.log(`[Daemon] Browser CDP watcher connected (${channel}:${port})`);
+      } catch {}
+    });
+
+    ws.addEventListener('message', (event) => {
+      if (watcherEntry.closing || !isEventDiscoveryEnabled()) return;
+      let msg;
+      try {
+        msg = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      if (!msg || !msg.method) return;
+      if (msg.method === 'Target.targetCreated' || msg.method === 'Target.targetInfoChanged') {
+        handleBrowserTargetUpsert(msg.params?.targetInfo, watcherEntry);
+      } else if (msg.method === 'Target.targetDestroyed') {
+        handleBrowserTargetDestroyed(msg.params?.targetId);
+      }
+    });
+
+    ws.addEventListener('close', handleDisconnect);
+    ws.addEventListener('error', handleDisconnect);
+    return true;
+  } catch {
+    if (isEventDiscoveryEnabled()) {
+      browserWatcherBackoffUntil.set(watcherKey, Date.now() + 5000);
+    }
+    return false;
+  }
 }
 
 const CASCADE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1971,19 +2004,40 @@ function parseMetricsSubscriptionPayload(rawPayload) {
 function attachTarget(target, endpoint) {
   const wsUrl = target.webSocketDebuggerUrl;
   if (!wsUrl) return Promise.resolve(false);
+  if (attachedTargets.has(target.id) || attachingTargetIds.has(target.id)) {
+    return Promise.resolve(false);
+  }
+  attachingTargetIds.add(target.id);
+  destroyedWhileAttaching.delete(target.id);
 
   return new Promise((resolveAttach) => {
+    let ws = null;
     let settled = false;
     const finishAttach = (ok) => {
       if (!settled) {
         settled = true;
+        clearTimeout(attachTimeout);
+        attachingTargetIds.delete(target.id);
+        if (destroyedWhileAttaching.delete(target.id)) {
+          if (attachedTargets.get(target.id)?.ws === ws) {
+            attachedTargets.delete(target.id);
+          }
+          targetThemeModes.delete(target.id);
+          targetMetaMap.delete(target.id);
+          skippedNonHostTargets.delete(target.id);
+          try {
+            ws?.close();
+          } catch {}
+          resolveAttach(false);
+          return;
+        }
         resolveAttach(ok);
       }
     };
     const attachTimeout = setTimeout(() => finishAttach(false), 2500);
 
     try {
-      const ws = new WebSocket(wsUrl);
+      ws = new WebSocket(wsUrl);
       let msgId = 1;
       let watchedCascadeIds = [];
       let hasExplicitSubscription = false;
@@ -2084,7 +2138,7 @@ function attachTarget(target, endpoint) {
           expression: script,
           returnByValue: true
         });
-        if (!res || generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return false;
+        if (!res || ws.readyState !== WebSocket.OPEN || destroyedWhileAttaching.has(target.id) || generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return false;
         if (res?.error) {
           console.error(`[Daemon] Injection error on ${target.id}:`, res.error.message || res.error);
           return false;
@@ -2199,7 +2253,6 @@ function attachTarget(target, endpoint) {
           const sig = childSnap?.sig || dbState?.sig || 'empty';
           const sessionKey = `${cid}@${sig}|${metricsConfigEpoch}`;
           if (!force && !childSnap?.isDraining && !childSnap?.partialStale && sessionKey === state.lastPushedHash) continue;
-          if (!force && (dbState?.uncDeferred || childSnap?.uncBackoffActive) && Date.now() < wslUncBackoffUntil && state.lastRenderedSig) continue;
           const payload = parseConversationMetrics(cid, currentEndpoint, dbState, childSnap, budget);
           if (!payload || payload.transientError) {
             if (force && payload?.cachedPayload) pendingUpdates.push({ cid, payload: payload.cachedPayload });
@@ -2343,6 +2396,7 @@ function attachTarget(target, endpoint) {
       };
 
       let currentTargetUrl = String(target.url || '');
+      let currentTargetTitle = String(target.title || '');
       let navigationGeneration = 0;
       let hostConfirmed = false;
       let nonHostSettled = false;
@@ -2387,7 +2441,23 @@ function attachTarget(target, endpoint) {
           navDebounceTimer = null;
         }
         const skippedUrl = String(reasonUrl || target.url || '');
-        if (skippedUrl) skippedNonHostTargets.set(target.id, { url: skippedUrl, skippedAt: Date.now() });
+        const originKey = getTargetOriginKey(skippedUrl);
+        if (skippedUrl || originKey) {
+          const prevSkipped = skippedNonHostTargets.get(target.id);
+          const sameEntry =
+            prevSkipped &&
+            (!prevSkipped.url || prevSkipped.url === skippedUrl) &&
+            (!prevSkipped.origin || prevSkipped.origin === originKey);
+          const attempts = sameEntry ? (prevSkipped.attempts || 1) + 1 : 1;
+          const titleHasAg = String(currentTargetTitle || target.title || '').includes('Antigravity');
+          skippedNonHostTargets.set(target.id, {
+            url: skippedUrl,
+            origin: originKey,
+            skippedAt: Date.now(),
+            attempts,
+            titleHadAg: Boolean((sameEntry && prevSkipped.titleHadAg) || titleHasAg)
+          });
+        }
         if (evalScriptId && ws.readyState === WebSocket.OPEN) {
           const idToRemove = evalScriptId;
           evalScriptId = null;
@@ -2412,6 +2482,7 @@ function attachTarget(target, endpoint) {
         hostConfirmed = true;
         pendingProbe = false;
         clearPendingTimer();
+        skippedNonHostTargets.delete(target.id);
         const entry = attachedTargets.get(target.id);
         if (entry && entry.ws === ws) {
           entry.hostConfirmed = true;
@@ -2451,6 +2522,7 @@ function attachTarget(target, endpoint) {
         return ok;
       };
 
+      const PENDING_RETRY_DELAYS_MS = [30, 50, 100, 200];
       const schedulePendingRetry = () => {
         clearPendingTimer();
         if (!pendingProbe || hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
@@ -2467,11 +2539,12 @@ function attachTarget(target, endpoint) {
           finishAttach(false);
           return;
         }
+        const delayMs = PENDING_RETRY_DELAYS_MS[Math.min(pendingRetryCount, PENDING_RETRY_DELAYS_MS.length - 1)];
         pendingRetryCount += 1;
         pendingRetryTimer = setTimeout(() => {
           pendingRetryTimer = null;
           void recheckPendingHost();
-        }, 200);
+        }, delayMs);
       };
 
       const recheckPendingHost = async () => {
@@ -2521,6 +2594,10 @@ function attachTarget(target, endpoint) {
       };
 
       ws.addEventListener('open', async () => {
+        if (destroyedWhileAttaching.has(target.id) || ws.readyState !== WebSocket.OPEN || nonHostSettled) {
+          finishAttach(false);
+          return;
+        }
         if (isExemptInternalTarget(target)) {
           await promoteToHost();
           return;
@@ -2529,9 +2606,15 @@ function attachTarget(target, endpoint) {
           runtimeEnabled = true;
           await send('Runtime.enable');
         }
-        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled || destroyedWhileAttaching.has(target.id)) {
+          finishAttach(false);
+          return;
+        }
         const kind = await probeHostKind();
-        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled || destroyedWhileAttaching.has(target.id)) {
+          finishAttach(false);
+          return;
+        }
         if (kind === 'host') {
           await promoteToHost();
           return;
@@ -2545,7 +2628,10 @@ function attachTarget(target, endpoint) {
           pageEnabled = true;
           await send('Page.enable');
         }
-        if (ws.readyState !== WebSocket.OPEN || nonHostSettled) return;
+        if (ws.readyState !== WebSocket.OPEN || nonHostSettled || destroyedWhileAttaching.has(target.id)) {
+          finishAttach(false);
+          return;
+        }
         await recheckPendingHost();
       });
 
@@ -2670,6 +2756,7 @@ function attachTarget(target, endpoint) {
         ws,
         type: target.type,
         parentId: target.parentId || null,
+        attachedAt: Date.now(),
         send,
         updateNewDocScript,
         inject,
@@ -2682,8 +2769,25 @@ function attachTarget(target, endpoint) {
         set hostConfirmed(v) {
           hostConfirmed = Boolean(v);
         },
-        updateTargetUrl: (u) => {
-          if (u) currentTargetUrl = String(u);
+        updateTargetUrl: (u, nextTitle = '') => {
+          let changed = false;
+          if (nextTitle) {
+            const tStr = String(nextTitle);
+            if (tStr !== currentTargetTitle) {
+              currentTargetTitle = tStr;
+              if (tStr.includes('Antigravity')) changed = true;
+            }
+          }
+          if (u) {
+            const nextUrl = String(u);
+            if (nextUrl !== currentTargetUrl) {
+              currentTargetUrl = nextUrl;
+              changed = true;
+            }
+          }
+          if (changed && pendingProbe && !hostConfirmed && !nonHostSettled && ws.readyState === WebSocket.OPEN) {
+            void recheckPendingHost();
+          }
         },
         setActiveCascade: (cid) => {
           acceptMetricsSubscription(normalizeCascadeIdList(cid));
@@ -2705,11 +2809,15 @@ const fallbackBackoffUntil = new Map();
 async function sync() {
   if (isSyncing) return;
   isSyncing = true;
+  const syncStartMs = Date.now();
   syncTickCount = (syncTickCount + 1) % 6000;
   try {
     const bundleChanged = rebuildBundleIfNeeded();
     if (!activeConfig.enabled) {
       targetThemeModes.clear();
+    }
+    if (!isEventDiscoveryEnabled()) {
+      closeAllBrowserWatchers();
     }
     const shouldHeartbeatCheck = bundleChanged || syncTickCount % 6 === 1;
 
@@ -2721,48 +2829,71 @@ async function sync() {
     const probedPorts = new Set();
     const nowMs = Date.now();
     for (const endpoint of activeConfig.endpoints) {
-      let port = readPort(endpoint.portFile);
+      const portInfo = readPortInfo(endpoint.portFile);
+      let activePort = portInfo.port;
+      let activeBrowserWsPath = portInfo.browserWsPath;
+      let fromPortFile = false;
+      let reachable = false;
       let targets = [];
-      if (port && !probedPorts.has(port)) {
-        probedPorts.add(port);
-        targets = await fetchTargets(port);
+      if (activePort && !probedPorts.has(activePort)) {
+        probedPorts.add(activePort);
+        const res = await fetchTargetsResult(activePort);
+        reachable = res.reachable;
+        targets = res.targets;
+        if (reachable) fromPortFile = true;
       }
       if (
-        targets.length === 0 &&
+        !reachable &&
         endpoint.channelInstalled !== false &&
         endpoint.fallbackPort &&
         !probedPorts.has(endpoint.fallbackPort) &&
         (RUN_ONCE || nowMs >= (fallbackBackoffUntil.get(endpoint.fallbackPort) || 0))
       ) {
         probedPorts.add(endpoint.fallbackPort);
-        targets = await fetchTargets(endpoint.fallbackPort);
-        if (targets.length === 0) {
+        const res = await fetchTargetsResult(endpoint.fallbackPort);
+        if (!res.reachable) {
           fallbackBackoffUntil.set(endpoint.fallbackPort, nowMs + 10000);
         } else {
-          fallbackBackoffUntil.delete(endpoint.fallbackPort);
+          const verInfo = await fetchBrowserVersionInfo(endpoint.fallbackPort);
+          if (verInfo.externalBrowser) {
+            fallbackBackoffUntil.set(endpoint.fallbackPort, nowMs + 10000);
+          } else {
+            reachable = true;
+            targets = res.targets;
+            fallbackBackoffUntil.delete(endpoint.fallbackPort);
+            activePort = endpoint.fallbackPort;
+            activeBrowserWsPath = '';
+          }
         }
+      }
+      if (!reachable) continue;
+
+      if (isEventDiscoveryEnabled() && activePort) {
+        await ensureBrowserWatcher(endpoint, activePort, activeBrowserWsPath, !fromPortFile);
       }
       if (targets.length === 0) continue;
 
       for (const t of targets) {
         if (!t?.id) continue;
         seenRawTargetIds.add(t.id);
-        targetMetaMap.set(t.id, { type: t.type, parentId: t.parentId || null, channel: endpoint.channel });
+        targetMetaMap.set(t.id, {
+          type: t.type,
+          parentId: t.parentId || null,
+          channel: endpoint.channel,
+          updatedAt: Date.now()
+        });
         const skipped = skippedNonHostTargets.get(t.id);
-        if (skipped && (String(t.url) !== skipped.url || Date.now() - skipped.skippedAt >= 15000)) {
+        if (
+          skipped &&
+          (!isAllowedOrigin(t.url) ||
+            (skipped.url && String(t.url || '') && skipped.url !== String(t.url)) ||
+            (skipped.origin && getTargetOriginKey(t.url) !== skipped.origin))
+        ) {
           skippedNonHostTargets.delete(t.id);
         }
       }
 
-      const pages = targets.filter(
-        (t) =>
-          (t.type === 'page' || (t.type === 'iframe' && String(t.url || '').startsWith('plugin://swarm--'))) &&
-          t.webSocketDebuggerUrl &&
-          !String(t.url || '').startsWith('devtools://') &&
-          isAllowedOrigin(t.url) &&
-          !String(t.title || '').includes('Launchpad') &&
-          !skippedNonHostTargets.has(t.id)
-      );
+      const pages = targets.filter((t) => Boolean(t.webSocketDebuggerUrl) && isCandidateTargetInfo(t, nowMs));
 
       for (const page of pages) {
         activeTargetIds.add(page.id);
@@ -2778,12 +2909,14 @@ async function sync() {
       const attachPromises = [];
       for (const { page, endpoint } of items) {
         if (!attachedTargets.has(page.id)) {
-          attachPromises.push(attachTarget(page, endpoint));
+          if (!attachingTargetIds.has(page.id)) {
+            attachPromises.push(attachTarget(page, endpoint));
+          }
         } else {
           const entry = attachedTargets.get(page.id);
           entry.endpoint = endpoint;
-          entry.parentId = page.parentId || null;
-          entry.updateTargetUrl?.(page.url);
+          entry.parentId = page.parentId || entry.parentId || null;
+          entry.updateTargetUrl?.(page.url, page.title);
           if (entry.hostConfirmed) {
             if (bundleChanged && entry.updateNewDocScript) {
               await entry.updateNewDocScript();
@@ -2802,9 +2935,12 @@ async function sync() {
     await syncTargetBatch(pendingPages);
     await syncTargetBatch(pendingIframes);
 
-    // 清理已关闭的目标连接
+    // 清理已关闭的目标连接（防竞态误杀：跳过本轮快照开始后由 BrowserWS 新附着的目标）
     for (const [id, entry] of attachedTargets.entries()) {
       if (!activeTargetIds.has(id)) {
+        if (entry.attachedAt && entry.attachedAt >= syncStartMs) {
+          continue;
+        }
         try {
           entry.ws.close();
         } catch {}
@@ -2813,19 +2949,32 @@ async function sync() {
       }
     }
     if (seenRawTargetIds.size > 0) {
-      for (const id of skippedNonHostTargets.keys()) {
-        if (!seenRawTargetIds.has(id)) {
+      for (const [id, skipped] of skippedNonHostTargets.entries()) {
+        if (!seenRawTargetIds.has(id) && (skipped?.skippedAt || 0) < syncStartMs) {
           skippedNonHostTargets.delete(id);
         }
       }
-      for (const id of targetMetaMap.keys()) {
-        if (!seenRawTargetIds.has(id)) {
+      for (const [id, meta] of targetMetaMap.entries()) {
+        if (
+          !seenRawTargetIds.has(id) &&
+          !attachedTargets.has(id) &&
+          !attachingTargetIds.has(id) &&
+          (meta?.updatedAt || 0) < syncStartMs
+        ) {
           targetMetaMap.delete(id);
         }
       }
-    } else if (attachedTargets.size === 0) {
-      targetMetaMap.clear();
-      skippedNonHostTargets.clear();
+    } else if (attachedTargets.size === 0 && attachingTargetIds.size === 0) {
+      for (const [id, skipped] of skippedNonHostTargets.entries()) {
+        if ((skipped?.skippedAt || 0) < syncStartMs) {
+          skippedNonHostTargets.delete(id);
+        }
+      }
+      for (const [id, meta] of targetMetaMap.entries()) {
+        if ((meta?.updatedAt || 0) < syncStartMs) {
+          targetMetaMap.delete(id);
+        }
+      }
     }
     syncThemeToChildIframes();
   } finally {
@@ -2839,6 +2988,8 @@ console.log(
 
 await sync();
 if (RUN_ONCE) {
+  daemonExiting = true;
+  closeAllBrowserWatchers();
   for (const [, entry] of attachedTargets.entries()) {
     try {
       entry.ws.close();

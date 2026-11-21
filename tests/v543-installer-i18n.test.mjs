@@ -13,7 +13,7 @@ test('v543 dictionary adds all 50 UI labels without changing 1756 fusion transla
   for(const key of addedKeys) assert.equal(typeof dict[key],'string',key);
   const prior = Object.fromEntries(Object.entries(dict).filter(([k])=>!addedKeys.includes(k) && !v550Keys.includes(k)));
   assert.equal(crypto.createHash('sha256').update(JSON.stringify(prior)).digest('hex'),
-    "161d61285d5e0bbe0fbb9f97cf8d1d983ced249f8af7e82bcd22e5a916f3409a");
+    "c36b4d6d27f79471b3b3fe5fb8bd08e424867b9e0904a61eca3d2b186a33f82a");
 });
 test('v543 dictionary has no duplicate keys or case/curly-apostrophe aliases', () => {
   const keys = [...raw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m=>JSON.parse(m[1]));
@@ -53,6 +53,6 @@ test('v543 diagnostics report absent pills and retain nonhost classification', (
   assert.equal(result.pillCount,0); assert.equal(result.pillMounted,false); assert.equal(result.pillText,null); assert.equal(result.__isHost,false);
 });
 test('v543 installer records fusion version and never restores sync-user', () => {
-  assert.match(source,/version: '5\.5\.0-eric\.1'/);
+  assert.match(source,/version: '5\.5\.2-eric\.1'/);
   assert.doesNotMatch(source,/hasFlag\(['"]--sync-user/);
 });

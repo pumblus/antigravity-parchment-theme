@@ -95,8 +95,8 @@ test('Anthropic font aliases, PingFang CJK fallback order, and discrete weights 
   assert.ok(serifMatch[1].indexOf("Georgia") < serifMatch[1].indexOf("'PingFang SC'"));
   assert.ok(serifMatch[1].indexOf("'PingFang SC'") < serifMatch[1].indexOf("'Sarasa UI SC'"));
   assert.ok(!serifMatch[1].includes('Sarasa Mono Slab SC'), 'Serif prose does not use monospace CJK');
-  assert.ok(monoMatch[1].indexOf("'Anthropic Mono'") < monoMatch[1].indexOf("Consolas"));
-  assert.ok(monoMatch[1].indexOf("Consolas") < monoMatch[1].indexOf("'PingFang SC'"));
+  assert.ok(monoMatch[1].indexOf("'Anthropic Mono'") < monoMatch[1].indexOf("Monaco"));
+  assert.ok(monoMatch[1].indexOf("Monaco") < monoMatch[1].indexOf("'PingFang SC'"));
 
   // No non-standard fractional font weights remain.
   assert.doesNotMatch(css, /font-weight:\s*(?:450|520)\b/);
@@ -347,7 +347,8 @@ for (const mode of ['light', 'dark']) {
   });
 }
 
-test('typography computed Windows axes retain protected code and do not affect macOS', async t => {
+test('typography computed macOS styles keep normal variation settings and no Windows rules', async t => {
+  assert.doesNotMatch(css, /data-ag-os="win32"|Segoe UI|Microsoft YaHei|Consolas/i);
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), headless: true });
   t.after(() => browser.close());
@@ -364,14 +365,6 @@ test('typography computed Windows axes retain protected code and do not affect m
   await page.addStyleTag({ content: css });
   const variation = id => page.locator('#' + id).evaluate(el => getComputedStyle(el).fontVariationSettings);
   for (const id of ['prose','normal','italic','medium','medium-italic','bold','bold-italic','code','nested-code','path','editable','math']) assert.equal(await variation(id), 'normal', 'darwin ' + id);
-  await page.locator('html').evaluate(el => el.dataset.agOs = 'win32');
-  for (const [ids, weight] of [[['prose','normal','italic'],400], [['medium','medium-italic'],500], [['bold','bold-italic'],600]]) {
-    for (const id of ids) {
-      assert.match(await variation(id), new RegExp('"wght" ' + weight), id);
-      assert.match(await variation(id), /"opsz" 16/, id);
-    }
-  }
-  for (const id of ['code','nested-code','path','editable','math']) assert.equal(await variation(id), 'normal', 'protected ' + id);
   assert.match(await page.locator('#code').evaluate(el => getComputedStyle(el).fontFamily), fonts.mono);
 });
 
@@ -400,8 +393,6 @@ test('typography computed v530 PDF scope, ligatures, plugin headings and neutral
   assert.equal(await get('ag-live-metrics-tooltip','box-shadow'), 'none');
   await page.locator('body').evaluate(el => el.classList.add('dark'));
   assert.equal(await get('badge','background-color'), 'rgb(43, 42, 39)');
-  await page.locator('html').evaluate(el => el.dataset.agOs = 'win32');
-  assert.match(await get('heading','font-variation-settings'), /"wght" 600/);
   assert.equal(await get('code-heading','font-variation-settings'), 'normal');
   await page.locator('body').evaluate(el => el.removeAttribute('data-agy-font'));
   assert.equal(await get('pdf','--sdk-font-family'), 'Arial', 'SDK variables are not global when patch font scope is absent');
