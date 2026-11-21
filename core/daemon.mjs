@@ -2,10 +2,10 @@
 /**
  * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（融合版 v5.5.2-eric.1 · macOS 专用）：
+ * 架构特性（融合版 v5.5.3-eric.1 · macOS 专用）：
  * 1. 动态 Node 分级：
- *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、宿主隔离、Browser 级 CDP 事件发现、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
- *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）；低版本优雅降级绝不崩溃。
+ *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、宿主隔离、Browser 级 CDP 事件发现与在线快路径、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
+ *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）与设置弹窗「Token 统计」增量归因分析；低版本优雅降级绝不崩溃。
  * 2. 模块化与热重载：
  *    - 周期性检测 `user/config.json`、`user/custom.css`、`user/i18n.override.json`、`user/custom.js` 的 mtime，
  *      用户或对方 Agent 修改 `user/` 层后 2.5 秒内自动重新构建签名并热更新至所有打开的 Antigravity 窗口。
@@ -155,14 +155,20 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261120-v5.5.2-eric.1';
+const BASE_VERSION = '20261121-v5.5.3-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
+let cachedIframeInjectScript = '';
 let cachedPatchVersion = '';
 let metricsConfigEpoch = 0;
 const lastBestEffortPayloadCache = new Map(); // initialized before the first bundle rebuild
 const metricsCache = new Map(); // dbPath -> { sig, payload }
 const incrementalMetricsMap = new Map(); // dbPath -> { rowCount, maxIdx, userStepsCount, lastUserStepIdx, items, validItems, totalIn, totalCache, totalOut, totalThink, totalResp }
+const tokenAnalyticsDbCache = new Map(); // dbPath -> { sig, parsed }
+const tokenAnalyticsSummariesCache = new Map(); // summariesDbPath -> { sig, map }
+let lastTokenAnalyticsAccessMs = 0;
+let inFlightTokenAnalyticsPromise = null;
+let inFlightTokenAnalyticsKey = '';
 const MAX_METRICS_CACHE_SIZE = 30;
 
 function setMetricsCache(dbPath, entry) {
@@ -195,6 +201,7 @@ let activeConfig = {
   modules: {
     i18n: true,
     metrics: true,
+    tokenAnalytics: true,
     composerWaxSeal: true,
     deadlockHealer: true,
     coldBootHealer: false,
@@ -303,6 +310,7 @@ function rebuildBundleIfNeeded() {
     {
       i18n: true,
       metrics: true,
+      tokenAnalytics: true,
       composerWaxSeal: true,
       deadlockHealer: true,
       coldBootHealer: false,
@@ -315,6 +323,7 @@ function rebuildBundleIfNeeded() {
   );
   if (!DatabaseSync) {
     modules.metrics = false;
+    modules.tokenAnalytics = false;
   }
   modules.metricsCapsule = modules.metrics;
 
@@ -385,13 +394,21 @@ function rebuildBundleIfNeeded() {
   const channelTag = channel === 'insiders' ? 'insiders' : 'stable';
   cachedPatchVersion = `${BASE_VERSION}-${channelTag}-${hash}`;
 
+  const RE_STRIP_TA_CSS = /\/\* __AG_TOKEN_ANALYTICS_CSS_START__ \*\/[\s\S]*?\/\* __AG_TOKEN_ANALYTICS_CSS_END__ \*\//g;
+  const RE_STRIP_TA_JS = /\/\* __AG_TOKEN_ANALYTICS_JS_START__ \*\/[\s\S]*?\/\* __AG_TOKEN_ANALYTICS_JS_END__ \*\//g;
+
+  const pageCss = modules.tokenAnalytics ? baseCss : baseCss.replace(RE_STRIP_TA_CSS, '');
+  const pageRuntime = modules.tokenAnalytics
+    ? runtimeTemplate
+    : runtimeTemplate.replace(RE_STRIP_TA_JS, '  cleanupTokenAnalyticsDom();');
+
   const bootPayload = {
     version: cachedPatchVersion,
     platform: 'darwin',
     hostThemeMode,
     enabled,
     preset,
-    cssText: baseCss,
+    cssText: pageCss,
     customCss,
     themeVars,
     i18nDict: mergedDict,
@@ -409,7 +426,18 @@ function rebuildBundleIfNeeded() {
     customJs
   };
 
-  cachedInjectScript = runtimeTemplate.replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(bootPayload)});`);
+  cachedInjectScript = pageRuntime.replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(bootPayload)});`);
+
+  // Swarm 子 iframe 不承载设置弹窗，固定裁剪 Token 统计 CSS+JS 且保持同一 version 哈希
+  const iframeModules = Object.assign({}, modules, { tokenAnalytics: false });
+  const iframePayload = Object.assign({}, bootPayload, {
+    cssText: baseCss.replace(RE_STRIP_TA_CSS, ''),
+    modules: iframeModules,
+    config: Object.assign({}, bootPayload.config, { modules: iframeModules })
+  });
+  cachedIframeInjectScript = runtimeTemplate
+    .replace(RE_STRIP_TA_JS, '')
+    .replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(iframePayload)});`);
   cachedBundleSig = sig;
   return true;
 }
@@ -846,6 +874,8 @@ function refreshLineageIndex(conversationsDir, budget = null) {
         if (statInfo.sig !== prevSig && !dirState.unindexedSet.has(uuid)) {
           newlyChanged.push({ uuid, dbPath, mtimeMs: statInfo.mtimeMs, statSig: statInfo.sig });
           dirState.unindexedSet.add(uuid);
+        } else if (statInfo.sig === prevSig && nowMs - statInfo.mtimeMs >= 300000) {
+          dirState.noMetaPending.delete(uuid);
         }
       }
       if (newlyChanged.length > 0) {
@@ -893,7 +923,7 @@ function refreshLineageIndex(conversationsDir, budget = null) {
           rootId: '',
           statSig: item.statSig
         });
-        if (!res.permanentInvalid) {
+        if (!res.permanentInvalid && Date.now() - item.mtimeMs < 300000) {
           rememberNoMetaPending(dirState, item.uuid, item.statSig);
           dirState.lastPendingScanAt = Date.now();
         } else {
@@ -1457,6 +1487,755 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       db?.close();
     } catch {}
   }
+}
+
+// ============================================================================
+// 4.5 SQLite 全量增量 Token 统计分析（系统设置弹窗「Token 统计」Tab · macOS 精简版）
+// ============================================================================
+const TA_MEMORY_PATH_RE = /MEMORY\.md|\/\.gemini\/antigravity\/brain\/|\bmemory_/i;
+const TA_PRINTABLE_STR_RE = /^[\x20-\x7e\u00a0-\uffff]{2,260}$/;
+const TA_SLUG_LABELS = {
+  'gemini-pro-orchestrator-neon': 'Orchestrator (Neon)',
+  'gemini-pro-orchestrator-g1-pro': 'Orchestrator (Argon)',
+  'gemini-pro-orchestrator-carbon': 'Orchestrator (Carbon)',
+  'gemini-flash-worker-agy': 'Gemini 4 Hydrogen (Orchestrator)',
+  'gemini-4-hydrogen': 'Gemini 4 Hydrogen',
+  'gemini-4-argon': 'Gemini 4 Argon',
+  'gemini-4-argon-trial': 'Gemini 4 Argon',
+  'gemini-4-carbon': 'Gemini 4 Carbon',
+  'gemini-4-neon': 'Gemini 4 Neon',
+  'gemini-3.8-flash-n': 'Gemini 3.8 Flash',
+  'gemini-3.8-flash-tiered': 'Gemini 3.8 Flash',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-sonnet-5-5-high': 'Claude Sonnet 5.5 (High)',
+  'claude-opus-5-5-medium': 'Claude Opus 5.5 (Medium)',
+  'claude-opus-5-5-high': 'Claude Opus 5.5 (High)'
+};
+
+function withReadOnlyDb(dbPath, timeoutMs, fn) {
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true, timeout: timeoutMs });
+    return fn(db);
+  } finally {
+    try {
+      db?.close();
+    } catch {}
+  }
+}
+
+function taParseProtoAll(buf) {
+  const fields = [];
+  if (!buf || typeof buf.length !== 'number' || buf.length === 0) return fields;
+  let i = 0;
+  while (i < buf.length) {
+    let tag = 0;
+    let shift = 0;
+    while (i < buf.length) {
+      const b = buf[i++];
+      tag |= (b & 0x7f) << shift;
+      if (!(b & 0x80)) break;
+      shift += 7;
+      if (shift > 35) return fields;
+    }
+    const field = tag >>> 3;
+    const wire = tag & 7;
+    if (field <= 0 || field > 10000) break;
+    if (wire === 0) {
+      let v = 0n;
+      let s = 0n;
+      while (i < buf.length) {
+        const b = buf[i++];
+        v |= BigInt(b & 0x7f) << s;
+        if (!(b & 0x80)) break;
+        s += 7n;
+        if (s > 70n) return fields;
+      }
+      fields.push({ f: field, w: 0, v: Number(v) });
+    } else if (wire === 2) {
+      let len = 0;
+      let s = 0;
+      while (i < buf.length) {
+        const b = buf[i++];
+        len |= (b & 0x7f) << s;
+        if (!(b & 0x80)) break;
+        s += 7;
+        if (s > 35) return fields;
+      }
+      if (len < 0 || i + len > buf.length) break;
+      fields.push({ f: field, w: 2, buf: buf.subarray(i, i + len) });
+      i += len;
+    } else if (wire === 1) {
+      if (i + 8 > buf.length) break;
+      i += 8;
+    } else if (wire === 5) {
+      if (i + 4 > buf.length) break;
+      i += 4;
+    } else {
+      break;
+    }
+  }
+  return fields;
+}
+
+function taParsePackedVarints(buf) {
+  const out = [];
+  if (!buf || typeof buf.length !== 'number') return out;
+  let i = 0;
+  while (i < buf.length) {
+    let v = 0;
+    let s = 0;
+    while (i < buf.length) {
+      const b = buf[i++];
+      v |= (b & 0x7f) << s;
+      if (!(b & 0x80)) break;
+      s += 7;
+      if (s > 35) return out;
+    }
+    out.push(v);
+  }
+  return out;
+}
+
+const taGetField = (fields, num) => fields.find((x) => x.f === num);
+const taFieldToStr = (f) => (f?.buf ? textDecoder.decode(f.buf) : '');
+
+function taStepPayloadHasMemoryPath(buf, maxDepth = 3, state = { seen: 0 }) {
+  if (maxDepth < 0 || !buf || !buf.length || state.seen >= 18) return false;
+  for (const fld of taParseProtoAll(buf)) {
+    if (state.seen >= 18) break;
+    if (fld.w === 2 && fld.buf.length > 0 && fld.buf.length <= 512) {
+      const s = textDecoder.decode(fld.buf);
+      if (TA_PRINTABLE_STR_RE.test(s)) {
+        state.seen += 1;
+        if (TA_MEMORY_PATH_RE.test(s)) return true;
+      } else if (maxDepth > 0 && fld.buf.length >= 2 && taStepPayloadHasMemoryPath(fld.buf, maxDepth - 1, state)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function taExtractStepTimestamp(metaBuf) {
+  if (!metaBuf || !metaBuf.length) return 0;
+  for (const fld of taParseProtoAll(metaBuf)) {
+    if (fld.w === 2 && fld.buf.length >= 2 && fld.buf.length <= 24) {
+      const sec = taGetField(taParseProtoAll(fld.buf), 1)?.v;
+      if (sec && sec > 1700000000 && sec < 1900000000) return sec;
+    }
+  }
+  return 0;
+}
+
+function taResolveStepLookup(stepTs, fallbackSec) {
+  const sorted = [...stepTs.keys()].sort((a, b) => a - b);
+  return (stepIdx) => {
+    if (stepTs.has(stepIdx)) return stepTs.get(stepIdx);
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      if (sorted[i] <= stepIdx) return stepTs.get(sorted[i]);
+    }
+    return sorted.length > 0 ? stepTs.get(sorted[0]) : fallbackSec;
+  };
+}
+
+function taNormalizePath(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return '';
+  if (s.startsWith('file://')) {
+    s = s.slice(7);
+    try {
+      s = decodeURIComponent(s);
+    } catch {}
+  }
+  s = s.replace(/\/{2,}/g, '/');
+  if (s.length > 1) s = s.replace(/\/+$/, '');
+  return s || '/';
+}
+
+const TA_NORMALIZED_OS_TMP = taNormalizePath(os.tmpdir()).toLowerCase();
+
+function taIsTempPath(p) {
+  if (!p) return false;
+  const low = p.toLowerCase();
+  if (TA_NORMALIZED_OS_TMP.length > 1 && (low === TA_NORMALIZED_OS_TMP || low.startsWith(`${TA_NORMALIZED_OS_TMP}/`))) {
+    return true;
+  }
+  return /^(?:\/private)?\/tmp(?:\/|$)|^\/var\/folders(?:\/|$)/i.test(low);
+}
+
+function taParseWorkspaceUrisList(workspaceUris) {
+  if (!workspaceUris) return [];
+  if (Array.isArray(workspaceUris)) return workspaceUris.map(taNormalizePath).filter(Boolean);
+  const str = String(workspaceUris).trim();
+  if (!str) return [];
+  if (str.startsWith('[')) {
+    try {
+      const arr = JSON.parse(str);
+      if (Array.isArray(arr)) return arr.map(taNormalizePath).filter(Boolean);
+    } catch {}
+  }
+  const decoded = taNormalizePath(str);
+  return decoded ? [decoded] : [];
+}
+
+function taNormalizeProjectInfo(workspaceUris, projectId = '') {
+  const paths = taParseWorkspaceUrisList(workspaceUris);
+  const nonTemp = paths.find((p) => !taIsTempPath(p));
+  const chosen = nonTemp || paths[0] || '';
+  if (!chosen || (String(projectId || '').trim() === 'outside-of-project' && !nonTemp)) {
+    return { key: '__none__', name: '未绑定项目', rawBasename: '未绑定项目', path: '', isTemp: false };
+  }
+  if (taIsTempPath(chosen)) {
+    return { key: '__tmp__', name: '临时目录 (/tmp)', rawBasename: '临时目录 (/tmp)', path: '/tmp', isTemp: true };
+  }
+  const parts = chosen.split('/').filter(Boolean);
+  const base = parts[parts.length - 1] || chosen;
+  return { key: chosen.toLowerCase(), name: base, rawBasename: base, path: chosen, isTemp: false };
+}
+
+function taClassifyModelPool({ label = '', slug = '', modelEnum = '', usedClaude = '' } = {}) {
+  const combined = `${label} ${slug} ${modelEnum}`.toLowerCase();
+  if (combined.includes('argon')) return 'Argon';
+  if (combined.includes('claude') || combined.includes('gpt') || String(usedClaude).toLowerCase() === 'true') {
+    return 'Claude & GPT';
+  }
+  return 'Gemini';
+}
+
+function taNormalizeModelLabel({ label = '', slug = '', modelEnum = '', enumId = 0 } = {}) {
+  const trimmedLabel = String(label || '').trim();
+  if (trimmedLabel) return trimmedLabel;
+  const trimmedSlug = String(slug || '').trim();
+  if (trimmedSlug) return TA_SLUG_LABELS[trimmedSlug] || trimmedSlug;
+  if (modelEnum) return String(modelEnum).trim();
+  return `model-${enumId || 'unknown'}`;
+}
+
+function taResolveCallScenario(baseScenario, isSubagent, source) {
+  if (isSubagent) return 'subagent';
+  if (baseScenario === 'planning' || baseScenario === 'memory') return baseScenario;
+  if (source === 'cli') return 'internal';
+  return baseScenario || 'internal';
+}
+
+function taParseIsoSeconds(val) {
+  if (!val) return 0;
+  const str = String(val).trim();
+  if (!str || str.startsWith('0001-01-01')) return 0;
+  const ms = Date.parse(str.includes('T') ? str : str.replace(' ', 'T'));
+  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;
+}
+
+function taToLocalDateString(tsSec) {
+  const d = new Date(tsSec * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function taLoadSummariesCached(summariesDbPath, force) {
+  if (!summariesDbPath) return new Map();
+  const sigInfo = getDbStatByPath(summariesDbPath);
+  if (!sigInfo) return new Map();
+  const cached = tokenAnalyticsSummariesCache.get(summariesDbPath);
+  if (!force && cached && cached.sig === sigInfo.sig) return cached.map;
+  try {
+    const fresh = withReadOnlyDb(summariesDbPath, 150, (db) => {
+      const map = new Map();
+      const rows = db
+        .prepare(
+          `SELECT conversation_id, title, workspace_uris, project_id, source, agent_name,
+                  parent_conversation_id, nesting_depth, last_modified_time
+           FROM conversation_summaries`
+        )
+        .all();
+      for (const r of rows) {
+        if (!r?.conversation_id) continue;
+        map.set(r.conversation_id, {
+          id: r.conversation_id,
+          title: String(r.title || '').trim(),
+          workspaceUris: String(r.workspace_uris || ''),
+          projectId: String(r.project_id || ''),
+          source: String(r.source || '') === 'CORTEX_TRAJECTORY_SOURCE_CLI' ? 'cli' : 'desktop',
+          agentName: String(r.agent_name || '').trim(),
+          parentId: String(r.parent_conversation_id || '').trim(),
+          nestingDepth: Number(r.nesting_depth || 0) || 0,
+          lastModifiedSec: taParseIsoSeconds(r.last_modified_time)
+        });
+      }
+      return map;
+    });
+    tokenAnalyticsSummariesCache.set(summariesDbPath, { sig: sigInfo.sig, map: fresh });
+    return fresh;
+  } catch {
+    return cached ? cached.map : new Map();
+  }
+}
+
+function taParseConversationDetailDb(dbPath, statInfo) {
+  const dbId = path.basename(dbPath, '.db');
+  try {
+    return withReadOnlyDb(dbPath, 150, (db) => {
+      const fallbackSec = Math.floor((statInfo?.mtimeMs || Date.now()) / 1000);
+      let trajParentId = '';
+      let trajRootId = '';
+      let trajWorkspaceUri = '';
+      let trajProjectId = '';
+      try {
+        const mrow = db.prepare('SELECT data FROM trajectory_metadata_blob LIMIT 1').get();
+        if (mrow?.data) {
+          const mf = taParseProtoAll(mrow.data);
+          trajParentId = taFieldToStr(taGetField(mf, 5)).trim();
+          trajRootId = taFieldToStr(taGetField(mf, 6)).trim();
+          trajWorkspaceUri = taFieldToStr(taGetField(mf, 7)).trim();
+          trajProjectId = taFieldToStr(taGetField(mf, 18)).trim();
+          if (!trajWorkspaceUri) {
+            const wsField = taGetField(mf, 1);
+            if (wsField?.buf) {
+              const wsSub = taParseProtoAll(wsField.buf);
+              trajWorkspaceUri =
+                taFieldToStr(taGetField(wsSub, 1)).trim() || taFieldToStr(taGetField(wsSub, 2)).trim();
+            }
+          }
+        }
+      } catch {}
+
+      const stepTs = new Map();
+      const stepByIdx = new Map();
+      const compactionStepIndices = new Set();
+      for (const row of db.prepare('SELECT idx, step_type, metadata, step_payload FROM steps').all()) {
+        const ts = taExtractStepTimestamp(row.metadata);
+        if (ts > 0) stepTs.set(row.idx, ts);
+        if (row.step_type === 23) compactionStepIndices.add(row.idx);
+        const hasMemoryPath =
+          row.step_type === 132 && row.step_payload?.length > 0
+            ? taStepPayloadHasMemoryPath(row.step_payload, 3)
+            : false;
+        stepByIdx.set(row.idx, { stepType: row.step_type, hasMemoryPath });
+      }
+      const lookupTs = taResolveStepLookup(stepTs, fallbackSec);
+
+      const calls = [];
+      let firstParentCascadeId = '';
+      let firstRootCascadeId = '';
+      let firstSubagentType = '';
+
+      for (const row of db.prepare('SELECT idx, data FROM gen_metadata ORDER BY idx ASC').all()) {
+        const top = taParseProtoAll(row.data);
+        const chatField = taGetField(top, 1);
+        if (!chatField?.buf) continue;
+        const chat = taParseProtoAll(chatField.buf);
+        const usageField = taGetField(chat, 4);
+        if (!usageField?.buf) continue;
+        const usage = taParseProtoAll(usageField.buf);
+
+        const kv = {};
+        for (const entry of chat) {
+          if (entry.f !== 20 || !entry.buf) continue;
+          const pair = taParseProtoAll(entry.buf);
+          const k = taFieldToStr(taGetField(pair, 1));
+          if (k) kv[k] = taFieldToStr(taGetField(pair, 2));
+        }
+
+        const stepIndicesField = taGetField(top, 2);
+        const stepIndices = stepIndicesField?.buf ? taParsePackedVarints(stepIndicesField.buf) : [];
+        const refStep = stepIndices.length > 0 ? stepIndices[0] : Number(kv.last_step_index) || 0;
+        const ts = lookupTs(refStep);
+
+        let hasStep132 = false;
+        let hasStep15 = false;
+        let hasLinkedStep = false;
+        let hasMemoryStep = false;
+        let hasNearbyCompaction = false;
+        for (const sIdx of stepIndices) {
+          const info = stepByIdx.get(sIdx);
+          if (info) {
+            hasLinkedStep = true;
+            if (info.stepType === 132) hasStep132 = true;
+            else if (info.stepType === 15) hasStep15 = true;
+            if (info.hasMemoryPath) hasMemoryStep = true;
+          }
+          if (
+            compactionStepIndices.has(sIdx) ||
+            compactionStepIndices.has(sIdx - 1) ||
+            compactionStepIndices.has(sIdx + 1)
+          ) {
+            hasNearbyCompaction = true;
+          }
+        }
+        if (!hasNearbyCompaction && stepIndices.length === 0 && refStep > 0) {
+          hasNearbyCompaction =
+            compactionStepIndices.has(refStep) ||
+            compactionStepIndices.has(refStep - 1) ||
+            compactionStepIndices.has(refStep + 1);
+        }
+
+        const slug = taFieldToStr(taGetField(chat, 19));
+        const rawLabel = taFieldToStr(taGetField(chat, 21));
+        const enumId = taGetField(usage, 1)?.v || taGetField(chat, 3)?.v || 0;
+        const modelEnum = kv.model_enum || '';
+        const label = taNormalizeModelLabel({ label: rawLabel, slug, modelEnum, enumId });
+        const pool = taClassifyModelPool({ label, slug, modelEnum, usedClaude: kv.used_claude || '' });
+
+        const slugLower = slug.toLowerCase();
+        let baseScenario = 'internal';
+        if ((slugLower.includes('orchestrator') && !slugLower.includes('worker')) || /^orchestrator\b/i.test(label)) {
+          baseScenario = 'planning';
+        } else if (hasNearbyCompaction || hasMemoryStep) {
+          baseScenario = 'memory';
+        } else if (hasLinkedStep) {
+          if (hasStep132) baseScenario = 'tools';
+          else if (hasStep15) baseScenario = 'chat';
+        }
+
+        const inTok = taGetField(usage, 2)?.v || 0;
+        const outTok = taGetField(usage, 3)?.v || 0;
+        const cacheRead = taGetField(usage, 5)?.v || 0;
+        const thinkTok = taGetField(usage, 9)?.v || 0;
+        const respTok = taGetField(usage, 10)?.v || 0;
+
+        const subagentType = String(kv.subagent_type || '').trim();
+        const parentCascadeId = String(kv.parent_cascade_id || '').trim();
+        const rootCascadeId = String(kv.root_cascade_id || '').trim();
+        if (!firstParentCascadeId && parentCascadeId) firstParentCascadeId = parentCascadeId;
+        if (!firstRootCascadeId && rootCascadeId) firstRootCascadeId = rootCascadeId;
+        if (!firstSubagentType && subagentType) firstSubagentType = subagentType;
+
+        calls.push({
+          ts,
+          model: label,
+          pool,
+          inTok,
+          cacheRead,
+          outTok,
+          thinkTok,
+          respTok,
+          total: inTok + cacheRead + outTok,
+          weighted: Math.round(inTok + 0.1 * cacheRead + 6 * outTok),
+          billable: inTok + outTok,
+          baseScenario,
+          subagentType
+        });
+      }
+
+      return {
+        ok: true,
+        dbId,
+        mtimeSec: fallbackSec,
+        trajMeta: {
+          parentId: trajParentId || firstParentCascadeId,
+          rootId: trajRootId || firstRootCascadeId,
+          subagentType: firstSubagentType,
+          workspaceUri: trajWorkspaceUri,
+          projectId: trajProjectId
+        },
+        calls
+      };
+    });
+  } catch (err) {
+    return { ok: false, dbId, error: err?.message || String(err) };
+  }
+}
+
+const yieldEventLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+async function queryTokenAnalytics(
+  endpoint,
+  { maxDays = 365, force = false, nowSec = Math.floor(Date.now() / 1000) } = {}
+) {
+  lastTokenAnalyticsAccessMs = Date.now();
+  const t0 = performance.now();
+  let sliceStartMs = t0;
+  const convDir =
+    endpoint?.conversationsDir || path.join(os.homedir(), endpoint?.geminiSubDir || '.gemini/antigravity', 'conversations');
+
+  const summaries = fs.existsSync(convDir)
+    ? taLoadSummariesCached(path.join(path.dirname(convDir), 'conversation_summaries.db'), force)
+    : new Map();
+  const dbCandidateById = new Map();
+
+  if (fs.existsSync(convDir)) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(convDir).filter((name) => name.endsWith('.db')).sort();
+    } catch {}
+
+    let statIter = 0;
+    for (const fileName of entries) {
+      const dbPath = path.join(convDir, fileName);
+      const sigInfo = getDbStatByPath(dbPath);
+      if (sigInfo) {
+        dbCandidateById.set(path.basename(fileName, '.db'), { dbPath, sigInfo });
+      }
+      statIter += 1;
+      if (statIter % 80 === 0 && performance.now() - sliceStartMs >= 16) {
+        await yieldEventLoop();
+        sliceStartMs = performance.now();
+      }
+    }
+  }
+
+  const activePaths = new Set();
+  const parsedDbs = [];
+  const failedDbs = [];
+  let cacheHits = 0;
+  let cacheMisses = 0;
+  let missesSinceYield = 0;
+
+  const dbEntries = [...dbCandidateById.values()].sort(
+    (a, b) => (b.sigInfo.mtimeMs || 0) - (a.sigInfo.mtimeMs || 0) || a.dbPath.localeCompare(b.dbPath)
+  );
+  for (const { dbPath, sigInfo } of dbEntries) {
+    activePaths.add(dbPath);
+    const cached = !force ? tokenAnalyticsDbCache.get(dbPath) : null;
+    if (cached && cached.sig === sigInfo.sig) {
+      cacheHits += 1;
+      parsedDbs.push(cached.parsed);
+      continue;
+    }
+
+    cacheMisses += 1;
+    missesSinceYield += 1;
+    const parsed = taParseConversationDetailDb(dbPath, sigInfo);
+    if (parsed.ok) {
+      tokenAnalyticsDbCache.set(dbPath, { sig: sigInfo.sig, parsed });
+      parsedDbs.push(parsed);
+    } else if (cached?.parsed) {
+      parsedDbs.push(cached.parsed);
+    } else {
+      failedDbs.push({ dbId: parsed.dbId, error: parsed.error });
+    }
+
+    if (missesSinceYield >= 8 || performance.now() - sliceStartMs >= 16) {
+      await yieldEventLoop();
+      sliceStartMs = performance.now();
+      missesSinceYield = 0;
+    }
+  }
+
+  for (const oldPath of tokenAnalyticsDbCache.keys()) {
+    if (!activePaths.has(oldPath)) tokenAnalyticsDbCache.delete(oldPath);
+  }
+
+  const cutoffSec = maxDays > 0 ? nowSec - maxDays * 86400 : 0;
+  const rawMetaById = new Map();
+  for (const parsed of parsedDbs) {
+    const id = parsed.dbId;
+    const sum = summaries.get(id);
+    const parentId = sum?.parentId || parsed.trajMeta.parentId || '';
+    const rawRoot = parsed.trajMeta.rootId || '';
+    const agentName = sum?.agentName || parsed.trajMeta.subagentType || '';
+    const isSubagent = Boolean(
+      (sum && sum.nestingDepth > 0) || parentId || agentName || (rawRoot && rawRoot !== id)
+    );
+    rawMetaById.set(id, {
+      id,
+      title: sum?.title || '',
+      source: sum?.source || 'desktop',
+      agentName,
+      parentId,
+      rawRoot,
+      isSubagent,
+      proj: taNormalizeProjectInfo(
+        sum?.workspaceUris || parsed.trajMeta.workspaceUri || '',
+        sum?.projectId || parsed.trajMeta.projectId || ''
+      ),
+      parsed
+    });
+  }
+
+  const resolveRootId = (id) => {
+    const seen = new Set();
+    let cur = id;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const m = rawMetaById.get(cur);
+      if (!m) break;
+      if (m.parentId && rawMetaById.has(m.parentId) && m.parentId !== cur) {
+        cur = m.parentId;
+        continue;
+      }
+      if (m.rawRoot && rawMetaById.has(m.rawRoot) && m.rawRoot !== cur) {
+        cur = m.rawRoot;
+        continue;
+      }
+      return cur;
+    }
+    const m = rawMetaById.get(id);
+    return m?.parentId || m?.rawRoot || id;
+  };
+
+  const resolvedMetaById = new Map();
+  const projectRegistry = new Map();
+  for (const [id, m] of rawMetaById.entries()) {
+    const rootId = resolveRootId(id);
+    const proj = m.proj.key === '__none__' && rootId !== id && rawMetaById.has(rootId) ? rawMetaById.get(rootId).proj : m.proj;
+    let reg = projectRegistry.get(proj.key);
+    if (!reg) {
+      reg = { key: proj.key, path: proj.path, isTemp: proj.isTemp, votes: new Map() };
+      projectRegistry.set(proj.key, reg);
+    }
+    reg.votes.set(proj.rawBasename, (reg.votes.get(proj.rawBasename) || 0) + 1);
+    if (!reg.path && proj.path) reg.path = proj.path;
+
+    resolvedMetaById.set(id, {
+      id,
+      title: m.title || (m.isSubagent ? `${m.agentName || 'subagent'} 子任务 (${id.slice(0, 8)})` : `会话 ${id.slice(0, 8)}`),
+      source: m.source,
+      agentName: m.agentName,
+      parentId: m.parentId || (m.isSubagent && rootId !== id ? rootId : ''),
+      rootId,
+      isSubagent: m.isSubagent,
+      projectKey: proj.key,
+      parsed: m.parsed
+    });
+  }
+
+  const projects = [...projectRegistry.values()]
+    .map((p) => {
+      let name = p.key;
+      if (p.key === '__none__') name = '未绑定项目';
+      else if (p.key === '__tmp__') name = '临时目录 (/tmp)';
+      else {
+        const best = [...p.votes.entries()].sort(
+          (a, b) => b[1] - a[1] || (/^[A-Z]/.test(b[0]) ? 1 : 0) - (/^[A-Z]/.test(a[0]) ? 1 : 0) || a[0].localeCompare(b[0])
+        )[0];
+        name = best?.[0] || p.key;
+      }
+      return { key: p.key, name, path: p.path, isTemp: p.isTemp };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  const projNameByKey = new Map(projects.map((p) => [p.key, p.name]));
+
+  const factsMap = new Map();
+  const conversations = {};
+  const dailyMap = new Map();
+  let totalCalls = 0;
+
+  for (const meta of resolvedMetaById.values()) {
+    const windowCalls = cutoffSec > 0 ? meta.parsed.calls.filter((c) => c.ts >= cutoffSec) : meta.parsed.calls;
+    if (windowCalls.length === 0) continue;
+
+    let lastTs = 0;
+    const modelSet = new Set();
+    for (const c of windowCalls) {
+      totalCalls += 1;
+      if (c.ts > lastTs) lastTs = c.ts;
+      modelSet.add(c.model);
+
+      const callIsSubagent = meta.isSubagent || Boolean(c.subagentType);
+      const subagentType = callIsSubagent ? c.subagentType || meta.agentName || 'subagent' : '';
+      const scenario = taResolveCallScenario(c.baseScenario, callIsSubagent, meta.source);
+      const date = taToLocalDateString(c.ts || meta.parsed.mtimeSec);
+      const fKey = `${date}\x00${meta.id}\x00${c.model}\x00${c.pool}\x00${scenario}\x00${subagentType}`;
+      let fact = factsMap.get(fKey);
+      if (!fact) {
+        fact = {
+          date,
+          cid: meta.id,
+          model: c.model,
+          pool: c.pool,
+          scenario,
+          subagentType,
+          calls: 0,
+          inTok: 0,
+          cacheRead: 0,
+          outTok: 0,
+          thinkTok: 0,
+          respTok: 0,
+          total: 0,
+          weighted: 0,
+          billable: 0
+        };
+        factsMap.set(fKey, fact);
+      }
+      fact.calls += 1;
+      fact.inTok += c.inTok;
+      fact.cacheRead += c.cacheRead;
+      fact.outTok += c.outTok;
+      fact.thinkTok += c.thinkTok;
+      fact.respTok += c.respTok;
+      fact.total += c.total;
+      fact.weighted += c.weighted;
+      fact.billable += c.billable;
+
+      let dAcc = dailyMap.get(date);
+      if (!dAcc) {
+        dAcc = { date, calls: 0, inTok: 0, cacheRead: 0, outTok: 0, total: 0, weighted: 0, billable: 0 };
+        dailyMap.set(date, dAcc);
+      }
+      dAcc.calls += 1;
+      dAcc.inTok += c.inTok;
+      dAcc.cacheRead += c.cacheRead;
+      dAcc.outTok += c.outTok;
+      dAcc.total += c.total;
+      dAcc.weighted += c.weighted;
+      dAcc.billable += c.billable;
+    }
+
+    conversations[meta.id] = {
+      id: meta.id,
+      title: meta.title,
+      projectKey: meta.projectKey,
+      projectName: projNameByKey.get(meta.projectKey) || '未绑定项目',
+      source: meta.source,
+      isSubagent: meta.isSubagent,
+      agentName: meta.agentName,
+      parentId: meta.parentId,
+      rootId: meta.rootId,
+      lastTs,
+      models: [...modelSet]
+    };
+  }
+
+  const usedProjectKeys = new Set(Object.values(conversations).map((c) => c.projectKey));
+  const activeProjects = projects.filter((p) => usedProjectKeys.has(p.key));
+
+  return {
+    version: 1,
+    generatedAt: new Date(nowSec * 1000).toISOString(),
+    nowSec,
+    defaultMetric: 'weighted',
+    elapsedMs: Number((performance.now() - t0).toFixed(2)),
+    stats: {
+      dbCount: dbEntries.length,
+      scannedDbs: parsedDbs.length,
+      failedDbs: failedDbs.length,
+      totalCalls,
+      conversationCount: Object.keys(conversations).length,
+      projectCount: activeProjects.length,
+      cacheHits,
+      cacheMisses
+    },
+    projects: activeProjects,
+    conversations,
+    facts: [...factsMap.values()].sort((a, b) => (b.date !== a.date ? b.date.localeCompare(a.date) : b.weighted - a.weighted)),
+    dailySummary: [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date))
+  };
+}
+
+function runTokenAnalyticsQuery(endpoint, opts = {}) {
+  const key = `${endpoint?.channel || 'default'}|${endpoint?.conversationsDir || ''}|${opts.maxDays || 365}`;
+  if (!opts.force && inFlightTokenAnalyticsPromise && inFlightTokenAnalyticsKey === key) {
+    return inFlightTokenAnalyticsPromise;
+  }
+  const prev = inFlightTokenAnalyticsPromise;
+  const run = (async () => {
+    if (prev) {
+      try {
+        await prev;
+      } catch {}
+    }
+    return queryTokenAnalytics(endpoint, opts);
+  })();
+  inFlightTokenAnalyticsKey = key;
+  inFlightTokenAnalyticsPromise = run;
+  run.finally(() => {
+    if (inFlightTokenAnalyticsPromise === run) {
+      inFlightTokenAnalyticsPromise = null;
+      inFlightTokenAnalyticsKey = '';
+    }
+  });
+  return run;
 }
 
 // ============================================================================
@@ -2083,19 +2862,22 @@ function attachTarget(target, endpoint) {
       let lastNewDocSig = '';
 
       const buildTargetInjectScript = () => {
-        if (!activeConfig.enabled || target.type !== 'iframe') {
+        if (target.type !== 'iframe') {
           return { script: cachedInjectScript, parentMode: '' };
+        }
+        if (!activeConfig.enabled) {
+          return { script: cachedIframeInjectScript, parentMode: '' };
         }
         const entry = attachedTargets.get(target.id);
         const parentMode = resolveParentThemeMode(entry || target, entry?.endpoint || endpoint) || '';
         if (parentMode !== 'dark' && parentMode !== 'light') {
           return {
-            script: `window.__ag_host_theme_mode=null;\n${cachedInjectScript}`,
+            script: `window.__ag_host_theme_mode=null;\n${cachedIframeInjectScript}`,
             parentMode: ''
           };
         }
         return {
-          script: `window.__ag_host_theme_mode=${JSON.stringify(parentMode)};\n${cachedInjectScript}`,
+          script: `window.__ag_host_theme_mode=${JSON.stringify(parentMode)};\n${cachedIframeInjectScript}`,
           parentMode
         };
       };
@@ -2502,10 +3284,11 @@ function attachTarget(target, endpoint) {
         }
         if (!bindingsAdded) {
           bindingsAdded = true;
-          await send('Runtime.addBinding', { name: '__agRequestMetrics' });
           if (target.type === 'page') {
+            await send('Runtime.addBinding', { name: '__agRequestMetrics' });
             await send('Runtime.addBinding', { name: '__agRequestHardReload' });
             await send('Runtime.addBinding', { name: '__agSyncHostThemeMode' });
+            await send('Runtime.addBinding', { name: '__agRequestTokenAnalytics' });
           }
         }
         if (ws.readyState !== WebSocket.OPEN || nonHostSettled || !hostConfirmed || generation !== navigationGeneration) {
@@ -2515,7 +3298,9 @@ function attachTarget(target, endpoint) {
         await updateNewDocScript(true);
         if (generation !== navigationGeneration || !hostConfirmed || nonHostSettled) return false;
         const ok = await inject();
-        await syncMetricsForSession(true);
+        if (target.type === 'page') {
+          await syncMetricsForSession(true);
+        }
         initialAttachDone = true;
         clearTimeout(attachTimeout);
         finishAttach(ok);
@@ -2648,6 +3433,43 @@ function attachTarget(target, endpoint) {
             if (!hostConfirmed || nonHostSettled || target.type !== 'page' || !activeConfig.enabled) return;
             const parsed = parseMetricsSubscriptionPayload(msg.params.payload);
             if (parsed.valid && acceptMetricsSubscription(parsed.ids)) syncMetricsForSession(true, true);
+            return;
+          }
+          if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestTokenAnalytics') {
+            if (
+              !hostConfirmed ||
+              nonHostSettled ||
+              target.type !== 'page' ||
+              !activeConfig.enabled ||
+              !activeConfig.modules.tokenAnalytics ||
+              !DatabaseSync
+            ) {
+              return;
+            }
+            let req = {};
+            try {
+              req = msg.params.payload ? JSON.parse(String(msg.params.payload)) : {};
+            } catch {}
+            const reqId = String(req?.reqId || '');
+            const maxDays = Number(req?.maxDays) > 0 ? Number(req.maxDays) : 365;
+            const force = Boolean(req?.force);
+            void (async () => {
+              let out;
+              try {
+                out = { ok: true, data: await runTokenAnalyticsQuery(endpoint, { maxDays, force }) };
+              } catch (err) {
+                out = { ok: false, error: err?.message || String(err || 'token analytics failed') };
+              }
+              if (ws.readyState === WebSocket.OPEN && hostConfirmed && !nonHostSettled) {
+                const payloadJson = JSON.stringify(out).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+                try {
+                  await send('Runtime.evaluate', {
+                    expression: `if (typeof window.__ag_on_token_analytics === 'function') { window.__ag_on_token_analytics(${JSON.stringify(reqId)}, ${payloadJson}); }`,
+                    returnByValue: false
+                  });
+                } catch {}
+              }
+            })();
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agSyncHostThemeMode') {
@@ -2812,6 +3634,15 @@ async function sync() {
   const syncStartMs = Date.now();
   syncTickCount = (syncTickCount + 1) % 6000;
   try {
+    if (
+      syncTickCount % 24 === 1 &&
+      !inFlightTokenAnalyticsPromise &&
+      (tokenAnalyticsDbCache.size > 0 || tokenAnalyticsSummariesCache.size > 0) &&
+      Date.now() - lastTokenAnalyticsAccessMs > 600000
+    ) {
+      tokenAnalyticsDbCache.clear();
+      tokenAnalyticsSummariesCache.clear();
+    }
     const bundleChanged = rebuildBundleIfNeeded();
     if (!activeConfig.enabled) {
       targetThemeModes.clear();
@@ -2823,8 +3654,11 @@ async function sync() {
 
     const activeTargetIds = new Set();
     const seenRawTargetIds = new Set();
+    const fullScannedChannels = new Set();
+    const reachableChannels = new Set();
     const pendingPages = [];
     const pendingIframes = [];
+    const fastPathPageEntries = [];
 
     const probedPorts = new Set();
     const nowMs = Date.now();
@@ -2832,6 +3666,29 @@ async function sync() {
       const portInfo = readPortInfo(endpoint.portFile);
       let activePort = portInfo.port;
       let activeBrowserWsPath = portInfo.browserWsPath;
+
+      // BrowserWatcher 在线时的非心跳拍快路径：跳过 /json/list HTTP 轮询（削减 5/6 轮询），每 6 拍或配置热更新仍执行全量对账
+      const liveWatcher =
+        !RUN_ONCE && !shouldHeartbeatCheck && isEventDiscoveryEnabled() && activePort
+          ? browserWatchers.get(`${endpoint.channel}:${activePort}`)
+          : null;
+      if (liveWatcher && liveWatcher.ws && liveWatcher.ws.readyState === WebSocket.OPEN) {
+        probedPorts.add(activePort);
+        reachableChannels.add(endpoint.channel);
+        liveWatcher.endpoint = endpoint;
+        for (const [id, entry] of attachedTargets.entries()) {
+          if ((entry.endpoint?.channel || 'stable') !== endpoint.channel) continue;
+          const rs = entry.ws?.readyState;
+          if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) {
+            activeTargetIds.add(id);
+            if (entry.hostConfirmed && entry.type !== 'iframe' && entry.syncMetricsForSession) {
+              fastPathPageEntries.push(entry);
+            }
+          }
+        }
+        continue;
+      }
+
       let fromPortFile = false;
       let reachable = false;
       let targets = [];
@@ -2867,6 +3724,11 @@ async function sync() {
         }
       }
       if (!reachable) continue;
+
+      fullScannedChannels.add(endpoint.channel);
+      if (fromPortFile || targets.length > 0) {
+        reachableChannels.add(endpoint.channel);
+      }
 
       if (isEventDiscoveryEnabled() && activePort) {
         await ensureBrowserWatcher(endpoint, activePort, activeBrowserWsPath, !fromPortFile);
@@ -2922,7 +3784,9 @@ async function sync() {
               await entry.updateNewDocScript();
             }
             if (shouldHeartbeatCheck && entry.checkAndInject) await entry.checkAndInject();
-            if (entry.syncMetricsForSession) await entry.syncMetricsForSession(bundleChanged);
+            if (entry.type !== 'iframe' && entry.syncMetricsForSession) {
+              await entry.syncMetricsForSession(bundleChanged);
+            }
           }
         }
       }
@@ -2934,6 +3798,11 @@ async function sync() {
     // 先同步宿主 page 目标以获取权威深浅色状态，再同步子 Swarm iframe（确保 --once 与冷启动零闪烁）
     await syncTargetBatch(pendingPages);
     await syncTargetBatch(pendingIframes);
+    for (const entry of fastPathPageEntries) {
+      if (entry.hostConfirmed && entry.ws?.readyState === WebSocket.OPEN && entry.syncMetricsForSession) {
+        await entry.syncMetricsForSession(false);
+      }
+    }
 
     // 清理已关闭的目标连接（防竞态误杀：跳过本轮快照开始后由 BrowserWS 新附着的目标）
     for (const [id, entry] of attachedTargets.entries()) {
@@ -2948,14 +3817,16 @@ async function sync() {
         targetThemeModes.delete(id);
       }
     }
-    if (seenRawTargetIds.size > 0) {
+    if (fullScannedChannels.size > 0) {
       for (const [id, skipped] of skippedNonHostTargets.entries()) {
-        if (!seenRawTargetIds.has(id) && (skipped?.skippedAt || 0) < syncStartMs) {
+        const metaCh = targetMetaMap.get(id)?.channel;
+        if ((!metaCh || fullScannedChannels.has(metaCh)) && !seenRawTargetIds.has(id) && (skipped?.skippedAt || 0) < syncStartMs) {
           skippedNonHostTargets.delete(id);
         }
       }
       for (const [id, meta] of targetMetaMap.entries()) {
         if (
+          (!meta?.channel || fullScannedChannels.has(meta.channel)) &&
           !seenRawTargetIds.has(id) &&
           !attachedTargets.has(id) &&
           !attachingTargetIds.has(id) &&
@@ -2964,7 +3835,7 @@ async function sync() {
           targetMetaMap.delete(id);
         }
       }
-    } else if (attachedTargets.size === 0 && attachingTargetIds.size === 0) {
+    } else if (reachableChannels.size === 0 && attachedTargets.size === 0 && attachingTargetIds.size === 0) {
       for (const [id, skipped] of skippedNonHostTargets.entries()) {
         if ((skipped?.skippedAt || 0) < syncStartMs) {
           skippedNonHostTargets.delete(id);

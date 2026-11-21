@@ -1,5 +1,9 @@
 # Changelog
 
+## 融合版 5.5.3-eric.1（2026-11-21 · macOS 专用）
+
+选择性精简融合上游 `v5.5.3`（`0aec663`）的 macOS 可用改进与设置弹窗「Token 统计」Tab（PR #25）：适配 Antigravity `2.34.0` 三层浏览器打孔与行内文件胶囊（`[data-uri^="file:"]` 等恢复 `Anthropic Mono` 与 i18n 不可变排除，非文件 `.inline-pill` 保持 `Anthropic Sans`）；词典扩充 80 条至 1,956 条并对齐融合版术语，新增 `…` ↔ `...` 双向兜底、无括号模型努力度后缀与 `Quote`/`Comment` 交互控件上下文门禁；清理 `theme.css` 末尾 `*` 通配符并收窄输入框底栏选择器；升级 i18n 观察器自写入短路、祖先去重、指标胶囊 RAF 布局合批、`scheduleRouteCheck` 防抖与 Swarm 子帧裁剪；守护进程增加 `BrowserWatcher` 在线快路径（减 5/6 `/json/list` 轮询）、`fullScannedChannels` 精确清理与 `noMetaPending` 5 分钟自动毕业；接入精简 macOS 专版 Token 统计面板（移除 Windows/WSL UNC 冗余，采用事件委托与 Anthropic 暖纸/暖墨零阴影样式，Swarm 子帧及关闭模块时自动剥离载荷）。未带入 Windows 保活/快捷方式自愈、M2 冷启动自动重启、外链字体去重或中文标题外挂逻辑。详见 FORK.md。
+
 ## 融合版 5.5.2-eric.1（2026-11-20 · macOS 专用）
 
 选择性融合上游 `v5.5.2`（`aadfc54`）的四项 macOS 可用改进：Browser 级 CDP 事件驱动目标发现（`Target.setDiscoverTargets`、`fallbackPort` 外部浏览器过滤、并发附着与竞态防护）、冷启动过渡文档识别（`about:`/`chrome-error:`/`data:` → `pending`）与标题感知 `non_host` 快速复检、macOS Homebrew/fnm 稳定 Node 软链解析（`LaunchAgent` 与 `doctor` `node.serviceExecPath`），以及 `syncChuanbanPreset()` 表面同步签名短路。同时将融合分支精简为 macOS 专用版，移除 Windows/WSL/Linux 客户端、系统服务、字体注册与 DirectWrite CSS 代码（`core/daemon.mjs` 不再导入 `child_process`），保留 `core/i18n.json` 全部 1,876 条静态词条及 Linux CI 校验能力。详见 FORK.md。

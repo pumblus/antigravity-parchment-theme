@@ -210,8 +210,13 @@ test('v552 daemon Browser CDP event discovery attaches created targets, guards r
     SAFE_MODE: false,
     RUN_ONCE: false,
     cachedInjectScript: 'TEST_INJECT',
+    cachedIframeInjectScript: 'TEST_INJECT',
     cachedPatchVersion: 'v552-test',
     rebuildBundleIfNeeded: () => false,
+    inFlightTokenAnalyticsPromise: null,
+    tokenAnalyticsDbCache: new Map(),
+    tokenAnalyticsSummariesCache: new Map(),
+    lastTokenAnalyticsAccessMs: 0,
     console: { log() {}, error() {} },
     Date: { now: () => now },
     fs: {
@@ -288,9 +293,11 @@ test('v552 daemon Browser CDP event discovery attaches created targets, guards r
   listResponses.set(9555, { body: [] });
   await ctx.api.sync();
   assert.equal(ctx.api.attachedTargets.has('win-1'), true);
-  // Once an older target is absent from a newer sync snapshot, it is cleaned up
+  // On the next full heartbeat reconciliation (every 6 ticks), an older target absent from /json/list is cleaned up
   now += 100;
-  await ctx.api.sync();
+  for (let t = 0; t < 5 && ctx.api.attachedTargets.has('win-1'); t++) {
+    await ctx.api.sync();
+  }
   assert.equal(ctx.api.attachedTargets.has('win-1'), false);
 
   // Title transitioning to Antigravity unlocks skippedNonHostTargets after 150ms

@@ -2,10 +2,10 @@
 
 ## 来源与版本
 
-- 版本：`5.5.2-eric.1`（macOS 专用）。
-- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性移植至 `v5.5.2` / `aadfc54ac4e0bf54ff24ffe3f251fae33cc7fee1`，不是完整合并。
+- 版本：`5.5.3-eric.1`（macOS 专用）。
+- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v5.5.3` / `0aec6635f898a3b8f761326a54f2de8d4478921c`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
-- 本次源码更新位于本机 `main`；未推送、未触发远端 CI。保留 d0d7d87 及之前的全部用户设计提交。
+- 本次源码更新位于本机 `main`（先提交 `5.5.2-eric.1` 基线 `52993c9`）；未推送、未触发远端 CI。保留 d0d7d87 及之前的全部用户设计提交。
 
 ## 融合内容
 
@@ -16,6 +16,19 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 5.5.3-eric.1 源码同步与精简边界（2026-11-21 UTC）
+
+- 先将此前本机工作区 `5.5.2-eric.1` 提交为独立基线（`52993c9`），再选择性精简融合上游 `v5.5.3`（`0aec663`）：
+  1. **`2.34.0` 界面漂移修复与性能清理**：`core/theme.css` 补齐三层浏览器打孔 `:not([data-has-three-layer-browser-hole="true"])`、内嵌面板改为自身属性 `:not([data-has-browser-hole="true"])`、行内文件胶囊（`[data-uri^="file:"]` / `[data-uri^="vscode-"]` 等）恢复 `Anthropic Mono` 与 i18n 不可变排除，非文件 `.inline-pill` 恢复 `Anthropic Sans`（不引入 Google Sans Flex 可变轴）；清理多处末尾 `*` 通配符并收窄输入框底栏选择器。
+  2. **词典扩充与动态翻译增强**：`core/i18n.json` 新增 80 条至 1,956 条（零重复、零大小写与弯直引号碰撞，统一「任务组」「转为独立对话」及模型分流描述）；`core/runtime.js` 新增 `…` ↔ `...` 双向兜底、无括号模型努力度后缀（限定控件上下文）、`Quote`/`Comment` 交互控件上下文门禁、`SWARM_FRAME_ONLY_DICT` 增量状态短词，以及 i18n 观察器自写入短路、祖先去重后再判阈值（`1500` / `120`）、指标胶囊 RAF 布局合批、`scheduleRouteCheck` 防抖与 `darkColorSchemeMql` 缓存；Swarm 子帧跳过设置守卫、`resize` 与指标逻辑。
+  3. **守护进程空闲轮询优化**：`core/daemon.mjs` 在 `BrowserWatcher` 在线时的非心跳拍（5/6 拍）跳过 `/json/list` HTTP 轮询，按 `fullScannedChannels` 精确清理失效缓存，仅对 `page` 绑定/同步指标；`noMetaPending` 为超过 5 分钟仍无元数据的空库增加自动退出机制。
+  4. **精简版设置弹窗「Token 统计」Tab（PR #25）**：
+     - 后端复用既有 `getDbStatByPath()` / `textDecoder` 并剔除全部 Windows/WSL UNC 代码（仅保留 macOS 临时目录与大小写合并），保留只读 SQLite 异步分片扫描（每 8 库/16ms 让出事件循环）、10 分钟空闲缓存回收及 Swarm/禁用态载荷裁剪；
+     - 前端采用事件委托与数据驱动切换器替代循环逐项绑定，剔除未用死代码，保留零噪声设置弹窗定向观察器与 `cleanupTokenAnalyticsDom()` 无损清理；
+     - 样式按融合版 Anthropic 规范重写（浅色 `#FAF9F5`/`#F0EEE6`、深色暖墨黑 `#141413`/`#1F1E1C`、`1px` 细边、零 `#FFFFFF` 与零 `box-shadow` 投影、同心圆角与 `Anthropic Sans` 等宽数字），篇幅较上游缩减逾半；不自动改写 `user/config.json`。
+- 未带入上游 Windows 保活（`PT5M` / `--keep-alive` / `lockfile`）与 `.lnk` 自愈、M2 冷启动自动重启相关预筛/死端口穿透、中文标题外挂 `stale_inode` PID 门控、Google Sans Flex 外链去重与 macOS 润墨规则。
+- 验证结果：三项语法检查、`138` 项单测与 `190` 项完整回归（含 `tests/v553.test.mjs` 5 项，使用本机 Chrome 无头合成 DOM 与真实 `node:sqlite` 临时库）全部通过（0 失败 / 0 跳过）；`node install.mjs pack` 打包并校验 4 个核心文件 SHA-256。本轮仅更新源码与隔离测试，未修改本机已安装目录、未重启守护进程、未推送远端。
 
 ## 5.5.2-eric.1 源码同步与 macOS 专版收敛边界（2026-11-20 UTC）
 

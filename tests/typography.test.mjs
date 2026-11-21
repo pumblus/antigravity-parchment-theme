@@ -70,7 +70,8 @@ test('Anthropic font aliases, PingFang CJK fallback order, and discrete weights 
   }
 
   for (const selector of [
-    '[class*="group/file-title"] *',
+    '[class*="group/file-title"] .select-text',
+    '[data-uri^="file:"]',
     '[class*="file-path"]',
     '[data-path]',
     '[data-file-path]',

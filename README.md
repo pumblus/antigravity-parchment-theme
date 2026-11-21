@@ -1,19 +1,19 @@
-# Antigravity 主题融合分支（macOS 专用）· 5.5.2-eric.1
+# Antigravity 主题融合分支（macOS 专用）· 5.5.3-eric.1
 
-基于 [Anarcadia 上游](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2)，并按 Anthropic 设计规范重构界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.x / 2.33.0 兼容、实时指标与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，西文使用 Anthropic 三族、中文优先回退 `PingFang SC`，将输入框、快捷键与指标面板统一为 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，并优化权限文案与界面汉化。静态词典共 1,876 条，保留上游键集与大小写兜底查找。
+基于 [Anarcadia 上游](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)，选择性融合 [Eric 的字体与汉化改进](https://github.com/Anarcadia/chuanban-antigravity-theme-patch/pull/2)，并按 Anthropic 设计规范重构界面字体选型。保留上游昼夜主题、2.31.2 / 2.32.x / 2.33.0 / 2.34.0 兼容、实时指标、设置弹窗 Token 统计与生命周期清理，补齐 Serif/Sans/Display 全字重及真斜体别名，西文使用 Anthropic 三族、中文优先回退 `PingFang SC`，将输入框、快捷键与指标面板统一为 `Anthropic Sans`，首页欢迎语改用 `Anthropic Serif Display`，并优化权限文案与界面汉化。静态词典共 1,956 条，保留上游键集与大小写/省略号兜底查找。
 
 **本分支为 macOS 专用独立集成版，并非上游发布。** 移除了 Windows/WSL/Linux 运行时、系统服务与 DirectWrite 样式代码，同时移除自动调用仓库外 Python 二进制补丁的路径；不引入 `--sync-user`，安装保留已有用户文件及自定义选择器。变更边界、验证方法与限制见 [FORK.md](FORK.md)。下方截图为上游历史参考。
 
-本轮（`5.5.2-eric.1`）选择性融合上游 `v5.5.2`（`aadfc54`）的四项 macOS 可用改进：Browser 级 CDP 事件驱动目标发现（`Target.setDiscoverTargets`，降低新窗与 Swarm 挂载延迟，并过滤 `fallbackPort` 上的外部 Chrome/Edge）、冷启动 `about:`/`chrome-error:`/`data:` 过渡文档防误判 `non_host` 与标题感知复检、macOS Homebrew/fnm 稳定 Node 软链解析（减少 `LaunchAgent` 在 Node 升级后失效的风险）、`syncChuanbanPreset()` 表面同步签名短路；同时清理 Windows/WSL/Linux 客户端与服务分支（仅保留 `pack`、`build-manifest`、`doctor --target-dir` 与测试在 Linux CI 运行），并完成全词库中文化复核与代码清理。仍不带入 M1/M2 自动重启、Windows SuperTTC 退订或上游新配色/外链字体。
+本轮（`5.5.3-eric.1`）选择性精简融合上游 `v5.5.3`（`0aec663`）：适配 Antigravity `2.34.0` 三层浏览器打孔与行内文件胶囊等宽/翻译隔离；新增 80 条词条至 1,956 条，并补齐 `…`/`...` 双向兜底、无括号模型努力度后缀与 `Quote`/`Comment` 控件上下文保护；清除 `theme.css` 末尾 `*` 通配符并收窄底栏选择器；升级 i18n 观察器自写入短路、祖先去重、指标胶囊 RAF 布局合批、`scheduleRouteCheck` 防抖与 `BrowserWatcher` 在线快路径；接入精简版设置弹窗「Token 统计」Tab（纯 macOS 只读 SQLite 增量归因、事件委托渲染、Anthropic 暖纸/暖墨无投影配色，且对 Swarm 子帧自动裁剪载荷）。仍不带入 Windows 保活/快捷方式自愈、M1/M2 自动重启、外链字体去重或中文标题外挂。
 
-安装前请阅读 `SKILL.md`。真实安装会配置 macOS `LaunchAgent` 守护服务；2.33.0 的本地调试启动须另行授权，不能将 `doctor` 的文件完整性通过等同于客户端实机生效。
+安装前请阅读 `SKILL.md`。真实安装会配置 macOS `LaunchAgent` 守护服务；2.33.0+ 的本地调试启动须另行授权，不能将 `doctor` 的文件完整性通过等同于客户端实机生效。
 
 ---
 
-# 船板的 Antigravity 书卷暖纸 × 暖墨黑昼夜主题、字体与汉化补丁（macOS · 5.5.2-eric.1）
+# 船板的 Antigravity 书卷暖纸 × 暖墨黑昼夜主题、字体与汉化补丁（macOS · 5.5.3-eric.1）
 
-[![Version](https://img.shields.io/badge/version-5.5.2--eric.1-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
-[![Antigravity](https://img.shields.io/badge/Antigravity-2.33.0%2B-D97757.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
+[![Version](https://img.shields.io/badge/version-5.5.3--eric.1-7A1F1A.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
+[![Antigravity](https://img.shields.io/badge/Antigravity-2.34.0%2B-D97757.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0%20(22.13%2B%20Full)-339933.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://github.com/pumblus/chuanban-antigravity-theme-patch)
 
@@ -42,7 +42,7 @@
 
 ---
 
-## 补丁简介与主要特性（5.5.2-eric.1）
+## 补丁简介与主要特性（5.5.3-eric.1）
 
 ### 1. 设计目标
 Google Antigravity 原生浅色界面底色偏冷、全局使用单一无衬线字体，长时间阅读与编码较易疲劳。本补丁通过**运行时非侵入 CDP 注入**，参考 Anthropic 设计规范调整配色、排版、界面汉化与实时指标展示：
@@ -50,15 +50,15 @@ Google Antigravity 原生浅色界面底色偏冷、全局使用单一无衬线�
 - **昼夜暖调双模式（无 `#FFFFFF` 纯冷白 / 无悬浮投影）**：
   - **白天模式（Light）**：内置三套暖纸预设——默认 `high-contrast`（暖羊皮纸侧栏 `#F0EEE6` + 象牙纸主阅读区 `#FAF9F5` + 暖墨文字 `#141413` + `1px` 石色细边 `#CCCBC8`）、轻浅象牙纸（`claude-desktop-purewhite`）与深暖燕麦羊皮纸（`vintage-deep`）；
   - **黑夜模式（Dark）**：在设置中切换为「深色 / Dark」（或跟随系统深色）时，保留三族字体与扁平几何结构，切换为暖墨黑反色配色（`#141413` 主背景 / `#191917` 侧栏 / `#1F1E1C` 卡片 / `1px solid #3D3D3A` 细边 / `#FAF9F5` 文字 / `#D97757` 发送主按钮）。
-- **Anthropic 三族排版（昼夜共用，适配 `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字按区域分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）使用 `Anthropic Sans`，正文散文使用 `Anthropic Serif`（首页欢迎语使用 `Anthropic Serif Display`，正文链接保留 `1px` 下划线），代码块、路径、Monaco 编辑器与终端使用 `Anthropic Mono`；中文优先使用 `PingFang SC`（回退更纱黑体）。
+- **Anthropic 三族排版（昼夜共用，适配 `[data-markdown-root]`、`data-agy-font` 与 Lexical 编辑器）**：西文与数字按区域分工——UI 控件、输入框、快捷键与实时指标面板（配 `tabular-nums`）使用 `Anthropic Sans`，正文散文使用 `Anthropic Serif`（首页欢迎语使用 `Anthropic Serif Display`，正文链接保留 `1px` 下划线），代码块、路径、行内文件胶囊、Monaco 编辑器与终端使用 `Anthropic Mono`；中文优先使用 `PingFang SC`（回退更纱黑体）。
 - **扁平层叠、macOS 同心圆角与单一强调色**：移除常规容器的 `box-shadow`，输入框使用外托盘 `12px` + 内卡片 `11px` + `1px` 细边三态过渡（常态 `#CCCBC8` → 悬停 `#87867F` → 聚焦 `#3D3D3A`）；容器圆角按 macOS HIG 同心梯度设定（主画布/弹窗 `12px`、气泡/代码块/菜单 `10px`、菜单项与侧栏行 `6px`）并启用 `superellipse(1.5)`；`#D97757`（悬停 `#C6613F`）仅保留给发送主按钮。
-- **1,876 条静态汉化 + 大小写兜底索引（`DICT_CI`）+ 实时指标胶囊**：覆盖 Fork、Best of N、定时任务、快捷键编辑器、远程控制二维码、沙箱与浏览器权限、插件主题、Swarm 协作子帧与命令面板标签（通过 `WeakMap` 隔离保护代码块、Monaco 编辑器、终端与对话正文），并在输入框同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、动态上下文水位与缓存命中率详情。
+- **1,956 条静态汉化 + 大小写/省略号兜底（`DICT_CI`）+ 实时指标胶囊 + 设置弹窗 Token 统计**：覆盖 Fork、Best of N、定时任务、对战模式、编排/执行模型、运行时权限、Swarm 协作子帧与命令面板标签（通过 `WeakMap` 隔离保护代码块、行内文件胶囊、Monaco 编辑器、终端与对话正文）；在输入框同行实时展示生成速度（`tok/s`）、首字耗时（`TTFT`）、动态上下文水位与缓存命中率，并在「系统设置 → 本地扩展 → Token 统计」提供本机只读 SQLite 多维消耗归因分析。
 
 ### 2. 工程特点
 1. **无构建、零运行时依赖**：样式、词典、DOM 引擎与守护进程都直接存放在 `core/` 中，无需安装 npm 依赖或编译，可直接执行 `node install.mjs install`。
 2. **独立的 `user/` 改装层与 2.5 秒热重载**：用户自定义配置放在 `user/`（`config.json` / `custom.css` / `i18n.override.json` / `custom.js`），升级时默认保留不覆盖，修改保存后守护进程每 2.5 秒检测变更并热重载。
 3. **运行时 CDP 注入，不修改 `.asar`**：通过本机 Chrome DevTools Protocol 注入；原生主题色会写入应用配置。冷启动漂移检测/重载为**默认关闭的实验功能**，显式开启后仍受首页、无草稿、无交互、无弹窗/运行任务等门禁约束。融合版不调用 `Page.reload(ignoreCache)`，也没有延迟强刷兜底，不承诺清除缓存或覆盖全部旧包问题。
-4. **客户端更新后自动衔接**：配合 macOS `LaunchAgent`（自动解析 Homebrew/fnm 稳定 Node 软链）与 Browser 级 CDP 事件发现，单守护进程同时监听 **Stable** 与 **Insiders** 通道。
+4. **客户端更新后自动衔接**：配合 macOS `LaunchAgent`（自动解析 Homebrew/fnm 稳定 Node 软链）与 Browser 级 CDP 事件发现及在线快路径，单守护进程同时监听 **Stable** 与 **Insiders** 通道。
 5. **macOS 专版维护**：去除跨平台分支，内置 `install-fonts` 复制到 `~/Library/Fonts/`、SQLite 增量只读游标缓存、表面同步签名短路与 `Cmd + -/=/0` 缩放快捷键修复（含 `NSMenu` 防双倍缩放保护）。
 
 ---
@@ -66,17 +66,17 @@ Google Antigravity 原生浅色界面底色偏冷、全局使用单一无衬线�
 ## 部署与日常使用指南
 
 ### 一、初次安装
-1. **前置准备**：从 [**Google Drive 资源包**](https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC) 下载并安装字体文件（macOS 双击安装到「字体册」，或运行 `node install.mjs install-fonts --from <目录>`），并确保本机已安装 **Node.js `>= 22.0.0`**（推荐 `>= 22.13.0` 以启用 SQLite 实时指标胶囊）。
+1. **前置准备**：从 [**Google Drive 资源包**](https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC) 下载并安装字体文件（macOS 双击安装到「字体册」，或运行 `node install.mjs install-fonts --from <目录>`），并确保本机已安装 **Node.js `>= 22.0.0`**（推荐 `>= 22.13.0` 以启用 SQLite 实时指标胶囊与 Token 统计）。
 2. **交由 AI Agent 执行（Antigravity / Claude Code / Codex / Cursor 等）**：
 
 > **复制发给 Agent（初次安装）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.2-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.3-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
-### 二、从旧版本升级至 5.5.2-eric.1
+### 二、从旧版本升级至 5.5.3-eric.1
 `node install.mjs install` 会自动备份旧版 `core/`、更新 `LaunchAgent` 服务配置，并保留 `~/.gemini/antigravity/theme-patch/user/` 中的个人文件：
 
 > **复制发给 Agent（升级）**：  
-> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.2-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
+> 请读取我本机 `~/Repositories/chuanban-antigravity-theme-patch` 中的 `main` 分支，先核对版本为 `5.5.3-eric.1` 并确认工作区状态，不覆盖已有文件或盲目切换分支。阅读 `SKILL.md`，在取得本次安装与本地调试/自启权限确认后，运行 `node install.mjs install --channel stable` 和 `node install.mjs verify --channel stable`。保留 `user/` 中的配置、CSS、词典和脚本。
 
 ### 三、定制样式与排查问题
 - **切换白天预设、调整字号或微调样式**：

@@ -106,7 +106,7 @@
     }
   }
 
-  const PATCH_VERSION = boot.version || '20261120-v5.5.2-eric.1';
+  const PATCH_VERSION = boot.version || '20261121-v5.5.3-eric.1';
   const DETECTED_OS = 'darwin';
   const ENABLED = boot.enabled !== false;
   const CSS_TEXT = boot.cssText || '';
@@ -116,6 +116,7 @@
     {
       i18n: true,
       metrics: true,
+      tokenAnalytics: true,
       composerWaxSeal: true,
       deadlockHealer: true,
       coldBootHealer: false,
@@ -128,7 +129,28 @@
 
   const DEFAULT_PRESET = boot.preset || 'high-contrast';
   const DEFAULT_EXCLUDE_I18N =
-    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-row-history"] a[href^="/c/"], [data-testid="conversation-row-history"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip';
+    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-row-history"] a[href^="/c/"], [data-testid="conversation-row-history"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui]';
+
+  function cleanupTokenAnalyticsDom() {
+    try {
+      document.querySelectorAll('.settings-modal-container[data-ag-token-tab-active]').forEach((el) => {
+        el.removeAttribute('data-ag-token-tab-active');
+      });
+      document.querySelectorAll('[data-ag-native-settings-scroll]').forEach((el) => {
+        el.removeAttribute('data-ag-native-settings-scroll');
+      });
+      for (const id of ['ag-token-nav-section', 'ag-token-analytics-panel', 'ag-ta-tooltip']) {
+        document.getElementById(id)?.remove();
+      }
+    } catch (e) {}
+    for (const k of ['__ag_on_token_analytics', '__ag_open_token_analytics_tab', '__ag_sync_token_analytics_fn']) {
+      try {
+        delete window[k];
+      } catch (e) {
+        window[k] = null;
+      }
+    }
+  }
 
   const SELECTORS = Object.assign(
     {
@@ -188,6 +210,7 @@
     if (staleTt) {
       staleTt.remove();
     }
+    cleanupTokenAnalyticsDom();
   } catch (e) {}
 
   if (window.__ag_dcl_handler) {
@@ -506,6 +529,7 @@
     window.__ag_watched_cascade_id = '';
     window.__ag_watched_cascade_sig = '';
     window.__ag_last_metrics = null;
+    cleanupTokenAnalyticsDom();
     window.__ag_check_route_fn = null;
     window.__ag_trigger_route_check_fn = null;
     window.__agRequestMetrics?.('[]');
@@ -702,7 +726,7 @@
     }
   };
 
-  if (!window.__ag_settings_guard_installed) {
+  if (!IS_SWARM_PLUGIN_FRAME && !window.__ag_settings_guard_installed) {
     window.__ag_settings_guard_installed = true;
     document.addEventListener(
       'click',
@@ -1189,15 +1213,17 @@
 
   if (!window.__ag_zoom_guard_installed) {
     window.__ag_zoom_guard_installed = true;
-    window.addEventListener(
-      'resize',
-      () => {
-        if (typeof window.__ag_zoom_resize_fn === 'function') {
-          window.__ag_zoom_resize_fn();
-        }
-      },
-      { passive: true }
-    );
+    if (!IS_SWARM_PLUGIN_FRAME) {
+      window.addEventListener(
+        'resize',
+        () => {
+          if (typeof window.__ag_zoom_resize_fn === 'function') {
+            window.__ag_zoom_resize_fn();
+          }
+        },
+        { passive: true }
+      );
+    }
     window.addEventListener(
       'keydown',
       (e) => {
@@ -1232,6 +1258,8 @@
   }
 
   let lastSyncedHostMode = null;
+  const darkColorSchemeMql =
+    typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
   function syncChuanbanPreset() {
     try {
@@ -1273,9 +1301,7 @@
       const bodyEl = document.body;
       const htmlDataTheme = htmlEl ? htmlEl.getAttribute('data-theme') : null;
       const hostThemeMode = boot.hostThemeMode || null;
-      const systemPrefersDark = !!(
-        typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches
-      );
+      const systemPrefersDark = !!(darkColorSchemeMql && darkColorSchemeMql.matches);
       let isDark = false;
       if (IS_SWARM_PLUGIN_FRAME) {
         // Prefer the owning host's live mode. Saved native values below prevent
@@ -1511,6 +1537,9 @@
   const activeMetricsRows = new Map();
   const activeMetricsRafs = new Set();
   const metricsRouteTimers = new Set();
+  const pendingPillLayoutBoxes = new Set();
+  let pillLayoutRafId = 0;
+  let routeCheckRafId = 0;
 
   function scheduleTrackedHandle(trackSet, schedulerFn, callback) {
     let settled = false;
@@ -1522,6 +1551,24 @@
     });
     if (!settled && handle) trackSet.add(handle);
     return settled ? 0 : handle;
+  }
+
+  function scheduleDeferredPillLayout(box) {
+    if (!box || IS_SWARM_PLUGIN_FRAME || !MODULES.metrics || !metricsIsCurrent()) return;
+    pendingPillLayoutBoxes.add(box);
+    if (pillLayoutRafId) return;
+    pillLayoutRafId = scheduleTrackedHandle(activeMetricsRafs, requestAnimationFrame, () => {
+      pillLayoutRafId = 0;
+      if (pendingPillLayoutBoxes.size === 0) return;
+      const queued = Array.from(pendingPillLayoutBoxes);
+      pendingPillLayoutBoxes.clear();
+      for (let i = 0; i < queued.length; i++) {
+        const b = queued[i];
+        if (b && b.isConnected) {
+          ensureMetricsPillForBox(b, true, false);
+        }
+      }
+    });
   }
 
   if (!window.__ag_metrics_by_id || window.__ag_metrics_cache_ver !== PATCH_VERSION) {
@@ -1545,6 +1592,9 @@
       } catch (e) {}
     }
     activeMetricsRafs.clear();
+    pillLayoutRafId = 0;
+    routeCheckRafId = 0;
+    pendingPillLayoutBoxes.clear();
     for (const tid of metricsRouteTimers) {
       try {
         clearTimeout(tid);
@@ -2121,7 +2171,7 @@
       pill.style.display = 'inline-flex';
     }
     if (wasHidden || textChanged) {
-      ensureMetricsPillForBox(box, true, false);
+      scheduleDeferredPillLayout(box);
     }
   }
 
@@ -2149,7 +2199,7 @@
   }
 
   function ensureMetricsPill(forceLayout = false, resetHysteresis = false) {
-    if (!metricsIsCurrent()) return null;
+    if (IS_SWARM_PLUGIN_FRAME || !metricsIsCurrent()) return null;
     if (!MODULES.metrics) {
       document.querySelectorAll('#ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill]').forEach((el) => {
         el.style.display = 'none';
@@ -2183,25 +2233,37 @@
 
   window.__ag_render_metrics = function (payload) {
     try {
-      if (!metricsIsCurrent() || !MODULES.metrics || !payload || typeof payload !== 'object') return false;
+      if (IS_SWARM_PLUGIN_FRAME || !metricsIsCurrent() || !MODULES.metrics || !payload || typeof payload !== 'object') return false;
       const cid = String(payload.cascadeId || '').trim().toLowerCase();
       if (!CASCADE_UUID_RE.test(cid)) return false;
       const boxes = getAllInputBoxes();
-      const resolvedIds = boxes.map(box => resolveBoxCascadeId(box, boxes.length));
+      const totalBoxes = boxes.length;
+      if (totalBoxes === 0) return false;
+      const resolvedIds = boxes.map(box => resolveBoxCascadeId(box, totalBoxes));
       const allowedIds = [...new Set(resolvedIds.filter(Boolean))].slice(0, 12);
       const targets = boxes.filter((box, i) => resolvedIds[i] === cid);
       if (!allowedIds.includes(cid) || !targets.length) { ensureMetricsPill(false); return false; }
       metricsById[cid] = payload;
       const primaryCid = window.__ag_watched_cascade_id || extractFocusedOrPrimaryCascadeId();
       if (!primaryCid || cid === primaryCid) window.__ag_last_metrics = payload;
-      ensureMetricsPill(false);
       let applied = false;
+      let mountedNewPill = false;
       for (const box of targets) {
-        const pill = findPillInBox(box);
-        if (!pill) continue;
-        pill.setAttribute('data-ag-cascade-id', cid);
+        let pill = findPillInBox(box);
+        if (!pill) {
+          pill = ensureMetricsPillForBox(box, false, false);
+          if (!pill) continue;
+          mountedNewPill = true;
+        }
+        if (pill.getAttribute('data-ag-cascade-id') !== cid) {
+          pill.setAttribute('data-ag-cascade-id', cid);
+        }
         applyPayloadToPill(box, pill, payload);
         applied = true;
+      }
+      if (mountedNewPill) {
+        const kept = pruneOrphanedPills(boxes);
+        assignPrimaryPillIds(kept, primaryCid);
       }
       return applied;
     } catch (e) { return false; }
@@ -2290,10 +2352,27 @@
   }
 
   function scheduleRouteCheck() {
+    if (IS_SWARM_PLUGIN_FRAME) return;
+    if (routeCheckRafId) {
+      try {
+        cancelAnimationFrame(routeCheckRafId);
+      } catch (e) {}
+      activeMetricsRafs.delete(routeCheckRafId);
+      routeCheckRafId = 0;
+    }
+    if (metricsRouteTimers.size > 0) {
+      for (const tid of metricsRouteTimers) {
+        try {
+          clearTimeout(tid);
+        } catch (e) {}
+      }
+      metricsRouteTimers.clear();
+    }
     const runCheck = () => {
       if (typeof window.__ag_check_route_fn === 'function') window.__ag_check_route_fn();
     };
-    scheduleTrackedHandle(activeMetricsRafs, requestAnimationFrame, () => {
+    routeCheckRafId = scheduleTrackedHandle(activeMetricsRafs, requestAnimationFrame, () => {
+      routeCheckRafId = 0;
       scheduleTrackedHandle(metricsRouteTimers, (cb) => setTimeout(cb, 0), runCheck);
     });
     for (const delay of [120, 400]) {
@@ -2417,11 +2496,20 @@
         Stuck: '受阻',
         Moving: '推进中',
         Waiting: '等待中',
+        Resting: '休眠待命',
+        'Standing by': '待命中',
+        Blocked: '受阻',
+        'Not started': '未开始',
+        'In progress': '进行中',
+        Reconnecting: '正在重连',
+        'Needs you': '需您处理',
+        'Planned next': '后续计划',
         Other: '其他',
         Tasks: '任务',
         Task: '任务',
         Active: '活跃中',
         Team: '团队',
+        'The team': '团队成员',
         Retired: '已终止',
         Error: '错误',
         Killed: '已终止',
@@ -2438,8 +2526,7 @@
       }
     : null;
 
-  function dictLookup(s) {
-    if (!s) return undefined;
+  function dictLookupCore(s) {
     const exact = DICT[s];
     if (typeof exact === 'string') return exact;
     if (SWARM_FRAME_ONLY_DICT) {
@@ -2458,6 +2545,15 @@
     const c0 = sNorm.charCodeAt(0);
     if (c0 < 65 || c0 > 90) return undefined;
     return DICT_CI.get(sNorm.toLowerCase());
+  }
+
+  function dictLookup(s) {
+    if (!s) return undefined;
+    const hit = dictLookupCore(s);
+    if (typeof hit === 'string') return hit;
+    if (s.endsWith('\u2026')) return dictLookupCore(s.slice(0, -1) + '...');
+    if (s.endsWith('...')) return dictLookupCore(s.slice(0, -3) + '\u2026');
+    return undefined;
   }
 
   let scanBodyFn = null;
@@ -2511,7 +2607,7 @@
     }
 
     const CONTAINER_IMMUTABLE_EXCLUDE_SELECTOR =
-      'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title';
+      'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui], .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title';
     const TEXT_IMMUTABLE_EXCLUDE_SELECTOR =
       'textarea, input, [contenteditable="true"], [data-testid="conversation-navigator-turn"], ' +
       CONTAINER_IMMUTABLE_EXCLUDE_SELECTOR;
@@ -2774,9 +2870,9 @@
       /^([A-Za-z0-9 .+-]+?)\s+that may offload routine steps to\s+([A-Za-z0-9 .+-]+?)\.\s*Same\s+([A-Za-z0-9 .+-]+?)-level quality,\s*fewer tokens used\.?$/i;
     const RE_MODEL_REMOVED_ON = /^(.+?)\s+will be removed from Antigravity on\s+(.+?)\.?$/i;
     const RE_MODEL_PERIOD_LIMIT =
-      /^(Gemini\b[\w .+-]*|Claude\b[\w .+-]*|GPT\b[\w .+-]*|Orchestrator\b[\w .+()-]*)\s+(Weekly|Daily|Monthly)\s+Limit$/i;
+      /^(Gemini\b[\w .+-]*?|Claude\b[\w .+-]*?|GPT\b[\w .+-]*?|Orchestrator\b[\w .+()-]*?)\s+(Weekly|Daily|Monthly)\s+Limit$/i;
     const RE_MODEL_EFFORT_LABEL =
-      /^(Gemini\b[\w .+-]*|Claude\b[\w .+-]*|GPT\b[\w .+-]*)\s+\((Extra\s+High|Minimal|Low|Medium|High|Extra|XHigh|Max)\)$/i;
+      /^(Gemini\b[\w .+-]*?|Claude\b[\w .+-]*?|GPT\b[\w .+-]*?)\s+(?:\((Extra\s+High|Minimal|Low|Medium|High|Extra|XHigh|Max)\)|(Extra\s+High|Minimal|Low|Medium|High|Extra|XHigh|Max))$/i;
     const RE_YOUR_PLAN = /^Your Plan:\s*([^\r\n]{1,80})$/;
     const RE_AVAILABLE_AI_CREDITS = /^Available AI Credits:\s*([^\r\n]{1,40})$/i;
     const RE_EXITED_CODE_ONLY = /^Exited with code\s+(-?\d+)(\.)?$/i;
@@ -3205,12 +3301,29 @@
         }
       } else if (firstUpper === 'C') {
         if (
+          trimmed === 'Comment' &&
+          contextEl?.closest?.(
+            'button, [role="button"], [role="menuitem"], .agy-selection-pill, .selection-popup, .inline-pill:not([data-uri^="file:"]):not([data-uri^="vscode-"])'
+          )
+        ) {
+          return raw.replace(trimmed, () => '评论');
+        }
+        if (
           contextEl &&
           contextEl.closest &&
           contextEl.closest('[data-testid="ssh-machine-switcher-status"]') &&
           RE_CONNECTED_TO_HOST.test(trimmed)
         ) {
           return raw.replace(RE_CONNECTED_TO_HOST, '已连接到 $1');
+        }
+      } else if (firstUpper === 'Q') {
+        if (
+          trimmed === 'Quote' &&
+          contextEl?.closest?.(
+            'button, [role="button"], [role="menuitem"], .agy-selection-pill, .selection-popup, .inline-pill:not([data-uri^="file:"]):not([data-uri^="vscode-"])'
+          )
+        ) {
+          return raw.replace(trimmed, () => '引用');
         }
       } else if (firstUpper === 'Y') {
         const mYourPlan = trimmed.match(RE_YOUR_PLAN);
@@ -3336,8 +3449,20 @@
         }
         const mModEff = trimmed.match(RE_MODEL_EFFORT_LABEL);
         if (mModEff) {
-          const effZh = EFFORT_MAP[mModEff[2].replace(/\s+/g, ' ').toLowerCase()] || mModEff[2];
-          return raw.replace(trimmed, () => mModEff[1].trim() + ' (' + effZh + ')');
+          if (mModEff[2]) {
+            const effZh = EFFORT_MAP[mModEff[2].replace(/\s+/g, ' ').toLowerCase()] || mModEff[2];
+            return raw.replace(trimmed, () => mModEff[1].trim() + ' (' + effZh + ')');
+          }
+          if (
+            mModEff[3] &&
+            (!contextEl ||
+              contextEl.closest?.(
+                '[data-testid*="model-selector"], [data-testid*="orchestrator"], [role="menu"], [role="listbox"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="dialog"], button'
+              ))
+          ) {
+            const effZh = EFFORT_MAP[mModEff[3].replace(/\s+/g, ' ').toLowerCase()] || mModEff[3];
+            return raw.replace(trimmed, () => mModEff[1].trim() + ' · ' + effZh);
+          }
         }
       }
       if (trimmed.length < 240 && trimmed.includes('Exited with code')) {
@@ -3704,7 +3829,7 @@
       }
       if (dirtyRoots.size === 0) return;
 
-      if (dirtyRoots.size > 200) {
+      if (dirtyRoots.size > 1500) {
         dirtyRoots.clear();
         try {
           scanAndTranslate(document.body);
@@ -3716,6 +3841,7 @@
       const rootSet = new Set(roots);
       dirtyRoots.clear();
 
+      const topRoots = [];
       for (let i = 0; i < roots.length; i++) {
         const r = roots[i];
         if (!r || !r.isConnected) continue;
@@ -3726,11 +3852,20 @@
             break;
           }
         }
-        if (!covered) {
-          try {
-            scanAndTranslate(r);
-          } catch (e) {}
-        }
+        if (!covered) topRoots.push(r);
+      }
+
+      if (topRoots.length > 120) {
+        try {
+          scanAndTranslate(document.body);
+        } catch (e) {}
+        return;
+      }
+
+      for (let i = 0; i < topRoots.length; i++) {
+        try {
+          scanAndTranslate(topRoots[i]);
+        } catch (e) {}
       }
     }
 
@@ -3747,19 +3882,35 @@
         const m = mutations[i];
         if (m.type === 'characterData') {
           const t = m.target;
-          if (t && t.parentElement && !isExcludedElement(t.parentElement, batchSafeSet)) {
+          if (!t) continue;
+          const rec = origTextMap.get(t);
+          if (rec && rec.lastVal === t.nodeValue && rec.ver === PATCH_VERSION) continue;
+          if (t.parentElement && !isExcludedElement(t.parentElement, batchSafeSet)) {
             dirtyRoots.add(t);
           }
         } else if (m.type === 'attributes') {
           const el = m.target;
-          if (el && el.nodeType === 1 && canTranslateElementAttrs(el, batchSafeSet)) {
+          const attr = m.attributeName;
+          const origDataAttr = attr ? ATTR_TO_ORIG[attr] : null;
+          if (!el || el.nodeType !== 1 || !origDataAttr) continue;
+          if (
+            el['__ag_attr_ver_' + attr] === PATCH_VERSION &&
+            el.getAttribute(origDataAttr + '-last') === el.getAttribute(attr)
+          ) {
+            continue;
+          }
+          if (canTranslateElementAttrs(el, batchSafeSet)) {
             try {
-              translateElementAttrs(el, m.attributeName);
+              translateSingleAttr(el, attr, origDataAttr, resolveAttrTranslation);
             } catch (e) {}
           }
         } else if (m.type === 'childList' && m.addedNodes.length > 0) {
           if (m.target && m.target.nodeType === 1 && isExcludedElement(m.target, batchSafeSet)) {
-            if (m.target.closest && m.target.closest('[data-markdown-root]')) {
+            if (
+              m.target.closest &&
+              !m.target.closest('pre, code, .monaco-editor, .monaco-diff-editor, .xterm') &&
+              m.target.closest('[data-markdown-root]')
+            ) {
               for (let j = 0; j < m.addedNodes.length; j++) {
                 const n = m.addedNodes[j];
                 if (
@@ -3831,6 +3982,11 @@
       }
       syncChuanbanPreset();
       checkRouteAndMountMetrics();
+      if (typeof window.__ag_sync_token_analytics_fn === 'function' && document.body) {
+        try {
+          window.__ag_sync_token_analytics_fn();
+        } catch (e) {}
+      }
       if (MODULES.i18n && document.body) {
         if (typeof scanBodyFn === 'function') {
           try {
@@ -3850,6 +4006,1201 @@
     };
     window.addEventListener('DOMContentLoaded', window.__ag_dcl_handler, { once: true });
   }
+
+  /* __AG_TOKEN_ANALYTICS_JS_START__ */
+  // ============================================================================
+  // 4.5 系统设置弹窗「Token 统计」Tab（增量 SQLite 多维归因 · 融合精简版）
+  // ============================================================================
+  if (!IS_SWARM_PLUGIN_FRAME && ENABLED && MODULES.tokenAnalytics) {
+    (() => {
+      if (window.location && String(window.location.protocol || '').startsWith('plugin:')) return;
+
+      const NAV_SECTION_ID = 'ag-token-nav-section';
+      const NAV_BTN_ID = 'ag-token-nav-btn';
+      const PANEL_ID = 'ag-token-analytics-panel';
+      const HM_TOOLTIP_ID = 'ag-ta-tooltip';
+      const CACHE_TTL_MS = 15000;
+      const REQUEST_TIMEOUT_MS = 25000;
+
+      const TA_SCENARIO_META = {
+        tools: { label: '工具执行轮次', desc: '触发读/写/终端/检索工具的推理轮次', color: 'var(--ag-ta-c1)' },
+        subagent: { label: '子 Agent', desc: 'research / self / browser 等独立子轨迹', color: 'var(--ag-ta-c2)' },
+        chat: { label: '纯对话与回复', desc: '无工具调用的直接问答与总结输出', color: 'var(--ag-ta-c3)' },
+        planning: { label: '规划与编排', desc: 'Orchestrator / Plan 架构规划轮次', color: 'var(--ag-ta-c4)' },
+        memory: { label: '记忆与上下文压缩', desc: 'MEMORY.md 读写与上下文压缩检查点', color: 'var(--ag-ta-c5)' },
+        internal: { label: 'CLI / 重试与内部', desc: 'CLI 会话与无步关联重试/中止调用', color: 'var(--ag-ta-c6)' }
+      };
+
+      const esc = (s) =>
+        String(s ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+
+      const taFormatCompact = (n) => {
+        if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return '0';
+        if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+        if (n >= 1e8) return `${Math.round(n / 1e6)}M`;
+        if (n >= 1e6) return `${Number((n / 1e6).toFixed(1))}M`;
+        if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
+        return `${Math.round(n)}`;
+      };
+
+      const taGetMetricVal = (obj, metric = 'weighted') => {
+        if (!obj) return 0;
+        if (metric === 'calls') return obj.calls || 0;
+        if (metric === 'total') return obj.total ?? ((obj.inTok || 0) + (obj.cacheRead || 0) + (obj.outTok || 0));
+        if (metric === 'billable') return obj.billable ?? ((obj.inTok || 0) + (obj.outTok || 0));
+        return obj.weighted ?? Math.round((obj.inTok || 0) + 0.1 * (obj.cacheRead || 0) + 6 * (obj.outTok || 0));
+      };
+
+      const taFormatMetricVal = (obj, metric = 'weighted') =>
+        metric === 'calls' ? `${taGetMetricVal(obj, metric).toLocaleString('en-US')} 次` : taFormatCompact(taGetMetricVal(obj, metric));
+
+      const taCalcCacheRate = (obj) => {
+        const inp = (obj?.inTok || 0) + (obj?.cacheRead || 0);
+        return inp > 0 ? obj.cacheRead / inp : null;
+      };
+
+      const taIsDateInRange = (dateStr, rangeDays, nowSec) => {
+        if (!rangeDays || rangeDays >= 365) return true;
+        const p = String(dateStr || '').split('-').map(Number);
+        if (p.length !== 3 || !p[0] || !p[1] || !p[2]) return false;
+        const target = new Date(p[0], p[1] - 1, p[2], 0, 0, 0, 0);
+        const end = new Date((nowSec || Math.floor(Date.now() / 1000)) * 1000);
+        end.setHours(0, 0, 0, 0);
+        const diff = Math.round((end.getTime() - target.getTime()) / 86400000);
+        return diff >= 0 && diff < rangeDays;
+      };
+
+      const taMakeEmptyTotals = () => ({
+        calls: 0, inTok: 0, cacheRead: 0, outTok: 0, thinkTok: 0, respTok: 0, total: 0, weighted: 0, billable: 0
+      });
+
+      const taAddTotals = (acc, f) => {
+        acc.calls += f.calls || 0;
+        acc.inTok += f.inTok || 0;
+        acc.cacheRead += f.cacheRead || 0;
+        acc.outTok += f.outTok || 0;
+        acc.thinkTok += f.thinkTok || 0;
+        acc.respTok += f.respTok || 0;
+        acc.total += f.total || 0;
+        acc.weighted += f.weighted || 0;
+        acc.billable += f.billable || 0;
+      };
+
+      const topKeyByScore = (scoreMap) => {
+        let bestK = '';
+        let bestV = -1;
+        for (const [k, v] of scoreMap.entries()) {
+          if (v > bestV) {
+            bestV = v;
+            bestK = k;
+          }
+        }
+        return bestK;
+      };
+
+      function taBuildHeatmapGrid(dailyMap, { weeks = 26, nowSec, metric = 'weighted', rangeDays = 30, selectedDate = null } = {}) {
+        const end = new Date((nowSec || Math.floor(Date.now() / 1000)) * 1000);
+        end.setHours(0, 0, 0, 0);
+        const endWeekMonday = new Date(end.getTime() - ((end.getDay() + 6) % 7) * 86400000);
+        const startMonday = new Date(endWeekMonday.getTime() - (weeks - 1) * 7 * 86400000);
+
+        const gridDays = [];
+        const weekCols = [];
+        let curCol = [];
+        for (let c = new Date(startMonday); c.getTime() <= end.getTime(); c = new Date(c.getTime() + 86400000)) {
+          const date = `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, '0')}-${String(c.getDate()).padStart(2, '0')}`;
+          const dow = (c.getDay() + 6) % 7;
+          if (dow === 0 && curCol.length > 0) {
+            weekCols.push(curCol);
+            curCol = [];
+          }
+          const rec = dailyMap.get(date);
+          const dayObj = {
+            date,
+            month: c.getMonth() + 1,
+            calls: rec?.calls || 0,
+            inTok: rec?.inTok || 0,
+            cacheRead: rec?.cacheRead || 0,
+            outTok: rec?.outTok || 0,
+            total: rec?.total || 0,
+            weighted: rec?.weighted || 0,
+            billable: rec?.billable || 0,
+            topProject: rec?.topProject || '',
+            inRange: taIsDateInRange(date, rangeDays, nowSec),
+            selected: selectedDate === date,
+            level: 0
+          };
+          gridDays.push(dayObj);
+          curCol.push(dayObj);
+        }
+        if (curCol.length > 0) {
+          while (curCol.length < 7) curCol.push(null);
+          weekCols.push(curCol);
+        }
+
+        const posVals = gridDays.map((d) => taGetMetricVal(d, metric)).filter((v) => v > 0).sort((a, b) => a - b);
+        const q = (p) => (posVals.length ? posVals[Math.min(posVals.length - 1, Math.floor(posVals.length * p))] : 0);
+        const [t1, t2, t3] = [q(0.25), q(0.55), q(0.82)];
+        for (const d of gridDays) {
+          const v = taGetMetricVal(d, metric);
+          d.level = v <= 0 ? 0 : v <= t1 ? 1 : v <= t2 ? 2 : v <= t3 ? 3 : 4;
+        }
+
+        let streak = 0;
+        for (let i = gridDays.length - 1; i >= 0 && gridDays[i].total > 0; i -= 1) streak += 1;
+        return { weeks: weekCols, days: gridDays, last14: gridDays.slice(-14), streak };
+      }
+
+      function taComputeViewModel(payload, state) {
+        const nowSec = payload?.nowSec || Math.floor(Date.now() / 1000);
+        const facts = Array.isArray(payload?.facts) ? payload.facts : [];
+        const conversations = payload?.conversations || {};
+        const metric = state.metric || 'weighted';
+        const rangeDays = Number(state.rangeDays || 30);
+
+        const matchesFact = (f, opts = {}) => {
+          if (!opts.ignoreDate && state.selectedDate) {
+            if (f.date !== state.selectedDate) return false;
+          } else if (!opts.ignoreRange && rangeDays < 365 && !taIsDateInRange(f.date, rangeDays, nowSec)) {
+            return false;
+          }
+          if (!opts.ignoreProject && state.selectedProject !== 'ALL' && conversations[f.cid]?.projectKey !== state.selectedProject) {
+            return false;
+          }
+          if (!opts.ignoreModel && state.selectedModel) {
+            if ((state.modelGroup === 'pool' ? f.pool : f.model) !== state.selectedModel) return false;
+          }
+          if (!opts.ignoreScenario && state.selectedScenario && f.scenario !== state.selectedScenario) return false;
+          return true;
+        };
+
+        const kpiTotals = taMakeEmptyTotals();
+        const activeDates = new Map();
+        const kpiRootIds = new Set();
+        const kpiSubIds = new Set();
+        const kpiProjKeys = new Set();
+        const dailyMap = new Map();
+        const dailyProjScores = new Map();
+        const modelMap = new Map();
+        const scenMap = new Map();
+        const rootGroups = new Map();
+        const projMap = new Map();
+
+        for (const f of facts) {
+          const c = conversations[f.cid];
+          const mv = taGetMetricVal(f, metric);
+
+          if (matchesFact(f)) {
+            taAddTotals(kpiTotals, f);
+            let ad = activeDates.get(f.date);
+            if (!ad) {
+              ad = { date: f.date, ...taMakeEmptyTotals() };
+              activeDates.set(f.date, ad);
+            }
+            taAddTotals(ad, f);
+            if (c) {
+              const rootId = c.rootId && conversations[c.rootId] ? c.rootId : c.id;
+              const rootInfo = conversations[rootId] || c;
+              kpiRootIds.add(rootId);
+              if (c.isSubagent) kpiSubIds.add(c.id);
+              if (c.projectKey) kpiProjKeys.add(c.projectKey);
+              let g = rootGroups.get(rootId);
+              if (!g) {
+                g = {
+                  id: rootId,
+                  title: rootInfo.title,
+                  projectKey: rootInfo.projectKey,
+                  projectName: rootInfo.projectName,
+                  source: rootInfo.source,
+                  lastTs: rootInfo.lastTs || 0,
+                  modelScores: new Map(),
+                  scenarioScores: new Map(),
+                  rolled: taMakeEmptyTotals(),
+                  childrenMap: new Map()
+                };
+                rootGroups.set(rootId, g);
+              }
+              taAddTotals(g.rolled, f);
+              if (f.cid === rootId) {
+                g.modelScores.set(f.model, (g.modelScores.get(f.model) || 0) + mv);
+                g.scenarioScores.set(f.scenario, (g.scenarioScores.get(f.scenario) || 0) + mv);
+              } else {
+                let ch = g.childrenMap.get(f.cid);
+                if (!ch) {
+                  ch = {
+                    id: f.cid,
+                    title: c.title,
+                    agentName: c.agentName || f.subagentType || 'subagent',
+                    lastTs: c.lastTs || 0,
+                    modelScores: new Map(),
+                    ...taMakeEmptyTotals()
+                  };
+                  g.childrenMap.set(f.cid, ch);
+                }
+                taAddTotals(ch, f);
+                ch.modelScores.set(f.model, (ch.modelScores.get(f.model) || 0) + mv);
+                if (!g.modelScores.size) g.modelScores.set(f.model, mv);
+                if (!g.scenarioScores.size) g.scenarioScores.set(f.scenario, mv);
+              }
+            }
+          }
+
+          if (matchesFact(f, { ignoreDate: true, ignoreRange: true })) {
+            let dAcc = dailyMap.get(f.date);
+            if (!dAcc) {
+              dAcc = { date: f.date, ...taMakeEmptyTotals(), topProject: '' };
+              dailyMap.set(f.date, dAcc);
+              dailyProjScores.set(f.date, new Map());
+            }
+            taAddTotals(dAcc, f);
+            if (c?.projectName) {
+              const pm = dailyProjScores.get(f.date);
+              pm.set(c.projectName, (pm.get(c.projectName) || 0) + mv);
+            }
+          }
+
+          if (matchesFact(f, { ignoreModel: true })) {
+            const mKey = state.modelGroup === 'pool' ? f.pool : f.model;
+            let mAcc = modelMap.get(mKey);
+            if (!mAcc) {
+              mAcc = { key: mKey, pool: f.pool, ...taMakeEmptyTotals() };
+              modelMap.set(mKey, mAcc);
+            }
+            taAddTotals(mAcc, f);
+          }
+
+          if (matchesFact(f, { ignoreScenario: true })) {
+            let sAcc = scenMap.get(f.scenario);
+            if (!sAcc) {
+              sAcc = { key: f.scenario, ...taMakeEmptyTotals(), subAgents: new Set() };
+              scenMap.set(f.scenario, sAcc);
+            }
+            taAddTotals(sAcc, f);
+            if (f.subagentType) sAcc.subAgents.add(f.subagentType);
+          }
+
+          if (c && matchesFact(f, { ignoreProject: true })) {
+            let pAcc = projMap.get(c.projectKey);
+            if (!pAcc) {
+              pAcc = {
+                key: c.projectKey,
+                name: c.projectName,
+                rootIds: new Set(),
+                subIds: new Set(),
+                modelScores: new Map(),
+                ...taMakeEmptyTotals()
+              };
+              projMap.set(c.projectKey, pAcc);
+            }
+            taAddTotals(pAcc, f);
+            pAcc.rootIds.add(c.rootId && conversations[c.rootId] ? c.rootId : c.id);
+            if (c.isSubagent) pAcc.subIds.add(c.id);
+            pAcc.modelScores.set(f.model, (pAcc.modelScores.get(f.model) || 0) + mv);
+          }
+        }
+
+        for (const [dt, dAcc] of dailyMap.entries()) {
+          dAcc.topProject = topKeyByScore(dailyProjScores.get(dt));
+        }
+
+        const activeDayList = [...activeDates.values()];
+        const peakDay = activeDayList.reduce(
+          (best, d) => (!best || taGetMetricVal(d, metric) > taGetMetricVal(best, metric) ? d : best),
+          null
+        );
+        const heatmap = taBuildHeatmapGrid(dailyMap, {
+          weeks: 26,
+          nowSec,
+          metric,
+          rangeDays,
+          selectedDate: state.selectedDate
+        });
+        const inRangeActive = heatmap.days.filter((d) => d.inRange && d.total > 0);
+        const avgDaily =
+          inRangeActive.length > 0
+            ? inRangeActive.reduce((sum, d) => sum + taGetMetricVal(d, metric), 0) / inRangeActive.length
+            : 0;
+
+        const searchKw = String(state.search || '').trim().toLowerCase();
+        const sessions = [...rootGroups.values()]
+          .map((g) => {
+            const cacheRate = taCalcCacheRate(g.rolled);
+            const children = [...g.childrenMap.values()]
+              .map((ch) => ({ ...ch, primaryModel: topKeyByScore(ch.modelScores), cacheRate: taCalcCacheRate(ch) }))
+              .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric));
+            return {
+              id: g.id,
+              title: g.title,
+              projectKey: g.projectKey,
+              projectName: g.projectName,
+              source: g.source,
+              lastTs: g.lastTs,
+              primaryModel: topKeyByScore(g.modelScores),
+              primaryScenario: topKeyByScore(g.scenarioScores) || 'internal',
+              ...g.rolled,
+              cacheRate,
+              lowCacheWarning: cacheRate !== null && cacheRate < 0.8 && g.rolled.inTok >= 200000,
+              children
+            };
+          })
+          .filter((s) => {
+            if (state.onlyLowCache && !s.lowCacheWarning) return false;
+            if (!searchKw) return true;
+            const hay = `${s.title} ${s.projectName} ${s.id} ${s.primaryModel} ${s.children.map((c) => `${c.title} ${c.agentName} ${c.id} ${c.primaryModel}`).join(' ')}`.toLowerCase();
+            return hay.includes(searchKw);
+          })
+          .sort((a, b) => {
+            const sortBy = state.sort || 'metric';
+            if (sortBy === 'lowCache') return (a.cacheRate ?? 1) - (b.cacheRate ?? 1);
+            if (sortBy === 'recent') return (b.lastTs || 0) - (a.lastTs || 0);
+            if (sortBy === 'total' || sortBy === 'weighted' || sortBy === 'inTok' || sortBy === 'outTok' || sortBy === 'calls') {
+              return b[sortBy] - a[sortBy];
+            }
+            return taGetMetricVal(b, metric) - taGetMetricVal(a, metric);
+          });
+
+        return {
+          kpi: {
+            ...kpiTotals,
+            cacheRate: taCalcCacheRate(kpiTotals),
+            activeDays: activeDayList.length,
+            windowDays: state.selectedDate ? 1 : rangeDays >= 365 ? Math.max(1, activeDayList.length) : rangeDays,
+            peakDay,
+            mainSessions: kpiRootIds.size,
+            subagentCount: kpiSubIds.size,
+            projectCount: kpiProjKeys.size
+          },
+          heatmap,
+          avgDaily,
+          models: [...modelMap.values()]
+            .map((m) => ({ ...m, cacheRate: taCalcCacheRate(m) }))
+            .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric)),
+          scenarios: [...scenMap.values()]
+            .map((s) => ({ ...s, subAgents: [...s.subAgents].sort() }))
+            .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric)),
+          sessions,
+          projectsSummary: [...projMap.values()]
+            .map((p) => ({
+              ...p,
+              sessionsCount: p.rootIds.size,
+              subagentCount: p.subIds.size,
+              topModel: topKeyByScore(p.modelScores),
+              cacheRate: taCalcCacheRate(p)
+            }))
+            .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric))
+        };
+      }
+
+      const uiState = {
+        metric: 'weighted',
+        rangeDays: 30,
+        dailyMode: 'heatmap',
+        modelGroup: 'model',
+        explorerMode: 'sessions',
+        selectedDate: null,
+        selectedProject: 'ALL',
+        selectedModel: null,
+        selectedScenario: null,
+        search: '',
+        sort: 'metric',
+        onlyLowCache: false,
+        expandedIds: new Set()
+      };
+      const dataState = { loading: false, error: null, fetchedAt: 0, payload: null };
+      const hmDayByDate = new Map();
+      const pendingRequests = new Map();
+      let reqSeq = 0;
+      let pendingOpenTokenTab = false;
+      let pendingOpenTimer = null;
+      let tabActive = false;
+      let syncRaf = null;
+      let disposed = false;
+
+      const fmtLastActive = (tsSec) => {
+        if (!tsSec) return '--';
+        const d = new Date(tsSec * 1000);
+        const now = new Date();
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+        if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+        if (d.toDateString() === new Date(now.getTime() - 86400000).toDateString()) return `昨天 ${hm}`;
+        return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm}`;
+      };
+
+      window.__ag_on_token_analytics = (reqId, res) => {
+        const entry = pendingRequests.get(String(reqId || ''));
+        if (!entry) return;
+        pendingRequests.delete(String(reqId || ''));
+        clearTimeout(entry.timer);
+        if (res && res.ok && res.data) entry.resolve(res.data);
+        else entry.reject(new Error(res?.error || '本地 Token 统计数据获取失败'));
+      };
+
+      async function fetchTokenAnalytics(force = false) {
+        if (disposed) return;
+        if (!force && dataState.payload && Date.now() - dataState.fetchedAt < CACHE_TTL_MS) return;
+        if (typeof window.__agRequestTokenAnalytics !== 'function') {
+          dataState.error = '当前环境未启用本地 SQLite Token 统计（需 Node.js >= 22.13 且启用 modules.tokenAnalytics）';
+          dataState.loading = false;
+          renderPanel();
+          return;
+        }
+        if (dataState.loading && !force) return;
+        dataState.loading = true;
+        dataState.error = null;
+        renderPanel();
+        const reqId = `ta-${Date.now()}-${++reqSeq}`;
+        try {
+          const data = await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              pendingRequests.delete(reqId);
+              reject(new Error('读取本地 SQLite 统计超时 (25s)'));
+            }, REQUEST_TIMEOUT_MS);
+            pendingRequests.set(reqId, { resolve, reject, timer });
+            try {
+              window.__agRequestTokenAnalytics(JSON.stringify({ reqId, maxDays: 365, force }));
+            } catch (err) {
+              clearTimeout(timer);
+              pendingRequests.delete(reqId);
+              reject(err);
+            }
+          });
+          if (disposed) return;
+          dataState.payload = data;
+          dataState.fetchedAt = Date.now();
+        } catch (err) {
+          if (!disposed) dataState.error = String(err?.message || err || '获取 Token 统计失败');
+        } finally {
+          if (!disposed) {
+            dataState.loading = false;
+            renderPanel();
+          }
+        }
+      }
+
+      function findActiveSettingsModal() {
+        for (const container of document.querySelectorAll('.settings-modal-container')) {
+          const backdrop = container.closest('.settings-modal-backdrop');
+          if (backdrop?.getAttribute('aria-hidden') === 'true' || backdrop?.classList.contains('animate-modalFadeOut')) continue;
+          if (container.classList.contains('animate-modalScaleOut')) continue;
+          const r = container.getBoundingClientRect();
+          if (r.width > 200 && r.height > 200) return container;
+        }
+        return null;
+      }
+
+      function ensureHmTooltip() {
+        let tip = document.getElementById(HM_TOOLTIP_ID);
+        if (!tip && document.body) {
+          tip = document.createElement('div');
+          tip.id = HM_TOOLTIP_ID;
+          tip.setAttribute('data-ag-token-ui', '1');
+          document.body.appendChild(tip);
+        }
+        return tip;
+      }
+
+      const hideHmTooltip = () => document.getElementById(HM_TOOLTIP_ID)?.setAttribute('data-visible', '0');
+
+      function ensurePanelSkeleton(panel) {
+        if (panel.dataset.agSkeletonReady === '1') return;
+        panel.dataset.agSkeletonReady = '1';
+        panel.innerHTML = `
+      <div class="ag-ta-wrap">
+        <div class="ag-ta-hdr">
+          <div>
+            <div class="ag-ta-title-row">
+              <h1 class="ag-ta-h1">Token 消耗分析</h1>
+              <span id="ag-ta-header-badge" class="ag-ta-pill-meta ag-ta-num-font">待同步</span>
+            </div>
+            <p class="ag-ta-sub">基于本机 <span class="ag-ta-mono">conversations/*.db</span> 与 <span class="ag-ta-mono">conversation_summaries.db</span> 只读增量归因</p>
+          </div>
+          <div class="ag-ta-controls">
+            <div class="ag-ta-seg" id="ag-ta-metric-sw">
+              <button type="button" class="ag-ta-seg-btn active" data-metric="weighted">加权等效</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="total">总 Tokens</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="billable">净新消耗</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="calls">调用次数</button>
+            </div>
+            <div class="ag-ta-seg" id="ag-ta-range-sw">
+              <button type="button" class="ag-ta-seg-btn" data-range="7">7天</button>
+              <button type="button" class="ag-ta-seg-btn active" data-range="30">30天</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="90">90天</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="365">全部</button>
+            </div>
+            <button type="button" id="ag-ta-refresh-btn" class="ag-ta-refresh">刷新</button>
+          </div>
+        </div>
+        <div id="ag-ta-filters-bar" class="ag-ta-filters-bar" hidden>
+          <span>当前联动筛选：</span>
+          <div id="ag-ta-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <button type="button" id="ag-ta-clear-filters" class="ag-ta-clear-btn">清除全部</button>
+        </div>
+        <div id="ag-ta-status-banner" class="ag-ta-banner" hidden></div>
+        <div id="ag-ta-kpi-grid" class="ag-ta-kpis"></div>
+        <section class="ag-ta-card">
+          <div class="ag-ta-card-head">
+            <div>
+              <h2 class="ag-ta-card-h2">按日消耗记录</h2>
+              <p class="ag-ta-card-desc">悬停查看单日详情，点击任意日期格子可联动筛选下方模型、场景与会话</p>
+            </div>
+            <div class="ag-ta-controls">
+              <div class="ag-ta-seg" id="ag-ta-daily-sw">
+                <button type="button" class="ag-ta-seg-btn active" data-dmode="heatmap">贡献网格</button>
+                <button type="button" class="ag-ta-seg-btn" data-dmode="bars">近14日趋势</button>
+              </div>
+              <div id="ag-ta-hm-legend" class="ag-ta-hm-legend">
+                <span>少</span><span class="ag-ta-hm-sw" data-lvl="0"></span><span class="ag-ta-hm-sw" data-lvl="1"></span><span class="ag-ta-hm-sw" data-lvl="2"></span><span class="ag-ta-hm-sw" data-lvl="3"></span><span class="ag-ta-hm-sw" data-lvl="4"></span><span>多</span>
+              </div>
+            </div>
+          </div>
+          <div id="ag-ta-hm-wrap" class="ag-ta-hm-scroll">
+            <div class="ag-ta-hm-inner">
+              <div id="ag-ta-hm-months" class="ag-ta-hm-months"></div>
+              <div class="ag-ta-hm-body">
+                <div class="ag-ta-hm-days"><span>一</span><span>三</span><span>五</span><span>日</span></div>
+                <div id="ag-ta-hm-grid" class="ag-ta-hm-grid"></div>
+              </div>
+            </div>
+          </div>
+          <div id="ag-ta-bars-wrap" hidden>
+            <div id="ag-ta-bars-chart" class="ag-ta-bars-chart"></div>
+            <div class="ag-ta-legend" style="justify-content:flex-end;border-top:none;margin-top:4px;padding-top:4px;">
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>新输入</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>缓存读取</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>输出（含思考）</span>
+            </div>
+          </div>
+          <div id="ag-ta-daily-footer" class="ag-ta-foot"></div>
+        </section>
+        <section class="ag-ta-split">
+          <div class="ag-ta-card ag-ta-card-col">
+            <div class="ag-ta-card-head">
+              <div><h2 class="ag-ta-card-h2">按模型统计</h2><p class="ag-ta-card-desc">点击模型行联动筛选</p></div>
+              <div class="ag-ta-seg" id="ag-ta-model-sw">
+                <button type="button" class="ag-ta-seg-btn active" data-mg="model">具体模型</button>
+                <button type="button" class="ag-ta-seg-btn" data-mg="pool">配额池</button>
+              </div>
+            </div>
+            <div id="ag-ta-model-list" class="ag-ta-list"></div>
+            <div class="ag-ta-legend">
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>新输入</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>缓存命中</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-think"></span>思考</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>正文回复</span>
+            </div>
+          </div>
+          <div class="ag-ta-card ag-ta-card-col">
+            <div class="ag-ta-card-head">
+              <div><h2 class="ag-ta-card-h2">按场景统计</h2><p class="ag-ta-card-desc">工具执行 / 子 Agent / 纯对话 / 规划 / 记忆压缩</p></div>
+              <span class="ag-ta-badge" title="所有数字来自本机已落盘的 conversations/*.db，不含未落盘的云端后台任务">本地轨迹口径</span>
+            </div>
+            <div id="ag-ta-scenario-list" class="ag-ta-list"></div>
+            <div class="ag-ta-foot"><span>仅统计本地已落盘对话轨迹；点击场景行可联动筛选</span></div>
+          </div>
+        </section>
+        <section class="ag-ta-card">
+          <div class="ag-ta-card-head">
+            <div><h2 class="ag-ta-card-h2">按会话与项目统计</h2><p class="ag-ta-card-desc">同名项目已合并大小写并折叠 <span class="ag-ta-mono">/tmp</span>，支持父会话展开子 Agent 轨迹</p></div>
+            <div class="ag-ta-seg" id="ag-ta-explorer-sw">
+              <button type="button" class="ag-ta-seg-btn active" data-emode="sessions">会话明细</button>
+              <button type="button" class="ag-ta-seg-btn" data-emode="projects">项目汇总</button>
+            </div>
+          </div>
+          <div id="ag-ta-project-chips" class="ag-ta-chips"></div>
+          <div class="ag-ta-toolbar">
+            <div class="ag-ta-search-wrap">
+              <svg class="ag-ta-search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="ag-ta-search-input" class="ag-ta-input" type="text" placeholder="搜索会话标题、项目名或 ID…" />
+            </div>
+            <select id="ag-ta-sort-select" class="ag-ta-select">
+              <option value="metric">排序：按当前指标</option>
+              <option value="weighted">排序：加权等效</option>
+              <option value="total">排序：总 Tokens</option>
+              <option value="inTok">排序：未缓存输入</option>
+              <option value="outTok">排序：输出 Tokens</option>
+              <option value="calls">排序：调用次数</option>
+              <option value="lowCache">排序：低缓存命中优先</option>
+              <option value="recent">排序：最近活跃</option>
+            </select>
+            <label class="ag-ta-check-lbl"><input id="ag-ta-lowcache-cb" type="checkbox" /><span>仅低缓存预警 (&lt;80%)</span></label>
+          </div>
+          <div id="ag-ta-sessions-wrap" class="ag-ta-table-wrap">
+            <table class="ag-ta-table">
+              <thead><tr><th>会话 / 项目</th><th>主力模型 &amp; 场景</th><th class="ag-ta-num">调用</th><th class="ag-ta-num">消耗与构成</th><th class="ag-ta-num">缓存命中</th><th class="ag-ta-num">最近活跃</th></tr></thead>
+              <tbody id="ag-ta-sessions-tbody"></tbody>
+            </table>
+          </div>
+          <div id="ag-ta-projects-wrap" class="ag-ta-proj-grid" hidden></div>
+        </section>
+      </div>`;
+
+        panel.addEventListener('click', (e) => {
+          const el = e.target instanceof Element ? e.target : null;
+          if (!el) return;
+          const btn = el.closest('[data-metric], [data-range], [data-dmode], [data-mg], [data-emode], [data-hm-date], [data-bar-date], [data-model-key], [data-scen-key], [data-proj-key], [data-proj-card], [data-toggle-sub], [data-clear-filter], #ag-ta-refresh-btn, #ag-ta-clear-filters');
+          if (!btn) return;
+          if (btn.id === 'ag-ta-refresh-btn') return void fetchTokenAnalytics(true);
+          if (btn.id === 'ag-ta-clear-filters') {
+            uiState.selectedDate = null;
+            uiState.selectedProject = 'ALL';
+            uiState.selectedModel = null;
+            uiState.selectedScenario = null;
+            return renderPanel();
+          }
+          const clr = btn.getAttribute('data-clear-filter');
+          if (clr) {
+            if (clr === 'date') uiState.selectedDate = null;
+            else if (clr === 'project') uiState.selectedProject = 'ALL';
+            else if (clr === 'model') uiState.selectedModel = null;
+            else if (clr === 'scenario') uiState.selectedScenario = null;
+            return renderPanel();
+          }
+          const subId = btn.getAttribute('data-toggle-sub');
+          if (subId) {
+            if (uiState.expandedIds.has(subId)) uiState.expandedIds.delete(subId);
+            else uiState.expandedIds.add(subId);
+            return renderExplorerOnly();
+          }
+          if (btn.hasAttribute('data-metric')) uiState.metric = btn.getAttribute('data-metric') || 'weighted';
+          else if (btn.hasAttribute('data-range')) uiState.rangeDays = Number(btn.getAttribute('data-range') || 30);
+          else if (btn.hasAttribute('data-dmode')) uiState.dailyMode = btn.getAttribute('data-dmode') || 'heatmap';
+          else if (btn.hasAttribute('data-mg')) {
+            uiState.modelGroup = btn.getAttribute('data-mg') || 'model';
+            uiState.selectedModel = null;
+          } else if (btn.hasAttribute('data-emode')) uiState.explorerMode = btn.getAttribute('data-emode') || 'sessions';
+          else if (btn.hasAttribute('data-hm-date') || btn.hasAttribute('data-bar-date')) {
+            hideHmTooltip();
+            const dt = btn.getAttribute('data-hm-date') || btn.getAttribute('data-bar-date');
+            uiState.selectedDate = uiState.selectedDate === dt ? null : dt;
+          } else if (btn.hasAttribute('data-model-key')) {
+            const k = btn.getAttribute('data-model-key');
+            uiState.selectedModel = uiState.selectedModel === k ? null : k;
+          } else if (btn.hasAttribute('data-scen-key')) {
+            const k = btn.getAttribute('data-scen-key');
+            uiState.selectedScenario = uiState.selectedScenario === k ? null : k;
+          } else if (btn.hasAttribute('data-proj-key')) {
+            uiState.selectedProject = btn.getAttribute('data-proj-key') || 'ALL';
+          } else if (btn.hasAttribute('data-proj-card')) {
+            uiState.selectedProject = btn.getAttribute('data-proj-card') || 'ALL';
+            uiState.explorerMode = 'sessions';
+          }
+          renderPanel();
+        });
+
+        panel.addEventListener('mouseover', (e) => {
+          const cell = e.target instanceof Element ? e.target.closest('.ag-ta-hm-cell[data-hm-date]') : null;
+          if (!cell) return;
+          const d = hmDayByDate.get(cell.getAttribute('data-hm-date'));
+          const tip = ensureHmTooltip();
+          if (!d || !tip) return;
+          const cRate = taCalcCacheRate(d);
+          const cRateStr = cRate !== null ? `${(cRate * 100).toFixed(1)}%` : '--';
+          tip.innerHTML =
+            `<div class="ag-ta-tt-hdr ag-ta-num-font"><span>${esc(d.date)}</span><span style="color:var(--ag-ta-primary);">${esc(taFormatMetricVal(d, uiState.metric))}</span></div>` +
+            (d.calls > 0
+              ? `<div class="ag-ta-tt-row"><span>加权等效</span><strong class="ag-ta-num-font">${taFormatCompact(d.weighted)}</strong></div>` +
+                `<div class="ag-ta-tt-row"><span>总 Tokens</span><strong class="ag-ta-num-font">${taFormatCompact(d.total)}</strong></div>` +
+                `<div class="ag-ta-tt-row"><span>新入 / 缓读 / 出</span><strong class="ag-ta-num-font">${taFormatCompact(d.inTok)} / ${taFormatCompact(d.cacheRead)} / ${taFormatCompact(d.outTok)}</strong></div>` +
+                `<div class="ag-ta-tt-row"><span>调用 / 缓存命中</span><strong class="ag-ta-num-font">${d.calls} 次 · ${cRateStr}</strong></div>` +
+                (d.topProject
+                  ? `<div class="ag-ta-tt-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--ag-ta-border);"><span>主力项目</span><strong>${esc(d.topProject)}</strong></div>`
+                  : '')
+              : `<div style="color:var(--ag-ta-muted);">当日无本地调用记录</div>`);
+          tip.setAttribute('data-visible', '1');
+          tip.style.left = `${Math.max(8, Math.min(window.innerWidth - 265, e.clientX + 14))}px`;
+          tip.style.top = `${Math.max(8, Math.min(window.innerHeight - 150, e.clientY - 90))}px`;
+        });
+        panel.addEventListener('mouseout', (e) => {
+          if (e.target instanceof Element && e.target.closest('.ag-ta-hm-cell[data-hm-date]')) hideHmTooltip();
+        });
+        panel.querySelector('#ag-ta-search-input')?.addEventListener('input', (e) => {
+          uiState.search = e.target.value || '';
+          renderExplorerOnly();
+        });
+        panel.querySelector('#ag-ta-sort-select')?.addEventListener('change', (e) => {
+          uiState.sort = e.target.value || 'metric';
+          renderExplorerOnly();
+        });
+        panel.querySelector('#ag-ta-lowcache-cb')?.addEventListener('change', (e) => {
+          uiState.onlyLowCache = Boolean(e.target.checked);
+          renderExplorerOnly();
+        });
+      }
+
+      function syncPanelSwitchers(panel) {
+        const specs = [
+          ['#ag-ta-metric-sw', 'data-metric', uiState.metric],
+          ['#ag-ta-range-sw', 'data-range', String(uiState.rangeDays)],
+          ['#ag-ta-daily-sw', 'data-dmode', uiState.dailyMode],
+          ['#ag-ta-model-sw', 'data-mg', uiState.modelGroup],
+          ['#ag-ta-explorer-sw', 'data-emode', uiState.explorerMode]
+        ];
+        for (const [sel, attr, val] of specs) {
+          panel.querySelectorAll(`${sel} .ag-ta-seg-btn`).forEach((b) => {
+            b.classList.toggle('active', b.getAttribute(attr) === val);
+          });
+        }
+        panel.querySelector('#ag-ta-hm-wrap').hidden = uiState.dailyMode !== 'heatmap';
+        panel.querySelector('#ag-ta-hm-legend').hidden = uiState.dailyMode !== 'heatmap';
+        panel.querySelector('#ag-ta-bars-wrap').hidden = uiState.dailyMode !== 'bars';
+        panel.querySelector('#ag-ta-sessions-wrap').hidden = uiState.explorerMode !== 'sessions';
+        panel.querySelector('#ag-ta-projects-wrap').hidden = uiState.explorerMode !== 'projects';
+        const si = panel.querySelector('#ag-ta-search-input');
+        if (si && si.value !== uiState.search) si.value = uiState.search;
+        const ss = panel.querySelector('#ag-ta-sort-select');
+        if (ss && ss.value !== uiState.sort) ss.value = uiState.sort;
+        const cb = panel.querySelector('#ag-ta-lowcache-cb');
+        if (cb && cb.checked !== uiState.onlyLowCache) cb.checked = uiState.onlyLowCache;
+      }
+
+      function renderExplorerSections(panel, vm) {
+        const chipsEl = panel.querySelector('#ag-ta-project-chips');
+        if (chipsEl) {
+          chipsEl.innerHTML = [{ key: 'ALL', name: '全部项目' }, ...(dataState.payload?.projects || [])]
+            .map((p) => `<button type="button" class="ag-ta-chip ${uiState.selectedProject === p.key ? 'active' : ''}" data-proj-key="${esc(p.key)}">${esc(p.name)}</button>`)
+            .join('');
+        }
+        const tbody = panel.querySelector('#ag-ta-sessions-tbody');
+        if (tbody) {
+          if (!vm || vm.sessions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="ag-ta-empty">${dataState.loading ? '正在扫描本地会话数据库…' : '当前筛选条件下没有匹配的会话记录'}</td></tr>`;
+          } else {
+            const rowsHtml = [];
+            for (const s of vm.sessions.slice(0, 80)) {
+              const hasKids = s.children.length > 0;
+              const isExp = uiState.expandedIds.has(s.id);
+              const tot = Math.max(1, s.total);
+              const inP = (s.inTok / tot) * 100;
+              const cP = (s.cacheRead / tot) * 100;
+              const oP = Math.max(0, 100 - inP - cP);
+              const rateText = s.cacheRate !== null ? `${(s.cacheRate * 100).toFixed(1)}%` : '--';
+              rowsHtml.push(
+                `<tr><td><div class="ag-ta-sess-cell">` +
+                  (hasKids ? `<button type="button" class="ag-ta-exp-btn" data-toggle-sub="${esc(s.id)}">${isExp ? '▾' : '▸'}</button>` : `<span class="ag-ta-exp-pad"></span>`) +
+                  `<div style="min-width:0;"><div class="ag-ta-sess-title" title="${esc(s.title)}">${esc(s.title)}</div><div class="ag-ta-sess-tags">` +
+                  `<span class="ag-ta-badge ag-ta-mono">${esc(s.projectName)}</span>` +
+                  (s.source === 'cli' ? `<span class="ag-ta-badge ag-ta-mono">CLI</span>` : '') +
+                  (hasKids ? `<span class="ag-ta-sub-badge">含 ${s.children.length} 个子 Agent</span>` : '') +
+                  `<span class="ag-ta-mono" style="color:var(--ag-ta-muted);font-size:11px;">${esc(s.id.slice(0, 8))}</span></div></div></div></td>` +
+                  `<td style="white-space:nowrap;"><div>${esc(s.primaryModel || '--')}</div><div style="color:var(--ag-ta-muted);font-size:11px;margin-top:2px;">${esc(TA_SCENARIO_META[s.primaryScenario]?.label || s.primaryScenario)}</div></td>` +
+                  `<td class="ag-ta-num ag-ta-num-font">${s.calls}</td>` +
+                  `<td class="ag-ta-num"><div class="ag-ta-num-font" style="font-weight:600;">${esc(taFormatMetricVal(s, uiState.metric))}</div>` +
+                  `<div class="ag-ta-mini-bar" title="新入 ${taFormatCompact(s.inTok)} · 缓读 ${taFormatCompact(s.cacheRead)} · 出 ${taFormatCompact(s.outTok)}"><div class="ag-ta-seg-in" style="width:${inP}%"></div><div class="ag-ta-seg-cache" style="width:${cP}%"></div><div class="ag-ta-seg-out" style="width:${oP}%"></div></div></td>` +
+                  `<td class="ag-ta-num ag-ta-num-font"><span class="${s.lowCacheWarning ? 'ag-ta-lowcache' : ''}">${rateText}</span></td>` +
+                  `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${esc(fmtLastActive(s.lastTs))}</td></tr>`
+              );
+              if (hasKids && isExp) {
+                for (const c of s.children) {
+                  rowsHtml.push(
+                    `<tr class="ag-ta-subrow"><td style="padding-left:24px;"><div style="display:flex;align-items:center;gap:6px;max-width:276px;"><span style="color:var(--ag-ta-muted);">↳</span><span class="ag-ta-badge ag-ta-mono">${esc(c.agentName)}</span><span style="color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.title)}">${esc(c.title)}</span></div></td>` +
+                      `<td style="color:var(--ag-ta-muted);white-space:nowrap;">${esc(c.primaryModel || '--')}</td>` +
+                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.calls}</td>` +
+                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${esc(taFormatMetricVal(c, uiState.metric))}</td>` +
+                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.cacheRate !== null ? `${(c.cacheRate * 100).toFixed(1)}%` : '--'}</td>` +
+                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">子轨迹</td></tr>`
+                  );
+                }
+              }
+            }
+            tbody.innerHTML = rowsHtml.join('');
+          }
+        }
+        const projWrap = panel.querySelector('#ag-ta-projects-wrap');
+        if (projWrap) {
+          if (!vm || vm.projectsSummary.length === 0) {
+            projWrap.innerHTML = `<div class="ag-ta-empty" style="grid-column:1/-1;">当前筛选条件下无项目数据</div>`;
+          } else {
+            const projSum = Math.max(1, vm.projectsSummary.reduce((acc, p) => acc + taGetMetricVal(p, uiState.metric), 0));
+            projWrap.innerHTML = vm.projectsSummary
+              .map((p) => {
+                const share = (taGetMetricVal(p, uiState.metric) / projSum) * 100;
+                const rate = p.cacheRate !== null ? `${(p.cacheRate * 100).toFixed(1)}%` : '--';
+                return (
+                  `<div class="ag-ta-proj-card" data-proj-card="${esc(p.key)}">` +
+                  `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><span class="ag-ta-mono" style="font-weight:600;font-size:13px;">${esc(p.name)}</span><span class="ag-ta-num-font" style="font-weight:600;color:var(--ag-ta-primary);">${esc(taFormatMetricVal(p, uiState.metric))}</span></div>` +
+                  `<div class="ag-ta-track" style="margin:7px 0;"><div class="ag-ta-track-inner" style="width:${Math.max(4, share)}%;background-color:var(--ag-ta-primary);"></div></div>` +
+                  `<div class="ag-ta-num-font" style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--ag-ta-muted);"><span>${p.sessionsCount} 会话 · ${p.subagentCount} 个子 Agent · ${p.calls} 次</span><span>缓存 ${rate} · 占 ${share.toFixed(1)}%</span></div>` +
+                  `<div style="margin-top:5px;font-size:11.5px;color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">主力模型：${esc(p.topModel || '--')}</div></div>`
+                );
+              })
+              .join('');
+          }
+        }
+      }
+
+      function renderExplorerOnly() {
+        const panel = document.getElementById(PANEL_ID);
+        if (panel && dataState.payload) renderExplorerSections(panel, taComputeViewModel(dataState.payload, uiState));
+      }
+
+      function renderPanel() {
+        const panel = document.getElementById(PANEL_ID);
+        if (!panel || panel.hidden) return;
+        ensurePanelSkeleton(panel);
+        syncPanelSwitchers(panel);
+
+        const refreshBtn = panel.querySelector('#ag-ta-refresh-btn');
+        if (refreshBtn) refreshBtn.textContent = dataState.loading ? '刷新中…' : '刷新';
+
+        const banner = panel.querySelector('#ag-ta-status-banner');
+        if (banner) {
+          if (dataState.error) {
+            banner.hidden = false;
+            banner.setAttribute('data-kind', 'error');
+            banner.textContent = dataState.error;
+          } else if (dataState.loading && !dataState.payload) {
+            banner.hidden = false;
+            banner.removeAttribute('data-kind');
+            banner.textContent = '正在从本地 SQLite 增量统计全部会话消耗…';
+          } else {
+            banner.hidden = true;
+          }
+        }
+
+        const badge = panel.querySelector('#ag-ta-header-badge');
+        const st = dataState.payload?.stats;
+        if (badge && st) {
+          badge.textContent = `${st.scannedDbs}/${st.dbCount} 会话库 · ${st.totalCalls} 次调用 · ${dataState.payload.elapsedMs}ms`;
+        }
+
+        const filterPills = [];
+        if (uiState.selectedDate) filterPills.push(['date', `日期: ${uiState.selectedDate}`]);
+        if (uiState.selectedProject !== 'ALL') {
+          const pName = dataState.payload?.projects?.find((p) => p.key === uiState.selectedProject)?.name || uiState.selectedProject;
+          filterPills.push(['project', `项目: ${pName}`]);
+        }
+        if (uiState.selectedModel) filterPills.push(['model', `模型: ${uiState.selectedModel}`]);
+        if (uiState.selectedScenario) {
+          filterPills.push(['scenario', `场景: ${TA_SCENARIO_META[uiState.selectedScenario]?.label || uiState.selectedScenario}`]);
+        }
+        const fBar = panel.querySelector('#ag-ta-filters-bar');
+        const fWrap = panel.querySelector('#ag-ta-filter-pills');
+        if (fBar && fWrap) {
+          fBar.hidden = filterPills.length === 0;
+          fWrap.innerHTML = filterPills
+            .map(([k, lbl]) => `<button type="button" class="ag-ta-filter-pill" data-clear-filter="${k}"><span>${esc(lbl)}</span><span style="opacity:0.65;">×</span></button>`)
+            .join('');
+        }
+
+        if (!dataState.payload) return;
+        const vm = taComputeViewModel(dataState.payload, uiState);
+        const { kpi } = vm;
+        const metricLabels = {
+          weighted: '加权等效消耗（主指标）',
+          total: '总消耗 Tokens',
+          billable: '净新消耗（非缓存）',
+          calls: 'LLM 总调用次数'
+        };
+        const ratePct = kpi.cacheRate !== null ? (kpi.cacheRate * 100).toFixed(1) : '--';
+        const rateTone = kpi.cacheRate !== null ? (kpi.cacheRate >= 0.8 ? 'ok' : 'warn') : '';
+        const peakText = kpi.peakDay ? `${kpi.peakDay.date.slice(5)} (${taFormatMetricVal(kpi.peakDay, uiState.metric)})` : '--';
+
+        panel.querySelector('#ag-ta-kpi-grid').innerHTML =
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${esc(metricLabels[uiState.metric])}</div><div class="ag-ta-kpi-val ag-ta-num-font">${esc(taFormatMetricVal(kpi, uiState.metric))}</div><div class="ag-ta-kpi-sub ag-ta-num-font">新入 ${taFormatCompact(kpi.inTok)} · 缓读 ${taFormatCompact(kpi.cacheRead)} · 出 ${taFormatCompact(kpi.outTok)}</div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">平均缓存命中率</div><div class="ag-ta-kpi-val ag-ta-num-font" data-tone="${rateTone}">${ratePct === '--' ? '--' : `${ratePct}%`}</div><div class="ag-ta-kpi-sub">总输入 <span class="ag-ta-num-font">${taFormatCompact(kpi.inTok + kpi.cacheRead)}</span> · 思考 <span class="ag-ta-num-font">${taFormatCompact(kpi.thinkTok)}</span></div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">活跃天数 &amp; 单日峰值</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.activeDays} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">/ ${kpi.windowDays} 天</span></div><div class="ag-ta-kpi-sub ag-ta-num-font">峰值 ${esc(peakText)}</div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">归因覆盖范围</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.mainSessions} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">主会话</span></div><div class="ag-ta-kpi-sub">覆盖 <span class="ag-ta-num-font">${kpi.projectCount}</span> 个项目 · 含 <span class="ag-ta-num-font">${kpi.subagentCount}</span> 个子 Agent</div></div>`;
+
+        hmDayByDate.clear();
+        const monthsHtml = [];
+        const colsHtml = [];
+        let lastMonth = -1;
+        for (const wk of vm.heatmap.weeks) {
+          const firstDay = wk.find(Boolean);
+          const mTxt = firstDay && firstDay.month !== lastMonth ? `${(lastMonth = firstDay.month)}月` : '';
+          monthsHtml.push(`<div class="ag-ta-hm-mlbl">${mTxt}</div>`);
+          const cells = wk.map((d) => {
+            if (!d) return '<div class="ag-ta-hm-pad"></div>';
+            hmDayByDate.set(d.date, d);
+            const cls = `ag-ta-hm-cell${d.selected ? ' selected' : ''}${!d.inRange && !uiState.selectedDate ? ' out-range' : ''}`;
+            return `<div class="${cls}" data-lvl="${d.level}" data-hm-date="${esc(d.date)}"></div>`;
+          });
+          colsHtml.push(`<div class="ag-ta-hm-col">${cells.join('')}</div>`);
+        }
+        panel.querySelector('#ag-ta-hm-months').innerHTML = monthsHtml.join('');
+        panel.querySelector('#ag-ta-hm-grid').innerHTML = colsHtml.join('');
+
+        const last14 = vm.heatmap.last14;
+        const max14 = Math.max(1, ...last14.map((d) => taGetMetricVal(d, uiState.metric)));
+        panel.querySelector('#ag-ta-bars-chart').innerHTML = last14
+          .map((d) => {
+            const val = taGetMetricVal(d, uiState.metric);
+            const hPct = Math.max(val > 0 ? 6 : 2, Math.round((val / max14) * 100));
+            const sum = Math.max(1, d.total);
+            const inP = (d.inTok / sum) * 100;
+            const cP = (d.cacheRead / sum) * 100;
+            const oP = Math.max(0, 100 - inP - cP);
+            return `<div class="ag-ta-bar-col ${d.selected ? 'selected' : ''}" data-bar-date="${esc(d.date)}" title="${esc(d.date)}: ${esc(taFormatMetricVal(d, uiState.metric))}"><div class="ag-ta-bar-val ag-ta-num-font">${esc(taFormatMetricVal(d, uiState.metric))}</div><div class="ag-ta-bar-stack" style="height:${hPct}%;"><div class="ag-ta-seg-out" style="height:${oP}%;"></div><div class="ag-ta-seg-cache" style="height:${cP}%;"></div><div class="ag-ta-seg-in" style="height:${inP}%;"></div></div><div class="ag-ta-bar-dt ag-ta-num-font">${esc(d.date.slice(8))}</div></div>`;
+          })
+          .join('');
+
+        const avgStr = uiState.metric === 'calls' ? `${Math.round(vm.avgDaily)} 次/日` : `${taFormatCompact(vm.avgDaily)}/日`;
+        panel.querySelector('#ag-ta-daily-footer').innerHTML =
+          `<div style="display:flex;flex-wrap:wrap;gap:14px;"><span>当前连续活跃：<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${vm.heatmap.streak} 天</strong></span><span>窗口内活跃日均：<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${avgStr}</strong></span></div>` +
+          `<span>${uiState.selectedDate ? `已锁定单日：${esc(uiState.selectedDate)}（再次点击取消）` : '展示近 26 周（高亮当前时间窗）'}</span>`;
+
+        const modelListEl = panel.querySelector('#ag-ta-model-list');
+        if (vm.models.length === 0) {
+          modelListEl.innerHTML = '<div class="ag-ta-empty">当前筛选下无模型记录</div>';
+        } else {
+          const mSum = Math.max(1, vm.models.reduce((acc, m) => acc + taGetMetricVal(m, uiState.metric), 0));
+          const mMax = Math.max(1, ...vm.models.map((m) => taGetMetricVal(m, uiState.metric)));
+          modelListEl.innerHTML = vm.models
+            .map((m) => {
+              const val = taGetMetricVal(m, uiState.metric);
+              const tot = Math.max(1, m.total);
+              const inW = (m.inTok / tot) * 100;
+              const cacheW = (m.cacheRead / tot) * 100;
+              const thinkW = (m.thinkTok / tot) * 100;
+              const respW = Math.max(0, 100 - inW - cacheW - thinkW);
+              const rateStr = m.cacheRate !== null ? `${Math.round(m.cacheRate * 100)}%` : '--';
+              return (
+                `<div class="ag-ta-row-btn ${uiState.selectedModel === m.key ? 'active' : ''}" data-model-key="${esc(m.key)}">` +
+                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span>${esc(m.key)}</span>${uiState.modelGroup === 'model' ? `<span class="ag-ta-badge">${esc(m.pool)}</span>` : ''}</div>` +
+                `<div class="ag-ta-row-nums ag-ta-num-font"><span style="color:var(--ag-ta-muted);">${m.calls}次 · ${rateStr}</span><span style="font-weight:600;">${esc(taFormatMetricVal(m, uiState.metric))}</span><span style="color:var(--ag-ta-muted);width:38px;text-align:right;">${((val / mSum) * 100).toFixed(1)}%</span></div></div>` +
+                `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / mMax) * 100)}%;"><div class="ag-ta-seg-in" style="width:${inW}%;"></div><div class="ag-ta-seg-cache" style="width:${cacheW}%;"></div><div class="ag-ta-seg-think" style="width:${thinkW}%;"></div><div class="ag-ta-seg-out" style="width:${respW}%;"></div></div></div></div>`
+              );
+            })
+            .join('');
+        }
+
+        const scenListEl = panel.querySelector('#ag-ta-scenario-list');
+        if (vm.scenarios.length === 0) {
+          scenListEl.innerHTML = '<div class="ag-ta-empty">当前筛选下无场景记录</div>';
+        } else {
+          const sSum = Math.max(1, vm.scenarios.reduce((acc, s) => acc + taGetMetricVal(s, uiState.metric), 0));
+          const sMax = Math.max(1, ...vm.scenarios.map((s) => taGetMetricVal(s, uiState.metric)));
+          scenListEl.innerHTML = vm.scenarios
+            .map((s) => {
+              const meta = TA_SCENARIO_META[s.key] || { label: s.key, desc: '', color: 'var(--ag-ta-c6)' };
+              const val = taGetMetricVal(s, uiState.metric);
+              const extra = s.subAgents.length > 0 ? ` (${s.subAgents.join(', ')})` : '';
+              return (
+                `<div class="ag-ta-row-btn ${uiState.selectedScenario === s.key ? 'active' : ''}" data-scen-key="${esc(s.key)}">` +
+                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span class="ag-ta-swatch" style="background-color:${meta.color};"></span><span class="ag-ta-row-label">${esc(meta.label + extra)}</span></div>` +
+                `<div class="ag-ta-row-nums ag-ta-num-font"><span style="color:var(--ag-ta-muted);">${s.calls}次</span><span style="font-weight:600;">${esc(taFormatMetricVal(s, uiState.metric))}</span><span style="color:var(--ag-ta-muted);width:38px;text-align:right;">${((val / sSum) * 100).toFixed(1)}%</span></div></div>` +
+                `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / sMax) * 100)}%;background-color:${meta.color};"></div></div>` +
+                `<div style="margin-top:3px;font-size:11px;color:var(--ag-ta-muted);">${esc(meta.desc)}</div></div>`
+              );
+            })
+            .join('');
+        }
+
+        renderExplorerSections(panel, vm);
+      }
+
+      function setTokenTabActive(modal, active) {
+        if (!modal) return;
+        tabActive = Boolean(active);
+        if (tabActive) modal.setAttribute('data-ag-token-tab-active', '1');
+        else {
+          modal.removeAttribute('data-ag-token-tab-active');
+          hideHmTooltip();
+        }
+        document.getElementById(NAV_BTN_ID)?.setAttribute('data-active', tabActive ? '1' : '0');
+        const panel = document.getElementById(PANEL_ID);
+        if (panel) {
+          panel.hidden = !tabActive;
+          if (tabActive) {
+            renderPanel();
+            void fetchTokenAnalytics(false);
+          }
+        }
+      }
+
+      const observedModalEls = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+      const backdropObs = typeof MutationObserver !== 'undefined' ? new MutationObserver(() => scheduleModalSync()) : null;
+
+      function observeModalStateAttrs(modal) {
+        if (!backdropObs || !observedModalEls || !modal) return;
+        for (const el of [modal, modal.closest?.('.settings-modal-backdrop')]) {
+          if (el && !observedModalEls.has(el)) {
+            observedModalEls.add(el);
+            backdropObs.observe(el, { attributes: true, attributeFilter: ['aria-hidden', 'class'] });
+          }
+        }
+      }
+
+      function syncSettingsModal() {
+        if (disposed || !document.body) return;
+        const modal = findActiveSettingsModal();
+        if (!modal) {
+          if (tabActive) {
+            tabActive = false;
+            hideHmTooltip();
+          }
+          return;
+        }
+        observeModalStateAttrs(modal);
+        const sidebar = modal.querySelector('[data-testid="settings-sidebar"]');
+        if (!sidebar) return;
+        const anchorBtn = sidebar.querySelector(
+          '[data-testid="settings-nav-item-Models"], [data-testid="settings-nav-item-General"], [data-testid="settings-nav-item-Appearance"]'
+        );
+        const navContainer = (anchorBtn?.closest('.group\\/nav-item') || anchorBtn)?.parentElement || sidebar.querySelector('.overflow-y-auto');
+        const nativeScroll = [...modal.querySelectorAll('div.overflow-auto')].find(
+          (el) => !sidebar.contains(el) && !el.closest('[data-ag-token-ui]')
+        );
+        if (!navContainer || !nativeScroll?.parentElement) return;
+        const hostParent = nativeScroll.parentElement;
+
+        if (nativeScroll.getAttribute('data-ag-native-settings-scroll') !== '1') {
+          nativeScroll.setAttribute('data-ag-native-settings-scroll', '1');
+        }
+
+        let navSection = document.getElementById(NAV_SECTION_ID);
+        if (!navSection) {
+          navSection = document.createElement('div');
+          navSection.id = NAV_SECTION_ID;
+          navSection.setAttribute('data-ag-token-ui', '1');
+          navSection.innerHTML =
+            `<div class="ag-ta-nav-divider"></div><div class="ag-ta-nav-heading">本地扩展</div>` +
+            `<div class="relative mx-2"><button type="button" id="${NAV_BTN_ID}" data-ag-token-tab="1" data-active="0">` +
+            `<svg class="ag-ta-nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7" rx="1"/><rect x="12" y="6" width="3" height="11" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>` +
+            `<span>Token 统计</span></button></div>`;
+          navSection.querySelector(`#${NAV_BTN_ID}`)?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setTokenTabActive(modal, true);
+          });
+        }
+        if (navSection.parentElement !== navContainer) navContainer.appendChild(navSection);
+
+        let panel = document.getElementById(PANEL_ID);
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.id = PANEL_ID;
+          panel.setAttribute('data-ag-token-ui', '1');
+          panel.hidden = true;
+        }
+        if (panel.parentElement !== hostParent) hostParent.appendChild(panel);
+
+        if (!modal.__ag_token_click_bound) {
+          modal.__ag_token_click_bound = true;
+          modal.addEventListener(
+            'click',
+            (e) => {
+              const t = e.target;
+              if (!(t instanceof Element) || t.closest('[data-ag-token-ui]')) return;
+              const clickedNav =
+                t.closest('[data-testid^="settings-nav-item-"]') ||
+                (sidebar.contains(t) && t.closest('.group\\/nav-item, button'));
+              if (
+                clickedNav &&
+                !t.closest('[data-testid="settings-app-version-copy"], [data-testid="settings-app-version-caption"], [data-testid="settings-upload-debug-bundle-button"]') &&
+                modal.getAttribute('data-ag-token-tab-active') === '1'
+              ) {
+                setTokenTabActive(modal, false);
+              }
+            },
+            true
+          );
+        }
+
+        if (pendingOpenTokenTab) {
+          pendingOpenTokenTab = false;
+          if (pendingOpenTimer) {
+            clearTimeout(pendingOpenTimer);
+            pendingOpenTimer = null;
+          }
+          setTokenTabActive(modal, true);
+        } else {
+          document.getElementById(NAV_BTN_ID)?.setAttribute('data-active', tabActive ? '1' : '0');
+          panel.hidden = !tabActive;
+          if (tabActive) modal.setAttribute('data-ag-token-tab-active', '1');
+          else modal.removeAttribute('data-ag-token-tab-active');
+        }
+      }
+
+      window.__ag_open_token_analytics_tab = () => {
+        const modal = findActiveSettingsModal();
+        if (modal) {
+          syncSettingsModal();
+          setTokenTabActive(modal, true);
+          return;
+        }
+        pendingOpenTokenTab = true;
+        if (pendingOpenTimer) clearTimeout(pendingOpenTimer);
+        pendingOpenTimer = setTimeout(() => {
+          pendingOpenTokenTab = false;
+          pendingOpenTimer = null;
+        }, 3500);
+        document.querySelector('[data-testid="settings-button"]')?.click();
+      };
+
+      const MODAL_FAST_SKIP_SEL =
+        '[data-markdown-root], [data-testid="conversation-view"], [id="antigravity.agentSidePanelInputBox"], .monaco-editor, .monaco-diff-editor, .xterm, [data-ag-token-ui], [data-ag-metrics-pill], #ag-live-metrics-pill, #ag-live-metrics-tooltip';
+      const MODAL_RELEVANT_SEL =
+        '.settings-modal-container, .settings-modal-backdrop, [data-testid="settings-sidebar"], [role="dialog"]';
+
+      function scheduleModalSync() {
+        if (disposed || syncRaf) return;
+        syncRaf = requestAnimationFrame(() => {
+          syncRaf = null;
+          syncSettingsModal();
+        });
+      }
+
+      const nodeTouchesSettingsModal = (n) =>
+        n instanceof Element && (Boolean(n.matches?.(MODAL_RELEVANT_SEL)) || Boolean(n.firstElementChild && n.querySelector?.(MODAL_RELEVANT_SEL)));
+
+      let modalObserverStarted = false;
+      const modalObs =
+        typeof MutationObserver !== 'undefined'
+          ? new MutationObserver((mutations) => {
+              for (let i = 0; i < mutations.length; i++) {
+                const m = mutations[i];
+                const t = m.target;
+                if (t instanceof Element && t.closest?.(MODAL_FAST_SKIP_SEL)) continue;
+                if (
+                  tabActive ||
+                  pendingOpenTokenTab ||
+                  (t instanceof Element && t.closest?.(MODAL_RELEVANT_SEL)) ||
+                  (m.type === 'childList' &&
+                    ([...m.addedNodes].some(nodeTouchesSettingsModal) || [...m.removedNodes].some(nodeTouchesSettingsModal)))
+                ) {
+                  scheduleModalSync();
+                  break;
+                }
+              }
+            })
+          : null;
+
+      function ensureObserverStarted() {
+        if (disposed || modalObserverStarted || !modalObs || !document.body) return;
+        modalObserverStarted = true;
+        modalObs.observe(document.body, { childList: true, subtree: true });
+      }
+
+      window.__ag_sync_token_analytics_fn = () => {
+        if (disposed) return;
+        ensureObserverStarted();
+        syncSettingsModal();
+      };
+
+      ensureObserverStarted();
+      syncSettingsModal();
+
+      window.__ag_cleanup_fns.push(() => {
+        disposed = true;
+        modalObs?.disconnect();
+        backdropObs?.disconnect();
+        if (syncRaf) cancelAnimationFrame(syncRaf);
+        if (pendingOpenTimer) clearTimeout(pendingOpenTimer);
+        for (const entry of pendingRequests.values()) clearTimeout(entry.timer);
+        pendingRequests.clear();
+        cleanupTokenAnalyticsDom();
+      });
+    })();
+  } else {
+    cleanupTokenAnalyticsDom();
+  }
+  /* __AG_TOKEN_ANALYTICS_JS_END__ */
 
   // ============================================================================
   // 5. 开放用户自定义前端脚本钩子 (user/custom.js，沙箱异常隔离，同时提供 ctx 与 boot)

@@ -28,7 +28,7 @@ function harness() {
    if(this.model.hold?.(m)){this.model.held.push(respond);}else queueMicrotask(respond);
   }
  }
- const context=vm.createContext({URL,WebSocket:WS,activeConfig:config,DatabaseSync:null,SAFE_MODE:false,RUN_ONCE:false,cachedInjectScript:'TEST_INJECT',cachedPatchVersion:'test',rebuildBundleIfNeeded:()=>false,
+ const context=vm.createContext({URL,WebSocket:WS,activeConfig:config,DatabaseSync:null,SAFE_MODE:false,RUN_ONCE:false,cachedInjectScript:'TEST_INJECT',cachedIframeInjectScript:'TEST_INJECT',cachedPatchVersion:'test',rebuildBundleIfNeeded:()=>false,inFlightTokenAnalyticsPromise:null,tokenAnalyticsDbCache:new Map(),tokenAnalyticsSummariesCache:new Map(),lastTokenAnalyticsAccessMs:0,
  console:{log(){},error(){}},Date:{now:()=>now},fs:{readFileSync:()=>{throw Error('no host reads');}},http:{get(){throw Error('no network');}},setTimeout:(fn,ms)=>{timers.set(++id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id)});
  vm.runInContext(slice('const attachedTargets =','\nconsole.log(')+'\nglobalThis.api={attachTarget,attachedTargets,targetThemeModes,targetMetaMap,skippedNonHostTargets,syncThemeToChildIframes,resolveParentThemeMode,isAllowedOrigin,sync,HOST_PROBE_EXPRESSION};',context);
  async function attach(name,options={}){
