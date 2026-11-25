@@ -31,6 +31,10 @@
      - 默认切换为 `metricsMode: 'compact'`（SVG 圆环进度 + 4 行条形悬浮详情卡，仍支持 `metricsMode: 'full'`），补齐 Claude 合并思考展示、子 Agent/Swarm `step_type = 101` `[Message]` 唤醒轮次口径、`dbFound` 远程 SSH 采样门禁、260ms 悬停意图防误触、自愈订阅重试、DOM 局部观察器与 2-hop 队列合批；
      - Token 统计升级至 `TA_CACHE_SCHEMA_REV = 5`（55 项模型标签映射、合并配额池名为 `Claude`、跳过全零行、Swarm `worker` 归入实际成员名），前端升级为容器查询 `4:3` 布局、CSS `subgrid` 列对齐、定高日期舞台、常驻筛选条与 `ResizeObserver` 溢出渐隐遮罩。
   4. **诊断增强（`install.mjs`）**：`inspectLiveWindow` 增加 `uiLang` 字段；`doctor` 新增 `coreIntegrity.sourceSync` 比对源码仓库与已安装目录的 SHA-256 同步状态。
+  5. **底部指标胶囊与悬浮卡模型配额显示（融合版独占，2026-11-25）**：
+     - 通过只读遍历页面 React Fiber 发现宿主已有 `retrieveUserQuotaSummary()` 服务（不依赖混淆名、不接触凭据或网络拦截、Swarm 子帧禁用，支持 `modules.quota: false` 关闭），解决客户端运行期间锁死模型选择器导致无法查看用量的问题；
+     - 底部指标胶囊右侧以 `1px × 10px` 细竖线衔接极简斜杠格式，常驻显示 Gemini 剩余额度（中文 `5h X% / 周 Y%`、英文 `5h X% / 7d Y%`，空会话可独立挂载；`≤25%` 琥珀预警、`≤10%` 砖红告警）；悬停详情卡底部追加「模型用量 / Model Quota」双列同心卡，并列展示 Gemini 与 Claude & GPT 各自 5h/周余量、4px 进度条及重置倒计时（不侵入设置弹窗 Token 统计）；
+     - 采用事件驱动 + 节流刷新（初始化含 `0.8s/2.5s/6s` 重试、新步骤 `3.5s` 防抖、悬停超 `45s` 后台补刷、借既有 3s 巡检满 `120s` 或重置归零补刷，全局 `20s` 最小间隔、单飞去重且 `document.hidden` 静默），并补齐 `tests/quota-pill.test.mjs` 3 项单元与无头 Chrome 回归测试。
 - 未带入上游莫兰迪色与 5 槽主题切换器、外观「跟随系统」开关、Google Sans Flex / macOS 润墨、`claude-warm` 预设、Windows/WSL/Linux 代码及 `v6.0.2` Google Drive 字体自动下载器。
 
 ## 5.5.5-eric.1 源码同步与实机热更新（2026-11-23 UTC）

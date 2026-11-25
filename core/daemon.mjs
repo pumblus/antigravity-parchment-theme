@@ -212,6 +212,7 @@ let activeConfig = {
   modules: {
     i18n: true,
     metrics: true,
+    quota: true,
     tokenAnalytics: true,
     composerWaxSeal: true,
     deadlockHealer: true,
@@ -431,6 +432,7 @@ function rebuildBundleIfNeeded(opts = {}) {
     {
       i18n: true,
       metrics: true,
+      quota: true,
       tokenAnalytics: true,
       composerWaxSeal: true,
       deadlockHealer: true,
@@ -579,7 +581,7 @@ function rebuildBundleIfNeeded(opts = {}) {
   cachedInjectScript = pageRuntime.replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(bootPayload)});`);
 
   // Swarm 子 iframe 不承载设置弹窗，固定裁剪 Token 统计 CSS+JS 且保持同一 version 哈希
-  const iframeModules = Object.assign({}, modules, { tokenAnalytics: false });
+  const iframeModules = Object.assign({}, modules, { tokenAnalytics: false, quota: false });
   const iframePayload = Object.assign({}, bootPayload, {
     cssText: baseCss.replace(RE_STRIP_TA_CSS, ''),
     modules: iframeModules,

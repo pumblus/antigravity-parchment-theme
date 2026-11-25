@@ -116,6 +116,7 @@
     {
       i18n: true,
       metrics: true,
+      quota: true,
       tokenAnalytics: true,
       composerWaxSeal: true,
       deadlockHealer: true,
@@ -634,6 +635,7 @@
     window.__ag_watched_cascade_id = '';
     window.__ag_watched_cascade_sig = '';
     window.__ag_last_metrics = null;
+    window.__ag_quota_snapshot = null;
     cleanupTokenAnalyticsDom();
     window.__ag_check_route_fn = null;
     window.__ag_trigger_route_check_fn = null;
@@ -1838,6 +1840,11 @@
           window.__ag_rerender_token_analytics_lang();
         } catch (e) {}
       }
+      if (typeof window.__ag_rerender_quota_fn === 'function') {
+        try {
+          window.__ag_rerender_quota_fn();
+        } catch (e) {}
+      }
       if (typeof window.__ag_check_route_fn === 'function') {
         try {
           window.__ag_check_route_fn();
@@ -2110,6 +2117,421 @@
   const PENDING_RING_SVG =
     '<svg class="ag-ctx-ring ag-ctx-ok" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle class="ag-ctx-ring-track" cx="8" cy="8" r="5.8" fill="none" stroke-width="2.1"/><circle class="ag-ctx-ring-fill" cx="8" cy="8" r="5.8" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-dasharray="36.44" stroke-dashoffset="32.80" transform="rotate(-90 8 8)"/></svg>';
 
+  // 3.5.1 模型配额实时模块（读取页面 React 既有 retrieveUserQuotaSummary 服务；底栏常驻 Gemini 极简斜杠，悬浮详情卡双列同心卡）
+  const QUOTA_ENABLED = !IS_SWARM_PLUGIN_FRAME && MODULES.metrics && MODULES.quota !== false;
+  const QUOTA_MIN_FETCH_INTERVAL_MS = 20000;
+  const QUOTA_STALE_HOVER_MS = 45000;
+  const QUOTA_POLL_INTERVAL_MS = 120000;
+  const QUOTA_STEP_DEBOUNCE_MS = 3500;
+  const QUOTA_INIT_RETRY_DELAYS_MS = [800, 2500, 6000];
+  let quotaState =
+    QUOTA_ENABLED && window.__ag_quota_snapshot && typeof window.__ag_quota_snapshot === 'object'
+      ? window.__ag_quota_snapshot
+      : null;
+  let cachedQuotaService = null;
+  let quotaFetchInFlight = null;
+  let quotaLastAttemptAt = 0;
+  let quotaInitStarted = false;
+  let quotaStepTimer = null;
+  const quotaRetryTimers = new Set();
+
+  function parseQuotaResetTimeMs(rt) {
+    if (rt === null || rt === undefined) return 0;
+    if (typeof rt === 'number') {
+      if (!Number.isFinite(rt) || rt <= 0) return 0;
+      return rt > 1e12 ? rt : Math.round(rt * 1000);
+    }
+    if (typeof rt === 'bigint') {
+      const n = Number(rt);
+      return Number.isFinite(n) && n > 0 ? (n > 1e12 ? n : Math.round(n * 1000)) : 0;
+    }
+    if (typeof rt === 'string') {
+      const trimmed = rt.trim();
+      if (!trimmed) return 0;
+      if (/^\d+$/.test(trimmed)) {
+        const n = Number(trimmed);
+        return Number.isFinite(n) && n > 0 ? (n > 1e12 ? n : Math.round(n * 1000)) : 0;
+      }
+      const parsed = Date.parse(trimmed);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    }
+    if (typeof rt === 'object' && rt.seconds !== undefined && rt.seconds !== null) {
+      const sec = Number(rt.seconds);
+      const nanos = Number(rt.nanos || 0);
+      if (!Number.isFinite(sec) || sec <= 0) return 0;
+      return Math.round(sec * 1000 + (Number.isFinite(nanos) ? nanos / 1e6 : 0));
+    }
+    return 0;
+  }
+
+  function parseQuotaBucketFraction(bucket) {
+    if (!bucket || typeof bucket !== 'object') return null;
+    if (bucket.remaining && typeof bucket.remaining === 'object') {
+      const val = Number(bucket.remaining.value);
+      if (Number.isFinite(val)) return Math.max(0, Math.min(1, val));
+    }
+    if (typeof bucket.remainingFraction === 'number' && Number.isFinite(bucket.remainingFraction)) {
+      return Math.max(0, Math.min(1, bucket.remainingFraction));
+    }
+    return null;
+  }
+
+  function parseQuotaSummaryResponse(raw, nowMs = Date.now()) {
+    if (!raw || typeof raw !== 'object') return null;
+    const body = raw.response && typeof raw.response === 'object' ? raw.response : raw;
+    const groups = Array.isArray(body.groups) ? body.groups : [];
+    const gemini = { h5: null, weekly: null };
+    const claude = { h5: null, weekly: null };
+
+    const assignBucket = (target, bucket) => {
+      if (!bucket || typeof bucket !== 'object') return;
+      const frac = parseQuotaBucketFraction(bucket);
+      if (frac === null) return;
+      const pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+      const resetMs = parseQuotaResetTimeMs(bucket.resetTime);
+      const win = String(bucket.window || '').trim().toLowerCase();
+      const bid = String(bucket.bucketId || '').trim().toLowerCase();
+      const dname = String(bucket.displayName || '').trim().toLowerCase();
+      const item = { pct, fraction: frac, resetMs };
+      if (win === '5h' || /5h|five[\s-]*hour/.test(bid) || /5[\s-]*h|five[\s-]*hour/.test(dname)) {
+        target.h5 = item;
+      } else if (win === 'weekly' || /week|7d/.test(bid) || /weekly/.test(dname)) {
+        target.weekly = item;
+      }
+    };
+
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (!g || typeof g !== 'object') continue;
+      const buckets = Array.isArray(g.buckets) ? g.buckets : [];
+      const gName = String(g.displayName || '').toLowerCase();
+      const hasGeminiId = buckets.some((b) => /^gemini[-_]/i.test(String(b?.bucketId || '')));
+      const has3pId = buckets.some((b) => /^(?:3p|claude|gpt)[-_]/i.test(String(b?.bucketId || '')));
+      const target =
+        /gemini/.test(gName) || hasGeminiId
+          ? gemini
+          : /claude|gpt|3p/.test(gName) || has3pId
+            ? claude
+            : null;
+      if (!target) continue;
+      for (let j = 0; j < buckets.length; j++) {
+        assignBucket(target, buckets[j]);
+      }
+    }
+
+    if (!gemini.h5 && !gemini.weekly && !claude.h5 && !claude.weekly) {
+      return null;
+    }
+    return {
+      gemini,
+      claude,
+      fetchedAt: nowMs
+    };
+  }
+
+  function getQuotaTone(pct) {
+    if (pct <= 10) return 'crit';
+    if (pct <= 25) return 'warn';
+    return 'ok';
+  }
+
+  function formatQuotaReset(bucket, isEn, nowMs = Date.now()) {
+    if (!bucket) return '--';
+    if (bucket.pct >= 100 || bucket.fraction >= 0.999) {
+      return isEn ? 'Full' : '满额';
+    }
+    if (!bucket.resetMs || bucket.resetMs <= nowMs) {
+      return isEn ? 'Resetting' : '即将重置';
+    }
+    const diffMin = Math.max(0, Math.round((bucket.resetMs - nowMs) / 60000));
+    if (diffMin < 1) {
+      return isEn ? '<1m' : '<1m 后重置';
+    }
+    let dur = '';
+    if (diffMin < 60) {
+      dur = `${diffMin}m`;
+    } else if (diffMin < 1440) {
+      const h = Math.floor(diffMin / 60);
+      const m = diffMin % 60;
+      dur = m > 0 ? `${h}h ${m}m` : `${h}h`;
+    } else {
+      const d = Math.floor(diffMin / 1440);
+      const h = Math.floor((diffMin % 1440) / 60);
+      dur = h > 0 ? `${d}d ${h}h` : `${d}d`;
+    }
+    return isEn ? dur : `${dur} 后重置`;
+  }
+
+  function formatQuotaSyncAge(fetchedAt, isEn, nowMs = Date.now()) {
+    const ageMs = Math.max(0, nowMs - (Number(fetchedAt) || nowMs));
+    const mins = Math.floor(ageMs / 60000);
+    if (mins < 1) {
+      return isEn ? 'Remaining · just now' : '剩余额度 · 刚刚同步';
+    }
+    if (mins < 60) {
+      return isEn ? `Remaining · ${mins}m ago` : `剩余额度 · ${mins}分钟前`;
+    }
+    const hrs = Math.floor(mins / 60);
+    return isEn ? `Remaining · ${hrs}h ago` : `剩余额度 · ${hrs}小时前`;
+  }
+
+  function getQuotaRenderSig(snap, isEn) {
+    if (!snap) return '';
+    const g = snap.gemini || {};
+    const c = snap.claude || {};
+    return [
+      isEn ? 'en' : 'zh',
+      g.h5 ? `${g.h5.pct}@${g.h5.resetMs}` : '-',
+      g.weekly ? `${g.weekly.pct}@${g.weekly.resetMs}` : '-',
+      c.h5 ? `${c.h5.pct}@${c.h5.resetMs}` : '-',
+      c.weekly ? `${c.weekly.pct}@${c.weekly.resetMs}` : '-',
+      snap.fetchedAt || 0
+    ].join(':');
+  }
+
+  function buildQuotaInlineHtml(snap, isEn) {
+    if (!snap || !snap.gemini) return '';
+    const { h5, weekly } = snap.gemini;
+    if (!h5 && !weekly) return '';
+    const parts = [];
+    if (h5) {
+      parts.push(
+        `<span class="ag-q-lbl">5h</span><span class="ag-q-num ag-q-${getQuotaTone(h5.pct)}">${h5.pct}%</span>`
+      );
+    }
+    if (weekly) {
+      parts.push(
+        `<span class="ag-q-lbl">${isEn ? '7d' : '周'}</span><span class="ag-q-num ag-q-${getQuotaTone(weekly.pct)}">${weekly.pct}%</span>`
+      );
+    }
+    return `<span class="ag-quota-inline">${parts.join('<span class="ag-q-slash">/</span>')}</span>`;
+  }
+
+  function buildQuotaTooltipCardHtml(title, pool, isEn, nowMs) {
+    if (!pool || (!pool.h5 && !pool.weekly)) return '';
+    const renderItem = (label, bucket) => {
+      if (!bucket) return '';
+      const tone = getQuotaTone(bucket.pct);
+      const resetTxt = formatQuotaReset(bucket, isEn, nowMs);
+      return `<div class="ag-tt-qitem"><div class="ag-tt-qrow"><span class="ag-tt-qmeta">${label} <span class="ag-tt-qreset">· ${resetTxt}</span></span><span class="ag-tt-qpct ag-q-${tone}">${bucket.pct}%</span></div><span class="ag-tt-qtrack"><span class="ag-tt-qfill ag-q-${tone}" style="width:${bucket.pct}%"></span></span></div>`;
+    };
+    const rows = [
+      renderItem('5h', pool.h5),
+      renderItem(isEn ? 'Weekly' : '周', pool.weekly)
+    ].filter(Boolean).join('');
+    if (!rows) return '';
+    return `<div class="ag-tt-qcard"><div class="ag-tt-qcard-title">${title}</div>${rows}</div>`;
+  }
+
+  function buildQuotaTooltipHtml(snap, isEn, hasMetricsAbove, nowMs = Date.now()) {
+    if (!snap) return '';
+    const cards = [
+      buildQuotaTooltipCardHtml('Gemini', snap.gemini, isEn, nowMs),
+      buildQuotaTooltipCardHtml(isEn ? 'Claude &amp; GPT' : 'Claude 与 GPT', snap.claude, isEn, nowMs)
+    ].filter(Boolean);
+    if (cards.length === 0) return '';
+    const title = isEn ? 'Model Quota' : '模型用量';
+    const meta = formatQuotaSyncAge(snap.fetchedAt, isEn, nowMs);
+    const gridCls = cards.length === 1 ? 'ag-tt-quota-grid ag-tt-quota-grid--single' : 'ag-tt-quota-grid';
+    return `<div class="ag-tt-hdr${hasMetricsAbove ? ' ag-tt-sec' : ''}"><span>${title}</span><span class="ag-tt-hdr-meta">${meta}</span></div><div class="${gridCls}">${cards.join('')}</div>`;
+  }
+
+  function composePillTooltipHtml(pill, nowMs = Date.now()) {
+    const baseMetricsHtml = pill && pill.__ag_metrics_tooltip_html ? String(pill.__ag_metrics_tooltip_html) : '';
+    const hasMetricsAbove = Boolean(baseMetricsHtml);
+    const quotaHtml = QUOTA_ENABLED && quotaState ? buildQuotaTooltipHtml(quotaState, isUiEnglish(), hasMetricsAbove, nowMs) : '';
+    if (!hasMetricsAbove && !quotaHtml) return '';
+    return baseMetricsHtml + quotaHtml;
+  }
+
+  function extractQuotaSvcFromHooks(fiber) {
+    if (!fiber) return null;
+    let h = fiber.memoizedState;
+    for (let i = 0; i < 16 && h; i++) {
+      const mv = h.memoizedState;
+      const cand = Array.isArray(mv) ? mv[0] : mv;
+      if (cand && typeof cand === 'object' && typeof cand.retrieveUserQuotaSummary === 'function') {
+        return cand;
+      }
+      h = h.next;
+    }
+    return null;
+  }
+
+  function checkFiberForQuotaService(fiber) {
+    if (!fiber) return null;
+    const p = fiber.memoizedProps;
+    if (p && p.value && typeof p.value === 'object') {
+      if (typeof p.value.retrieveUserQuotaSummary === 'function') return p.value;
+      const keys = Object.keys(p.value);
+      for (let i = 0; i < keys.length; i++) {
+        const sub = p.value[keys[i]];
+        if (sub && typeof sub === 'object' && typeof sub.retrieveUserQuotaSummary === 'function') {
+          return sub;
+        }
+      }
+    }
+    const direct = extractQuotaSvcFromHooks(fiber);
+    if (direct) return direct;
+    const ch1 = fiber.child;
+    if (ch1) {
+      const fromCh1 = extractQuotaSvcFromHooks(ch1);
+      if (fromCh1) return fromCh1;
+      const ch2 = ch1.child;
+      if (ch2) {
+        const fromCh2 = extractQuotaSvcFromHooks(ch2);
+        if (fromCh2) return fromCh2;
+        if (ch2.sibling) {
+          const fromSib = extractQuotaSvcFromHooks(ch2.sibling);
+          if (fromSib) return fromSib;
+        }
+      }
+    }
+    return null;
+  }
+
+  function findQuotaService() {
+    if (cachedQuotaService && typeof cachedQuotaService.retrieveUserQuotaSummary === 'function') {
+      return cachedQuotaService;
+    }
+    try {
+      const anchors = [];
+      const trigger = document.querySelector('[data-testid="model-selector-trigger"]');
+      if (trigger) anchors.push(trigger);
+      const boxes = getAllInputBoxes();
+      for (let i = 0; i < boxes.length && anchors.length < 4; i++) {
+        anchors.push(boxes[i]);
+        const btn = boxes[i].querySelector && boxes[i].querySelector('button');
+        if (btn) anchors.push(btn);
+      }
+      for (let a = 0; a < anchors.length; a++) {
+        const el = anchors[a];
+        if (!el) continue;
+        const fk = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
+        if (!fk) continue;
+        let cur = el[fk];
+        for (let depth = 0; depth < 35 && cur; depth++) {
+          const svc = checkFiberForQuotaService(cur);
+          if (svc) {
+            cachedQuotaService = svc;
+            return svc;
+          }
+          cur = cur.return;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function hasExpiredQuotaReset(snap, nowMs = Date.now()) {
+    if (!snap) return false;
+    const buckets = [snap.gemini?.h5, snap.gemini?.weekly, snap.claude?.h5, snap.claude?.weekly];
+    for (let i = 0; i < buckets.length; i++) {
+      const b = buckets[i];
+      if (b && b.pct < 100 && b.resetMs > 0 && b.resetMs <= nowMs) return true;
+    }
+    return false;
+  }
+
+  function rerenderAllPillsForQuota() {
+    if (!metricsIsCurrent() || !MODULES.metrics || IS_SWARM_PLUGIN_FRAME) return;
+    try {
+      const boxes = getAllInputBoxes();
+      const totalBoxes = boxes.length;
+      const resolvedIds = boxes.map((box) => resolveBoxCascadeId(box, totalBoxes));
+      const allowed = new Set([...new Set(resolvedIds.filter(Boolean))].slice(0, 12));
+      for (let i = 0; i < boxes.length; i++) {
+        const box = boxes[i];
+        const pill = findPillInBox(box) || ensureMetricsPillForBox(box, false, false);
+        if (pill) {
+          const cid = resolvedIds[i];
+          syncPillForResolvedCascade(box, pill, allowed.has(cid) ? cid : '');
+        }
+      }
+      const activePill = window.__ag_active_tooltip_pill;
+      if (activePill && activePill.isConnected) {
+        const tt = document.getElementById('ag-live-metrics-tooltip');
+        if (tt && tt.getAttribute('data-visible') === '1') {
+          const freshTt = composePillTooltipHtml(activePill);
+          if (freshTt && tt.innerHTML !== freshTt) {
+            tt.innerHTML = freshTt;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  function refreshQuotaSummary(reason = 'poll') {
+    if (!QUOTA_ENABLED || !metricsIsCurrent()) return Promise.resolve(false);
+    if (quotaFetchInFlight) return quotaFetchInFlight;
+    const now = Date.now();
+    if (reason !== 'init' && now - quotaLastAttemptAt < QUOTA_MIN_FETCH_INTERVAL_MS) {
+      return Promise.resolve(false);
+    }
+    const svc = findQuotaService();
+    if (!svc) return Promise.resolve(false);
+    quotaLastAttemptAt = now;
+    quotaFetchInFlight = Promise.resolve()
+      .then(() => svc.retrieveUserQuotaSummary())
+      .then((res) => {
+        if (!metricsIsCurrent()) return false;
+        const parsed = parseQuotaSummaryResponse(res, Date.now());
+        if (!parsed) return false;
+        quotaState = parsed;
+        window.__ag_quota_snapshot = parsed;
+        rerenderAllPillsForQuota();
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        quotaFetchInFlight = null;
+      });
+    return quotaFetchInFlight;
+  }
+
+  function scheduleQuotaRefreshAfterStep() {
+    if (!QUOTA_ENABLED || !metricsIsCurrent()) return;
+    if (quotaStepTimer) {
+      try {
+        clearTimeout(quotaStepTimer);
+      } catch (e) {}
+      quotaStepTimer = null;
+    }
+    quotaStepTimer = setTimeout(() => {
+      quotaStepTimer = null;
+      if (metricsIsCurrent() && !document.hidden) {
+        refreshQuotaSummary('step');
+      }
+    }, QUOTA_STEP_DEBOUNCE_MS);
+  }
+
+  function maybeScheduleQuotaRefresh(reason = 'route') {
+    if (!QUOTA_ENABLED || !metricsIsCurrent() || document.hidden) return;
+    const now = Date.now();
+    if (!quotaState) {
+      if (!quotaInitStarted) {
+        quotaInitStarted = true;
+        refreshQuotaSummary('init').then((ok) => {
+          if (ok || !metricsIsCurrent() || quotaState) return;
+          for (const delay of QUOTA_INIT_RETRY_DELAYS_MS) {
+            scheduleTrackedHandle(quotaRetryTimers, (cb) => setTimeout(cb, delay), () => {
+              if (!quotaState && !document.hidden) refreshQuotaSummary('init');
+            });
+          }
+        });
+      } else if (now - quotaLastAttemptAt >= QUOTA_MIN_FETCH_INTERVAL_MS) {
+        refreshQuotaSummary('retry');
+      }
+      return;
+    }
+    if (
+      now - quotaState.fetchedAt >= QUOTA_POLL_INTERVAL_MS ||
+      (hasExpiredQuotaReset(quotaState, now) && now - quotaLastAttemptAt >= QUOTA_MIN_FETCH_INTERVAL_MS)
+    ) {
+      refreshQuotaSummary(reason);
+    }
+  }
+
   window.__ag_cleanup_fns.push(() => {
     if (metricsIsCurrent()) window.__ag_metrics_generation = null;
     for (const ro of activeMetricsObservers) {
@@ -2136,17 +2558,33 @@
       } catch (e) {}
     }
     metricsRouteTimers.clear();
+    if (quotaStepTimer) {
+      try {
+        clearTimeout(quotaStepTimer);
+      } catch (e) {}
+      quotaStepTimer = null;
+    }
+    for (const tid of quotaRetryTimers) {
+      try {
+        clearTimeout(tid);
+      } catch (e) {}
+    }
+    quotaRetryTimers.clear();
+    cachedQuotaService = null;
+    quotaFetchInFlight = null;
     window.__ag_metrics_focusin_fn = null;
     window.__ag_metrics_click_fn = null;
     window.__ag_trigger_route_check_fn = null;
     window.__ag_check_route_fn = null;
     window.__ag_render_metrics = null;
     window.__ag_ensure_metrics_pill_fn = null;
+    window.__ag_rerender_quota_fn = null;
     if (window.__ag_metrics_tt_hide_timer) clearTimeout(window.__ag_metrics_tt_hide_timer);
     window.__ag_metrics_tt_hide_timer = null;
     clearMetricsTooltipShowTimer();
     hideMetricsTooltipIfOwner(null);
   });
+  window.__ag_rerender_quota_fn = rerenderAllPillsForQuota;
 
   function isPillNode(el) {
     return !!(
@@ -2499,8 +2937,10 @@
   function showMetricsTooltipForPill(pill) {
     if (!pill || !pill.isConnected) return;
     const map = isWeakMapInstance(window.__ag_pill_tooltip_map) ? window.__ag_pill_tooltip_map : pillTooltipMap;
-    const ttHtml = map.get(pill);
+    const composedTt = composePillTooltipHtml(pill);
+    const ttHtml = composedTt || map.get(pill);
     if (!ttHtml) return;
+    if (composedTt) map.set(pill, composedTt);
     const tt = ensureMetricsTooltip();
     if (!tt) return;
     if (tt.innerHTML !== ttHtml) {
@@ -2514,6 +2954,9 @@
     tt.style.left = left + 'px';
     tt.style.bottom = Math.max(8, bottomPx) + 'px';
     tt.setAttribute('data-visible', '1');
+    if (QUOTA_ENABLED && (!quotaState || Date.now() - quotaState.fetchedAt >= QUOTA_STALE_HOVER_MS)) {
+      refreshQuotaSummary('hover');
+    }
   }
 
   function createPillElement() {
@@ -2758,12 +3201,31 @@
     if (!pill) return;
     const textEl = getPillTextEl(pill);
     const ttMap = isWeakMapInstance(window.__ag_pill_tooltip_map) ? window.__ag_pill_tooltip_map : pillTooltipMap;
+    const isEn = isUiEnglish();
+    const quotaInline = QUOTA_ENABLED ? buildQuotaInlineHtml(quotaState, isEn) : '';
+    const quotaSig = QUOTA_ENABLED ? getQuotaRenderSig(quotaState, isEn) : '';
     pill.removeAttribute('data-ag-rendered-cid');
     pill.setAttribute('data-ag-pending', '1');
-    ttMap.delete(pill);
-    hideMetricsTooltipIfOwner(pill);
-    const pendingLabel = isUiEnglish() ? 'Measuring\u2026' : '采样中\u2026';
-    const nextHtml = `${PENDING_RING_SVG}<span class="ag-ring-after">${pendingLabel}</span>`;
+    pill.setAttribute('data-ag-quota-sig', quotaSig);
+    pill.__ag_metrics_tooltip_html = '';
+    const nextTooltip = composePillTooltipHtml(pill);
+    if (nextTooltip) {
+      ttMap.set(pill, nextTooltip);
+      if (window.__ag_active_tooltip_pill === pill) {
+        const tt = document.getElementById('ag-live-metrics-tooltip');
+        if (tt && tt.getAttribute('data-visible') === '1' && tt.innerHTML !== nextTooltip) {
+          tt.innerHTML = nextTooltip;
+        }
+      }
+    } else {
+      ttMap.delete(pill);
+      hideMetricsTooltipIfOwner(pill);
+    }
+    const pendingLabel = isEn ? 'Measuring\u2026' : '采样中\u2026';
+    const pendingBase = `${PENDING_RING_SVG}<span class="ag-ring-after">${pendingLabel}</span>`;
+    const nextHtml = quotaInline
+      ? `${pendingBase}<span class="ag-quota-div" aria-hidden="true"></span>${quotaInline}`
+      : pendingBase;
     const textChanged = !!(textEl && textEl.innerHTML !== nextHtml);
     if (textEl && textChanged) {
       textEl.innerHTML = nextHtml;
@@ -2781,9 +3243,16 @@
     if (!pill) return;
     const textEl = getPillTextEl(pill);
     const ttMap = isWeakMapInstance(window.__ag_pill_tooltip_map) ? window.__ag_pill_tooltip_map : pillTooltipMap;
-    if (!payload || !payload.hasData) {
+    const isEn = isUiEnglish();
+    const quotaInline = QUOTA_ENABLED ? buildQuotaInlineHtml(quotaState, isEn) : '';
+    const quotaSig = QUOTA_ENABLED ? getQuotaRenderSig(quotaState, isEn) : '';
+    const hasMetrics = !!(payload && payload.hasData);
+
+    if (!hasMetrics && !quotaInline) {
       pill.removeAttribute('data-ag-rendered-cid');
       pill.removeAttribute('data-ag-pending');
+      pill.removeAttribute('data-ag-quota-sig');
+      pill.__ag_metrics_tooltip_html = '';
       if (textEl && textEl.innerHTML !== '') {
         textEl.innerHTML = '';
       }
@@ -2792,25 +3261,45 @@
       hideMetricsTooltipIfOwner(pill);
       return;
     }
+
     pill.removeAttribute('data-ag-pending');
-    const renderedCid = String(payload.cascadeId || pill.getAttribute('data-ag-cascade-id') || '').trim().toLowerCase();
-    if (renderedCid) {
-      delete pendingRunUntilByCid[renderedCid];
-      if (pill.getAttribute('data-ag-rendered-cid') !== renderedCid) {
-        pill.setAttribute('data-ag-rendered-cid', renderedCid);
+    pill.setAttribute('data-ag-quota-sig', quotaSig);
+
+    if (hasMetrics) {
+      const renderedCid = String(payload.cascadeId || pill.getAttribute('data-ag-cascade-id') || '').trim().toLowerCase();
+      if (renderedCid) {
+        delete pendingRunUntilByCid[renderedCid];
+        if (pill.getAttribute('data-ag-rendered-cid') !== renderedCid) {
+          pill.setAttribute('data-ag-rendered-cid', renderedCid);
+        }
+      } else {
+        pill.removeAttribute('data-ag-rendered-cid');
       }
+      pill.__ag_metrics_tooltip_html = payload.tooltipHtml || '';
     } else {
       pill.removeAttribute('data-ag-rendered-cid');
+      pill.__ag_metrics_tooltip_html = '';
     }
-    const nextTooltip = payload.tooltipHtml || '';
-    ttMap.set(pill, nextTooltip);
-    if (window.__ag_active_tooltip_pill === pill) {
-      const tt = document.getElementById('ag-live-metrics-tooltip');
-      if (tt && tt.getAttribute('data-visible') === '1' && tt.innerHTML !== nextTooltip) {
-        tt.innerHTML = nextTooltip;
+
+    const nextTooltip = composePillTooltipHtml(pill);
+    if (nextTooltip) {
+      ttMap.set(pill, nextTooltip);
+      if (window.__ag_active_tooltip_pill === pill) {
+        const tt = document.getElementById('ag-live-metrics-tooltip');
+        if (tt && tt.getAttribute('data-visible') === '1' && tt.innerHTML !== nextTooltip) {
+          tt.innerHTML = nextTooltip;
+        }
       }
+    } else {
+      ttMap.delete(pill);
+      hideMetricsTooltipIfOwner(pill);
     }
-    const nextHtml = payload.inlineHtml || '';
+
+    const baseInline = hasMetrics ? payload.inlineHtml || '' : '';
+    const nextHtml =
+      baseInline && quotaInline
+        ? `${baseInline}<span class="ag-quota-div" aria-hidden="true"></span>${quotaInline}`
+        : baseInline || quotaInline;
     const textChanged = !!(textEl && textEl.innerHTML !== nextHtml);
     if (textEl && textChanged) {
       textEl.innerHTML = nextHtml;
@@ -2826,11 +3315,23 @@
 
   function syncPillForResolvedCascade(box, pill, cid) {
     if (!pill) return;
+    const curQuotaSig = QUOTA_ENABLED ? getQuotaRenderSig(quotaState, isUiEnglish()) : '';
+    const renderedQuotaSig = String(pill.getAttribute('data-ag-quota-sig') || '');
+    const quotaChanged = curQuotaSig !== renderedQuotaSig;
     if (!cid) {
       if (pill.hasAttribute('data-ag-cascade-id')) {
         pill.removeAttribute('data-ag-cascade-id');
       }
-      applyPayloadToPill(box, pill, null);
+      const renderedCid = String(pill.getAttribute('data-ag-rendered-cid') || '');
+      if (
+        renderedCid !== '' ||
+        pill.hasAttribute('data-ag-pending') ||
+        quotaChanged ||
+        (curQuotaSig !== '' && pill.style.display !== 'inline-flex') ||
+        (curQuotaSig === '' && pill.style.display !== 'none')
+      ) {
+        applyPayloadToPill(box, pill, null);
+      }
       return;
     }
     if (pill.getAttribute('data-ag-cascade-id') !== cid) {
@@ -2839,12 +3340,18 @@
     const renderedCid = String(pill.getAttribute('data-ag-rendered-cid') || '').trim().toLowerCase();
     const cached = metricsById[cid];
     if (cached && cached.hasData) {
-      if (renderedCid !== cid || pill.hasAttribute('data-ag-pending') || pill.style.display !== 'inline-flex') {
+      if (renderedCid !== cid || pill.hasAttribute('data-ag-pending') || pill.style.display !== 'inline-flex' || quotaChanged) {
         applyPayloadToPill(box, pill, cached);
       }
     } else if (shouldShowPendingForBox(box, cid)) {
       applyPendingStateToPill(box, pill);
-    } else if (renderedCid !== '' || pill.hasAttribute('data-ag-pending') || pill.style.display === 'inline-flex') {
+    } else if (
+      renderedCid !== '' ||
+      pill.hasAttribute('data-ag-pending') ||
+      quotaChanged ||
+      (curQuotaSig !== '' && pill.style.display !== 'inline-flex') ||
+      (curQuotaSig === '' && pill.style.display !== 'none')
+    ) {
       applyPayloadToPill(box, pill, null);
     }
   }
@@ -2895,7 +3402,11 @@
       const allowedIds = [...new Set(resolvedIds.filter(Boolean))].slice(0, 12);
       const targets = boxes.filter((box, i) => resolvedIds[i] === cid);
       if (!allowedIds.includes(cid) || !targets.length) { ensureMetricsPill(false); return false; }
+      const prevSig = metricsById[cid]?.sig || '';
       metricsById[cid] = payload;
+      if (QUOTA_ENABLED && payload.hasData && payload.sig && payload.sig !== prevSig) {
+        scheduleQuotaRefreshAfterStep();
+      }
       const primaryCid = window.__ag_watched_cascade_id || extractFocusedOrPrimaryCascadeId();
       if (!primaryCid || cid === primaryCid) window.__ag_last_metrics = payload;
       let applied = false;
@@ -3022,6 +3533,9 @@
         sendMetricsSubscription(watchedIds, watchedSig, false);
       } else if (hasUnackedCid && Date.now() - lastMetricsReqAt >= 1200) {
         sendMetricsSubscription(watchedIds, watchedSig, true);
+      }
+      if (QUOTA_ENABLED && boxes.length > 0) {
+        maybeScheduleQuotaRefresh('route');
       }
     } catch (e) {}
   }
