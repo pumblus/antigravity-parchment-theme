@@ -2,7 +2,7 @@
 /**
  * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（融合版 v5.5.5-eric.1 · macOS 专用）：
+ * 架构特性（融合版 v6.0.3-eric.1 · macOS 专用）：
  * 1. 动态 Node 分级：
  *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、宿主隔离、Browser 级 CDP 事件发现与在线快路径、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）与设置弹窗「Token 统计」增量归因分析；低版本优雅降级绝不崩溃。
@@ -156,7 +156,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261123-v5.5.5-eric.1';
+const BASE_VERSION = '20261125-v6.0.3-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedIframeInjectScript = '';
@@ -205,6 +205,8 @@ let activeConfig = {
   enabled: true,
   channel: 'auto',
   preset: 'high-contrast',
+  installedLocale: 'zh-CN',
+  metricsMode: 'compact',
   contextLimit: 256000,
   contextLimitOverride: 0,
   modules: {
@@ -247,6 +249,107 @@ function normalizeOverrideDict(rawObj) {
 const HOST_CONFIG_PATH = path.join(os.homedir(), '.gemini', 'config', 'config.json');
 let cachedHostCfgFileSig = '';
 let cachedHostThemeMode = null;
+let cfgWriteSeq = 0;
+
+function normalizeUiLangValue(rawVal) {
+  const s = String(rawVal || '').trim().toLowerCase();
+  if (s === 'en' || s === 'en-us' || s === 'english' || s === 'off' || s === 'false' || s === '0') {
+    return 'en';
+  }
+  return 'target';
+}
+
+function broadcastUiLangToTargets(rawUiLang, excludeTargetId = null) {
+  if (!activeConfig.enabled) return;
+  const normLang = normalizeUiLangValue(rawUiLang);
+  const wantI18n = normLang !== 'en';
+  if (activeConfig.modules && typeof activeConfig.modules === 'object') {
+    activeConfig.modules.i18n = wantI18n;
+    metricsConfigEpoch += 1;
+  }
+  const expr = `window.__ag_set_host_ui_lang && window.__ag_set_host_ui_lang(${JSON.stringify(normLang)})`;
+  const tasks = [];
+  for (const [id, entry] of attachedTargets.entries()) {
+    if (!entry?.hostConfirmed) continue;
+    if (entry.updateNewDocScript) {
+      tasks.push(entry.updateNewDocScript().catch(() => {}));
+    }
+    if (!excludeTargetId || id !== excludeTargetId) {
+      if (entry.send) {
+        tasks.push(entry.send('Runtime.evaluate', { expression: expr, returnByValue: false }).catch(() => {}));
+      }
+    }
+    if (entry.type !== 'iframe' && entry.syncMetricsForSession) {
+      tasks.push(entry.syncMetricsForSession(true).catch(() => {}));
+    }
+  }
+  if (tasks.length > 0) {
+    void Promise.allSettled(tasks);
+  }
+}
+
+function persistUiLangToUserConfig(rawUiLang, skipNewDocSync = false) {
+  if (SAFE_MODE) return false;
+  const normLang = normalizeUiLangValue(rawUiLang);
+  const wantI18n = normLang !== 'en';
+  const cfgPath = path.join(USER_DIR, 'config.json');
+  const tmpPath = `${cfgPath}.tmp-${process.pid}-ul-${++cfgWriteSeq}`;
+  try {
+    fs.mkdirSync(USER_DIR, { recursive: true });
+    let currentObj = {};
+    if (fs.existsSync(cfgPath)) {
+      let parsed = null;
+      try {
+        const rawText = fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, '');
+        parsed = JSON.parse(rawText);
+      } catch {
+        return false;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return false;
+      }
+      currentObj = parsed;
+    }
+    const curModules =
+      currentObj.modules && typeof currentObj.modules === 'object' && !Array.isArray(currentObj.modules)
+        ? currentObj.modules
+        : {};
+    if (curModules.i18n === wantI18n && 'i18n' in curModules) {
+      return true;
+    }
+    const nextModules = Object.assign({ i18n: wantI18n }, curModules, { i18n: wantI18n });
+    const updatedObj = {};
+    let inserted = false;
+    for (const [k, v] of Object.entries(currentObj)) {
+      if (k === 'modules') {
+        updatedObj.modules = nextModules;
+        inserted = true;
+      } else {
+        updatedObj[k] = v;
+      }
+    }
+    if (!inserted) {
+      updatedObj.modules = nextModules;
+    }
+    fs.writeFileSync(tmpPath, `${JSON.stringify(updatedObj, null, 2)}\n`, 'utf8');
+    fs.renameSync(tmpPath, cfgPath);
+    if (rebuildBundleIfNeeded({ fromUiPersist: true }) && !skipNewDocSync) {
+      const tasks = [];
+      for (const [, entry] of attachedTargets.entries()) {
+        if (entry?.hostConfirmed && entry.updateNewDocScript) {
+          tasks.push(entry.updateNewDocScript().catch(() => {}));
+        }
+      }
+      if (tasks.length > 0) void Promise.allSettled(tasks);
+    }
+    return true;
+  } catch {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {}
+    return false;
+  }
+}
 
 function readHostThemeMode() {
   const fileSig = getFileMtimeSig(HOST_CONFIG_PATH);
@@ -271,7 +374,8 @@ function readHostThemeMode() {
   return cachedHostThemeMode;
 }
 
-function rebuildBundleIfNeeded() {
+function rebuildBundleIfNeeded(opts = {}) {
+  const fromUiPersist = !!(opts && opts.fromUiPersist);
   const coreFiles = [
     path.join(CORE_DIR, 'theme.css'),
     path.join(CORE_DIR, 'i18n.json'),
@@ -298,13 +402,21 @@ function rebuildBundleIfNeeded() {
   const enabled = SAFE_MODE ? true : userCfg.enabled !== false;
   const channel = CLI_CHANNEL || userCfg.channel || 'auto';
   const preset = userCfg.preset || 'high-contrast';
+  const rawInstalledLocale = String(userCfg.installedLocale || 'zh-CN').trim() || 'zh-CN';
+  const installedLocale =
+    rawInstalledLocale === 'none' || rawInstalledLocale === 'zh-CN' ? rawInstalledLocale : 'zh-CN';
+  const prevActiveI18nEnabled = activeConfig?.modules ? activeConfig.modules.i18n !== false : null;
   const rawCtxLimit = Number(userCfg.contextLimit);
   const contextLimit = Number.isFinite(rawCtxLimit) && rawCtxLimit > 0 ? rawCtxLimit : 256000;
   const rawCtxOverride = Number(userCfg.contextLimitOverride);
   const contextLimitOverride = Number.isFinite(rawCtxOverride) && rawCtxOverride > 0 ? rawCtxOverride : 0;
+  const rawMetricsMode = String(userCfg.metricsMode || 'compact').trim().toLowerCase();
+  const metricsMode = rawMetricsMode === 'full' || rawMetricsMode === 'legacy' ? 'full' : 'compact';
   if (
     activeConfig &&
-    (contextLimit !== activeConfig.contextLimit || contextLimitOverride !== activeConfig.contextLimitOverride)
+    (contextLimit !== activeConfig.contextLimit ||
+      contextLimitOverride !== activeConfig.contextLimitOverride ||
+      metricsMode !== activeConfig.metricsMode)
   ) {
     metricsCache.clear();
     lastBestEffortPayloadCache.clear();
@@ -330,6 +442,9 @@ function rebuildBundleIfNeeded() {
     },
     rawModules
   );
+  if (SAFE_MODE && activeConfig?.modules && typeof activeConfig.modules.i18n === 'boolean') {
+    modules.i18n = activeConfig.modules.i18n;
+  }
   if (!DatabaseSync) {
     modules.metrics = false;
     modules.tokenAnalytics = false;
@@ -366,6 +481,8 @@ function rebuildBundleIfNeeded() {
     enabled,
     channel,
     preset,
+    installedLocale,
+    metricsMode,
     contextLimit,
     contextLimitOverride,
     modules,
@@ -380,14 +497,19 @@ function rebuildBundleIfNeeded() {
   const baseCss = readTextSafe(path.join(CORE_DIR, 'theme.css'), '');
   const customCss = !SAFE_MODE && modules.customCss ? readTextSafe(path.join(USER_DIR, 'custom.css'), '') : '';
 
-  const baseDict = readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {});
-  const rawOverrideDict = !SAFE_MODE ? readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {}) : {};
-  const overrideDict = normalizeOverrideDict(rawOverrideDict);
-  const mergedDict = Object.assign({}, baseDict, overrideDict);
+  const mergedDict =
+    installedLocale === 'none'
+      ? {}
+      : Object.assign(
+          {},
+          readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {}),
+          !SAFE_MODE ? normalizeOverrideDict(readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {})) : {}
+        );
 
   const customJs = !SAFE_MODE && modules.customJs ? readTextSafe(path.join(USER_DIR, 'custom.js'), '') : '';
   const runtimeTemplate = readTextSafe(path.join(CORE_DIR, 'runtime.js'), '');
 
+  const { i18n: _omitI18nFromHash, ...hashModules } = modules;
   const hash = crypto
     .createHash('sha256')
     .update(String(enabled))
@@ -396,9 +518,25 @@ function rebuildBundleIfNeeded() {
     .update(customCss)
     .update(JSON.stringify(mergedDict))
     .update(customJs)
-    .update(JSON.stringify({ preset, modules, themeVars, selectors: activeConfig.selectors, hostThemeMode }))
+    .update(
+      JSON.stringify({
+        preset,
+        installedLocale,
+        metricsMode,
+        modules: hashModules,
+        themeVars,
+        selectors: activeConfig.selectors,
+        hostThemeMode
+      })
+    )
     .digest('hex')
     .slice(0, 8);
+
+  if (!fromUiPersist && enabled) {
+    if (prevActiveI18nEnabled !== null && (modules.i18n !== false) !== prevActiveI18nEnabled) {
+      broadcastUiLangToTargets(modules.i18n === false ? 'en' : 'target', null);
+    }
+  }
 
   const channelTag = channel === 'insiders' ? 'insiders' : 'stable';
   cachedPatchVersion = `${BASE_VERSION}-${channelTag}-${hash}`;
@@ -417,6 +555,7 @@ function rebuildBundleIfNeeded() {
     hostThemeMode,
     enabled,
     preset,
+    installedLocale,
     cssText: pageCss,
     customCss,
     themeVars,
@@ -427,6 +566,8 @@ function rebuildBundleIfNeeded() {
       enabled,
       channel,
       preset,
+      installedLocale,
+      metricsMode,
       contextLimit,
       contextLimitOverride,
       modules,
@@ -1157,6 +1298,7 @@ function parseGenMetadataRow(r) {
   const chatStart = chatStartRaw instanceof Uint8Array ? parseProto(chatStartRaw) : new Map();
   const ctxWinRaw = chatStart.get(10);
   const ctxWin = ctxWinRaw instanceof Uint8Array ? parseProto(ctxWinRaw) : new Map();
+  const estCtx = ctxWin.get(1) || 0;
   const maxCtx = ctxWin.get(4) || 0;
   const ttftRaw = chat.get(11);
   const ttftMap = ttftRaw instanceof Uint8Array ? parseProto(ttftRaw) : new Map();
@@ -1166,8 +1308,13 @@ function parseGenMetadataRow(r) {
   const inTok = usage.get(2) || 0;
   const outTok = usage.get(3) || 0;
   const cacheRead = usage.get(5) || 0;
+  const apiProvider = usage.get(6) || 0;
   const thinkTok = usage.get(9) || 0;
   const respTok = usage.get(10) || 0;
+  const slugRaw = chat.get(19);
+  const slug = slugRaw instanceof Uint8Array ? textDecoder.decode(slugRaw) : '';
+  const thinkUnreported =
+    !usage.has(9) && thinkTok === 0 && (apiProvider === 26 || /^claude-/i.test(slug));
   const ttft = (ttftMap.get(1) || 0) + (ttftMap.get(2) || 0) / 1e9;
   const stream = (streamMap.get(1) || 0) + (streamMap.get(2) || 0) / 1e9;
 
@@ -1177,9 +1324,11 @@ function parseGenMetadataRow(r) {
     outTok,
     cacheRead,
     ctx: inTok + cacheRead,
+    estCtx,
     maxCtx,
     thinkTok,
     respTok,
+    thinkUnreported,
     ttft,
     stream,
     totDur: ttft + stream
@@ -1197,12 +1346,13 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
   if (!DatabaseSync) return null;
   if (!cascadeId || !UUID_RE.test(cascadeId)) return null;
   const state = precomputedState || getDbState(cascadeId, endpointOrDir);
-  if (!state || !state.dbPath || !state.sig) return { cascadeId, hasData: false };
+  if (!state || !state.dbPath || !state.sig) return { cascadeId, hasData: false, dbFound: false };
   const { dbPath, sig } = state;
   const conversationsDir = path.dirname(dbPath);
   const childSnap =
     precomputedChildSnap || getCompositeChildSnapshot(cascadeId, conversationsDir, state.rawSig || sig, budget);
-  const compositeSig = childSnap?.sig || sig;
+  const isEnMetrics = activeConfig.modules?.i18n === false || activeConfig.installedLocale === 'none';
+  const compositeSig = `${childSnap?.sig || sig}|${isEnMetrics ? 'en' : 'zh'}|${activeConfig.metricsMode === 'full' ? 'full' : 'compact'}`;
 
   const cached = metricsCache.get(dbPath);
   if (cached && cached.sig === compositeSig && !childSnap?.isDraining && !childSnap?.partialStale) {
@@ -1225,6 +1375,7 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       const emptyPayload = {
         cascadeId,
         hasData: false,
+        dbFound: true,
         sig: compositeSig,
         isDraining: Boolean(childSnap?.isDraining),
         partialStale: Boolean(childSnap?.partialStale)
@@ -1240,11 +1391,41 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     const userStat = db
       .prepare('SELECT COUNT(*) AS cnt, COALESCE(MAX(idx), -1) AS lastIdx FROM steps WHERE step_type = 14')
       .get();
-    const lastUserStepIdx = userStat?.lastIdx ?? -1;
-    const userStepsCount = userStat?.cnt ?? 0;
+    const rawUserLastIdx = userStat?.lastIdx ?? -1;
+    const rawUserStepsCount = userStat?.cnt ?? 0;
+    let lastTurnStepIdx = rawUserLastIdx;
+    let effectiveTurnsCount = rawUserStepsCount;
+    let isSubagentWakeTurns = false;
+    if (rawUserStepsCount === 0) {
+      // 子 Agent 与 Swarm Worker 会话不含 step_type=14，改按外部消息唤醒边界切分轮次（合并连发 [Message] 并排除后台 /task- 与系统广播）
+      isSubagentWakeTurns = true;
+      try {
+        const wakeStat = db
+          .prepare(
+            `SELECT COUNT(*) AS cnt, COALESCE(MAX(s.idx), -1) AS lastIdx
+             FROM steps s
+             WHERE s.step_type = 101
+               AND instr(substr(s.step_payload, 1, 1024), CAST('[Message]' AS BLOB)) > 0
+               AND instr(substr(s.step_payload, 1, 1024), CAST('/task-' AS BLOB)) = 0
+               AND instr(substr(s.step_payload, 1, 1024), CAST('sender=system' AS BLOB)) = 0
+               AND NOT EXISTS (
+                 SELECT 1 FROM steps p
+                 WHERE p.idx = s.idx - 1
+                   AND p.step_type = 101
+                   AND instr(substr(p.step_payload, 1, 1024), CAST('[Message]' AS BLOB)) > 0
+               )`
+          )
+          .get();
+        const wakeCnt = wakeStat?.cnt ?? 0;
+        lastTurnStepIdx = wakeStat?.lastIdx ?? -1;
+        effectiveTurnsCount = wakeCnt > 0 ? wakeCnt : 1;
+      } catch {
+        isSubagentWakeTurns = false;
+      }
+    }
     const turnStat = db
       .prepare('SELECT COUNT(*) AS cnt FROM steps WHERE step_type = 15 AND idx > ?')
-      .get(lastUserStepIdx);
+      .get(lastTurnStepIdx);
     const rawTurnSteps = turnStat?.cnt ?? 0;
 
     let inc = incrementalMetricsMap.get(dbPath);
@@ -1252,9 +1433,10 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       inc &&
       (rowCount < inc.rowCount ||
         maxIdx < inc.maxIdx ||
-        userStepsCount < inc.userStepsCount ||
-        lastUserStepIdx < inc.lastUserStepIdx ||
-        (lastUserStepIdx !== inc.lastUserStepIdx && userStepsCount <= inc.userStepsCount))
+        effectiveTurnsCount < inc.userStepsCount ||
+        lastTurnStepIdx < inc.lastUserStepIdx ||
+        isSubagentWakeTurns !== Boolean(inc.isSubagentWakeTurns) ||
+        (lastTurnStepIdx !== inc.lastUserStepIdx && effectiveTurnsCount <= inc.userStepsCount))
     ) {
       inc = null;
     }
@@ -1288,8 +1470,9 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
         }
         inc.rowCount = rowCount;
         inc.maxIdx = maxIdx;
-        inc.userStepsCount = userStepsCount;
-        inc.lastUserStepIdx = lastUserStepIdx;
+        inc.userStepsCount = effectiveTurnsCount;
+        inc.lastUserStepIdx = lastTurnStepIdx;
+        inc.isSubagentWakeTurns = isSubagentWakeTurns;
       } else {
         inc = null;
       }
@@ -1319,8 +1502,9 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
       inc = {
         rowCount: rows.length,
         maxIdx: rows.length > 0 ? rows[rows.length - 1].idx : -1,
-        userStepsCount,
-        lastUserStepIdx,
+        userStepsCount: effectiveTurnsCount,
+        lastUserStepIdx: lastTurnStepIdx,
+        isSubagentWakeTurns,
         items,
         validItems,
         totalIn,
@@ -1335,11 +1519,13 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     db = null;
     setIncrementalMetrics(dbPath, inc);
 
+    const userStepsCount = effectiveTurnsCount;
     const { validItems: valid, totalIn, totalCache, totalOut, totalThink, totalResp } = inc;
     if (valid.length === 0) {
       const emptyPayload = {
         cascadeId,
         hasData: false,
+        dbFound: true,
         sig: compositeSig,
         isDraining: Boolean(childSnap?.isDraining),
         partialStale: Boolean(childSnap?.partialStale)
@@ -1408,15 +1594,30 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     // 统计最后一条用户提问之后的模型规划步数，并从有效调用末尾切片汇总，消除按位置对齐的错位风险
     const turnSlice = rawTurnSteps > 0 ? valid.slice(-rawTurnSteps) : [];
     const turnSteps = turnSlice.length;
+    let turnIn = 0;
     let turnOut = 0;
     let turnThink = 0;
     let turnResp = 0;
     let turnDur = 0;
+    let turnAllThinkUnreported = turnSlice.length > 0;
     for (let i = 0; i < turnSlice.length; i++) {
+      turnIn += turnSlice[i].inTok;
       turnOut += turnSlice[i].outTok;
       turnThink += turnSlice[i].thinkTok;
       turnResp += turnSlice[i].respTok;
       turnDur += turnSlice[i].totDur;
+      if (!turnSlice[i].thinkUnreported || turnSlice[i].thinkTok > 0) {
+        turnAllThinkUnreported = false;
+      }
+    }
+    let sessionAllThinkUnreported = totalThink === 0 && valid.length > 0;
+    if (sessionAllThinkUnreported) {
+      for (let i = 0; i < valid.length; i++) {
+        if (!valid[i].thinkUnreported) {
+          sessionAllThinkUnreported = false;
+          break;
+        }
+      }
     }
 
     const last = valid[valid.length - 1];
@@ -1444,53 +1645,180 @@ function parseConversationMetrics(cascadeId, endpointOrDir, precomputedState = n
     const remainCtx = Math.max(0, contextLimitTokens - last.ctx);
 
     const subSyncing = isDraining || partialStale;
-    const subInlineHtml =
-      childCount > 0 ? `<span class="ag-sep">·</span><span class="ag-sub-badge">+${childCount} sub</span>` : '';
-    const inlineHtml = [
-      `<span>${Math.round(displayTps)} tok/s</span>`,
-      `<span class="ag-sep">·</span>`,
-      `<span>${useStream ? 'TTFT' : 'Hold'} ${last.ttft.toFixed(1)}s</span>`,
-      `<span class="ag-sep">·</span>`,
-      `<span>Ctx ${fmtTok(last.ctx)}/${limitStr} <span class="${ctxClass}">(${ctxPct}%)</span></span>`,
-      `<span class="ag-sep">·</span>`,
-      `<span>Out ${fmtTok(last.outTok)}</span>`,
-      subInlineHtml
-    ].join('');
-
-    const turnRowHtml =
-      turnSteps > 1
-        ? `<div class="ag-tt-row"><span class="ag-tt-lbl">本轮合计 (${turnSteps}步)</span><span class="ag-tt-val">输出 ${fmtNum(turnOut)} (思考 ${fmtNum(turnThink)} + 响应 ${fmtNum(turnResp)}) | 耗时 ${turnDur.toFixed(1)}s</span></div>`
-        : '';
-
+    const isFullMetrics = activeConfig.metricsMode === 'full';
+    const turnsUnitEn = isSubagentWakeTurns
+      ? userStepsCount === 1
+        ? 'wake'
+        : 'wakes'
+      : userStepsCount === 1
+        ? 'turn'
+        : 'turns';
+    const turnsUnitZh = isSubagentWakeTurns ? '次唤醒' : '轮提问';
     const combinedOut = totalOut + childOut;
-    const subRowHtml =
-      childCount > 0
-        ? `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (${childCount}${subSyncing ? ' · 同步中' : ''})</span><span class="ag-tt-val">${childCalls} 次 · 新增 ${fmtTok(childIn)} + 缓存 ${fmtTok(childCache)} · 输出 ${fmtTok(childOut)}</span></div>`
-        : descendantIds.length > 0 && subSyncing
-          ? `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (同步中)</span><span class="ag-tt-val">正在索引 ${descendantIds.length} 个子会话…</span></div>`
+    let inlineHtml = '';
+    let tooltipHtml = '';
+
+    if (isFullMetrics) {
+      const subInlineHtml =
+        childCount > 0 ? `<span class="ag-sep">·</span><span class="ag-sub-badge">+${childCount} sub</span>` : '';
+      inlineHtml = [
+        `<span>${Math.round(displayTps)} tok/s</span>`,
+        `<span class="ag-sep">·</span>`,
+        `<span>${useStream ? 'TTFT' : 'Hold'} ${last.ttft.toFixed(1)}s</span>`,
+        `<span class="ag-sep">·</span>`,
+        `<span>Ctx ${fmtTok(last.ctx)}/${limitStr} <span class="${ctxClass}">(${ctxPct}%)</span></span>`,
+        `<span class="ag-sep">·</span>`,
+        `<span>Out ${fmtTok(last.outTok)}</span>`,
+        subInlineHtml
+      ].join('');
+
+      const turnOutDetailEn = turnAllThinkUnreported
+        ? `Out ${fmtNum(turnOut)} (Think+Resp merged)`
+        : `Out ${fmtNum(turnOut)} (Think ${fmtNum(turnThink)} + Resp ${fmtNum(turnResp)})`;
+      const turnOutDetailZh = turnAllThinkUnreported
+        ? `输出 ${fmtNum(turnOut)} (含思考链)`
+        : `输出 ${fmtNum(turnOut)} (思考 ${fmtNum(turnThink)} + 响应 ${fmtNum(turnResp)})`;
+      const turnRowHtml =
+        turnSteps > 1
+          ? isEnMetrics
+            ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Turn Total (${turnSteps} steps)</span><span class="ag-tt-val">${turnOutDetailEn} | ${turnDur.toFixed(1)}s</span></div>`
+            : `<div class="ag-tt-row"><span class="ag-tt-lbl">本轮合计 (${turnSteps}步)</span><span class="ag-tt-val">${turnOutDetailZh} | 耗时 ${turnDur.toFixed(1)}s</span></div>`
           : '';
-    const outputRowHtml =
-      childCount > 0
-        ? `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(combinedOut)} (主 ${fmtTok(totalOut)} + 子 ${fmtTok(childOut)})</span></div>`
-        : `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(totalOut)} (思考链 ${fmtTok(totalThink)} + 正文/工具 ${fmtTok(totalResp)})</span></div>`;
-    const tooltipRows = [
-      `<div class="ag-tt-hdr">本轮最新调用 (Gen #${last.idx + 1})</div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">生成速度</span><span class="ag-tt-val">${useStream ? `流式 ${rawStreamTps.toFixed(1)} tok/s | ` : ''}端到端（含等待） ${e2eTps.toFixed(1)} tok/s</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">响应耗时</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | 流式 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s` : `等待 ${last.ttft.toFixed(2)}s | 刷出 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s`}</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">当前上下文</span><span class="ag-tt-val">${fmtNum(last.ctx)} (新增 ${fmtNum(last.inTok)} + 缓存 ${fmtNum(last.cacheRead)}, ${lastCacheRate}%)</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">本步输出量</span><span class="ag-tt-val">${fmtNum(last.outTok)} (思考链 ${fmtNum(last.thinkTok)} + 正文/工具 ${fmtNum(last.respTok)})</span></div>`,
-      turnRowHtml,
-      `<div class="ag-tt-hdr ag-tt-sec">主会话累计 (${userStepsCount} 轮提问 / ${valid.length} 次有效调用)</div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">上下文窗口用量</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · 剩余容量 ${fmtTok(remainCtx)}</span></div>`,
-      `<div class="ag-tt-row"><span class="ag-tt-lbl">主会话累计输入</span><span class="ag-tt-val">新增 ${fmtTok(totalIn)} + 缓存读取 ${fmtTok(totalCache)} (命中率 ${sessionCacheRate}%)</span></div>`,
-      subRowHtml,
-      outputRowHtml
-    ];
-    const tooltipHtml = tooltipRows.join('');
+      const subRowHtml =
+        childCount > 0
+          ? isEnMetrics
+            ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Subagents (${childCount}${subSyncing ? ' · syncing' : ''})</span><span class="ag-tt-val">${childCalls} calls · New ${fmtTok(childIn)} + Cache ${fmtTok(childCache)} · Out ${fmtTok(childOut)}</span></div>`
+            : `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (${childCount}${subSyncing ? ' · 同步中' : ''})</span><span class="ag-tt-val">${childCalls} 次 · 新增 ${fmtTok(childIn)} + 缓存 ${fmtTok(childCache)} · 输出 ${fmtTok(childOut)}</span></div>`
+          : descendantIds.length > 0 && subSyncing
+            ? isEnMetrics
+              ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Subagents (syncing)</span><span class="ag-tt-val">Indexing ${descendantIds.length} sub-sessions…</span></div>`
+              : `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (同步中)</span><span class="ag-tt-val">正在索引 ${descendantIds.length} 个子会话…</span></div>`
+            : '';
+      const outputRowHtml =
+        childCount > 0
+          ? isEnMetrics
+            ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Total Output</span><span class="ag-tt-val">Total ${fmtTok(combinedOut)} (Main ${fmtTok(totalOut)} + Sub ${fmtTok(childOut)})</span></div>`
+            : `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(combinedOut)} (主 ${fmtTok(totalOut)} + 子 ${fmtTok(childOut)})</span></div>`
+          : sessionAllThinkUnreported
+            ? isEnMetrics
+              ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Total Output</span><span class="ag-tt-val">Total ${fmtTok(totalOut)} (Think+Resp merged)</span></div>`
+              : `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(totalOut)} (接口合并计入思考链)</span></div>`
+            : isEnMetrics
+              ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Total Output</span><span class="ag-tt-val">Total ${fmtTok(totalOut)} (Think ${fmtTok(totalThink)} + Resp ${fmtTok(totalResp)})</span></div>`
+              : `<div class="ag-tt-row"><span class="ag-tt-lbl">累计输出量</span><span class="ag-tt-val">总计 ${fmtTok(totalOut)} (思考链 ${fmtTok(totalThink)} + 正文/工具 ${fmtTok(totalResp)})</span></div>`;
+      const stepOutValEn = last.thinkUnreported
+        ? `${fmtNum(last.outTok)} (Think+Resp merged)`
+        : `${fmtNum(last.outTok)} (Think ${fmtNum(last.thinkTok)} + Resp ${fmtNum(last.respTok)})`;
+      const stepOutValZh = last.thinkUnreported
+        ? `${fmtNum(last.outTok)} (接口合并计入思考链)`
+        : `${fmtNum(last.outTok)} (思考链 ${fmtNum(last.thinkTok)} + 正文/工具 ${fmtNum(last.respTok)})`;
+
+      tooltipHtml = isEnMetrics
+        ? [
+            `<div class="ag-tt-hdr">Latest Call (Gen #${last.idx + 1})</div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Throughput</span><span class="ag-tt-val">${useStream ? `Stream ${rawStreamTps.toFixed(1)} tok/s | ` : ''}E2E ${e2eTps.toFixed(1)} tok/s</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Latency</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | Stream ${last.stream.toFixed(2)}s | Total ${last.totDur.toFixed(2)}s` : `Wait ${last.ttft.toFixed(2)}s | Flush ${last.stream.toFixed(2)}s | Total ${last.totDur.toFixed(2)}s`}</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Context</span><span class="ag-tt-val">${fmtNum(last.ctx)} (New ${fmtNum(last.inTok)} + Cache ${fmtNum(last.cacheRead)}, ${lastCacheRate}%)</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Step Output</span><span class="ag-tt-val">${stepOutValEn}</span></div>`,
+            turnRowHtml,
+            `<div class="ag-tt-hdr ag-tt-sec">Main Session Total (${userStepsCount} ${turnsUnitEn} / ${valid.length} calls)</div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Context Window</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · ${fmtTok(remainCtx)} left</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Main Input</span><span class="ag-tt-val">New ${fmtTok(totalIn)} + Cache ${fmtTok(totalCache)} (${sessionCacheRate}% hit)</span></div>`,
+            subRowHtml,
+            outputRowHtml
+          ].join('')
+        : [
+            `<div class="ag-tt-hdr">本轮最新调用 (Gen #${last.idx + 1})</div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">生成速度</span><span class="ag-tt-val">${useStream ? `流式 ${rawStreamTps.toFixed(1)} tok/s | ` : ''}端到端（含等待） ${e2eTps.toFixed(1)} tok/s</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">响应耗时</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | 流式 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s` : `等待 ${last.ttft.toFixed(2)}s | 刷出 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s`}</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">当前上下文</span><span class="ag-tt-val">${fmtNum(last.ctx)} (新增 ${fmtNum(last.inTok)} + 缓存 ${fmtNum(last.cacheRead)}, ${lastCacheRate}%)</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">本步输出量</span><span class="ag-tt-val">${stepOutValZh}</span></div>`,
+            turnRowHtml,
+            `<div class="ag-tt-hdr ag-tt-sec">主会话累计 (${userStepsCount} ${turnsUnitZh} / ${valid.length} 次有效调用)</div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">上下文窗口用量</span><span class="ag-tt-val">${fmtTok(last.ctx)} / ${limitStr} (${ctxPct}%) · 剩余容量 ${fmtTok(remainCtx)}</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">主会话累计输入</span><span class="ag-tt-val">新增 ${fmtTok(totalIn)} + 缓存读取 ${fmtTok(totalCache)} (命中率 ${sessionCacheRate}%)</span></div>`,
+            subRowHtml,
+            outputRowHtml
+          ].join('');
+    } else {
+      const clampedPct = Math.max(0, Math.min(100, ctxPct));
+      const ringVisualPct = last.ctx > 0 && clampedPct < 5 ? 5 : clampedPct;
+      const ringCircum = 36.44;
+      const ringOffset = (ringCircum * (1 - ringVisualPct / 100)).toFixed(2);
+      const ringSvg = `<svg class="ag-ctx-ring ${ctxClass}" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle class="ag-ctx-ring-track" cx="8" cy="8" r="5.8" fill="none" stroke-width="2.1"/><circle class="ag-ctx-ring-fill" cx="8" cy="8" r="5.8" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-dasharray="${ringCircum}" stroke-dashoffset="${ringOffset}" transform="rotate(-90 8 8)"/></svg>`;
+      const subInlineHtml =
+        childCount > 0 ? `<span class="ag-sep">·</span><span class="ag-sub-badge">+${childCount} sub</span>` : '';
+
+      inlineHtml = [
+        ringSvg,
+        `<span class="ag-ring-after">${Math.round(displayTps)} tok/s</span>`,
+        `<span class="ag-sep">·</span>`,
+        `<span>${useStream ? 'TTFT' : 'Hold'} ${last.ttft.toFixed(1)}s</span>`,
+        subInlineHtml
+      ].join('');
+
+      const turnDisplayNum = userStepsCount > 0 ? userStepsCount : last.idx + 1;
+      const effectiveTurnSteps = turnSteps > 0 ? turnSteps : 1;
+      const effectiveTurnDur = turnSteps > 0 ? turnDur : last.totDur;
+      const turnDurStr = effectiveTurnDur >= 10 ? `${Math.round(effectiveTurnDur)}s` : `${effectiveTurnDur.toFixed(1)}s`;
+
+      const effectiveTurnIn = turnSteps > 0 ? turnIn : last.inTok;
+      const effectiveTurnOut = turnSteps > 0 ? turnOut : last.outTok;
+      const effectiveTurnThink = turnSteps > 0 ? turnThink : last.thinkTok;
+      const effectiveTurnResp = turnSteps > 0 ? turnResp : last.respTok;
+      const effectiveThinkUnreported = turnSteps > 0 ? turnAllThinkUnreported : Boolean(last.thinkUnreported);
+      const splitSum = (effectiveTurnThink || 0) + (effectiveTurnResp || 0);
+      const thinkRatioPct = splitSum > 0 ? Math.round(((effectiveTurnThink || 0) / splitSum) * 100) : 0;
+      const respRatioPct = 100 - thinkRatioPct;
+
+      const resolveCacheTier = (rateVal) =>
+        rateVal >= 95 ? 'good' : rateVal >= 90 ? 'fair' : rateVal >= 50 ? 'low' : 'bad';
+      const lastCacheTier = resolveCacheTier(Number(lastCacheRate) || 0);
+      const sessionCacheTier = resolveCacheTier(Number(sessionCacheRate) || 0);
+      const ctxVolTier = last.ctx > 400000 ? 'bad' : last.ctx >= 200000 ? 'fair' : 'good';
+
+      const compactSplitRowEn = effectiveThinkUnreported
+        ? `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">Output</span><span class="ag-tt-val">${fmtTok(effectiveTurnOut)} <span class="ag-tt-lbl">(Think+Resp merged)</span></span></div>`
+        : `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">Output Split</span><span class="ag-tt-split-group"><span class="ag-tt-split-ratio ag-tt-think-lbl">Think ${thinkRatioPct}%</span><span class="ag-tt-split-track"><span class="ag-tt-split-think" style="width:${thinkRatioPct}%"></span><span class="ag-tt-split-resp" style="width:${respRatioPct}%"></span></span><span class="ag-tt-split-ratio ag-tt-resp-lbl">Resp ${respRatioPct}%</span></span></div>`;
+      const compactSplitRowZh = effectiveThinkUnreported
+        ? `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">本轮输出</span><span class="ag-tt-val">${fmtTok(effectiveTurnOut)} <span class="ag-tt-lbl">(接口合并计入思考链)</span></span></div>`
+        : `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">输出比例</span><span class="ag-tt-split-group"><span class="ag-tt-split-ratio ag-tt-think-lbl">思考链 ${thinkRatioPct}%</span><span class="ag-tt-split-track"><span class="ag-tt-split-think" style="width:${thinkRatioPct}%"></span><span class="ag-tt-split-resp" style="width:${respRatioPct}%"></span></span><span class="ag-tt-split-ratio ag-tt-resp-lbl">正文/工具 ${respRatioPct}%</span></span></div>`;
+      const turnHdrLabelEn = isSubagentWakeTurns ? `Wake #${turnDisplayNum}` : `Turn #${turnDisplayNum}`;
+      const turnHdrLabelZh = isSubagentWakeTurns ? `第${turnDisplayNum}次唤醒` : `第${turnDisplayNum}轮`;
+      const subCompactRowHtml =
+        childCount > 0
+          ? isEnMetrics
+            ? `<div class="ag-tt-row"><span class="ag-tt-lbl">Subagents (${childCount}${subSyncing ? ' · syncing' : ''})</span><span class="ag-tt-val">${childCalls} calls · Out ${fmtTok(childOut)} (Total ${fmtTok(combinedOut)})</span></div>`
+            : `<div class="ag-tt-row"><span class="ag-tt-lbl">子 Agent (${childCount}${subSyncing ? ' · 同步中' : ''})</span><span class="ag-tt-val">${childCalls} 次 · 输出 ${fmtTok(childOut)}（总计 ${fmtTok(combinedOut)}）</span></div>`
+          : '';
+
+      tooltipHtml = isEnMetrics
+        ? [
+            `<div class="ag-tt-hdr"><span>Current Turn</span><span class="ag-tt-hdr-meta">${turnHdrLabelEn} · ${effectiveTurnSteps} ${effectiveTurnSteps === 1 ? 'step' : 'steps'} · ${turnDurStr}</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Throughput</span><span class="ag-tt-val">${useStream ? `Stream ${rawStreamTps.toFixed(1)} tok/s | ` : ''}E2E ${e2eTps.toFixed(1)} tok/s</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">Latency</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | Stream ${last.stream.toFixed(2)}s | Total ${last.totDur.toFixed(2)}s` : `Wait ${last.ttft.toFixed(2)}s | Flush ${last.stream.toFixed(2)}s | Total ${last.totDur.toFixed(2)}s`}</span></div>`,
+            `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">Net Input</span><span class="ag-tt-compact-right"><span class="ag-tt-val">+${fmtTok(effectiveTurnIn)}</span><span class="ag-tt-cache-tag ag-cache-${lastCacheTier}">Cache ${lastCacheRate}%</span></span></div>`,
+            compactSplitRowEn,
+            `<div class="ag-tt-hdr ag-tt-sec"><span>Session Total</span><span class="ag-tt-hdr-meta">${userStepsCount} ${turnsUnitEn} / ${valid.length} calls</span></div>`,
+            `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-bar-group"><span class="ag-tt-ctx-bar"><span class="ag-tt-ctx-fill ${ctxClass}" style="width:${clampedPct}%"></span></span><span class="ag-tt-bar-lbl ag-tt-num-${ctxVolTier}">${fmtTok(last.ctx)}/${limitStr} (${ctxPct}%)</span></span><span class="ag-tt-nowrap"><span class="ag-tt-lbl">Avg Cache </span><span class="ag-tt-val ag-tt-num-${sessionCacheTier}">${sessionCacheRate}%</span></span></div>`,
+            subCompactRowHtml
+          ].join('')
+        : [
+            `<div class="ag-tt-hdr"><span>当前轮次</span><span class="ag-tt-hdr-meta">${turnHdrLabelZh} 总${effectiveTurnSteps}步 共耗时${turnDurStr}</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">生成速度</span><span class="ag-tt-val">${useStream ? `流式 ${rawStreamTps.toFixed(1)} tok/s | ` : ''}端到端 ${e2eTps.toFixed(1)} tok/s</span></div>`,
+            `<div class="ag-tt-row"><span class="ag-tt-lbl">响应耗时</span><span class="ag-tt-val">${useStream ? `TTFT ${last.ttft.toFixed(2)}s | 流式 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s` : `等待 ${last.ttft.toFixed(2)}s | 刷出 ${last.stream.toFixed(2)}s | 总计 ${last.totDur.toFixed(2)}s`}</span></div>`,
+            `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-lbl">本轮净增</span><span class="ag-tt-compact-right"><span class="ag-tt-val">+${fmtTok(effectiveTurnIn)}</span><span class="ag-tt-cache-tag ag-cache-${lastCacheTier}">缓存率 ${lastCacheRate}%</span></span></div>`,
+            compactSplitRowZh,
+            `<div class="ag-tt-hdr ag-tt-sec"><span>会话总计</span><span class="ag-tt-hdr-meta">${userStepsCount} ${turnsUnitZh} / ${valid.length} 次调用</span></div>`,
+            `<div class="ag-tt-row ag-tt-row-merged"><span class="ag-tt-bar-group"><span class="ag-tt-ctx-bar"><span class="ag-tt-ctx-fill ${ctxClass}" style="width:${clampedPct}%"></span></span><span class="ag-tt-bar-lbl ag-tt-num-${ctxVolTier}">${fmtTok(last.ctx)}/${limitStr} (${ctxPct}%)</span></span><span class="ag-tt-nowrap"><span class="ag-tt-lbl">全轮次平均缓存 </span><span class="ag-tt-val ag-tt-num-${sessionCacheTier}">${sessionCacheRate}%</span></span></div>`,
+            subCompactRowHtml
+          ].join('');
+    }
 
     const payload = {
       cascadeId,
       hasData: true,
+      dbFound: true,
       sig: compositeSig,
       isDraining,
       partialStale,
@@ -1528,23 +1856,57 @@ const TA_SLUG_LABELS = {
   'gemini-pro-orchestrator-carbon': 'Orchestrator (Carbon)',
   'gemini-flash-worker-agy': 'Gemini 4 Hydrogen (Orchestrator)',
   'gemini-4-hydrogen': 'Gemini 4 Hydrogen',
+  'gemini-4-hydrogen-low': 'Gemini 4 Hydrogen (Low)',
+  'gemini-4-hydrogen-medium': 'Gemini 4 Hydrogen (Medium)',
+  'gemini-4-hydrogen-high': 'Gemini 4 Hydrogen (High)',
+  'gemini-4-hydrogen-xhigh': 'Gemini 4 Hydrogen (Extra High)',
+  'gemini-4-hydrogen-sonar': 'Gemini 4 Hydrogen (Sonar)',
   'gemini-4-hydrogen-tiered-high': 'Gemini 4 Hydrogen (High)',
+  'gemini-4-hydrogen-tiered-xhigh': 'Gemini 4 Hydrogen (Extra High)',
   'gemini-4-argon': 'Gemini 4 Argon',
+  'gemini-4-argon-b': 'Gemini 4 Argon (High)',
+  'gemini-4-argon-low': 'Gemini 4 Argon (Low)',
+  'gemini-4-argon-medium': 'Gemini 4 Argon (Medium)',
+  'gemini-4-argon-high': 'Gemini 4 Argon (High)',
   'gemini-4-argon-trial': 'Gemini 4 Argon',
   'gemini-4-carbon': 'Gemini 4 Carbon',
+  'gemini-4-carbon-low': 'Gemini 4 Carbon (Low)',
+  'gemini-4-carbon-medium': 'Gemini 4 Carbon (Medium)',
+  'gemini-4-carbon-high': 'Gemini 4 Carbon (High)',
   'gemini-4-neon': 'Gemini 4 Neon',
+  'gemini-4-neon-low': 'Gemini 4 Neon (Low)',
+  'gemini-4-neon-medium': 'Gemini 4 Neon (Medium)',
+  'gemini-4-neon-high': 'Gemini 4 Neon (High)',
+  'gemini-4-neon-xhigh': 'Gemini 4 Neon (XHigh)',
+  'gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.8-flash-n': 'Gemini 3.8 Flash',
+  'gemini-3.8-flash-low': 'Gemini 3.8 Flash (Low)',
+  'gemini-3.8-flash-medium': 'Gemini 3.8 Flash (Medium)',
+  'gemini-3.8-flash-high': 'Gemini 3.8 Flash (High)',
   'gemini-3.8-flash-tiered': 'Gemini 3.8 Flash',
+  'gemini-3.7-flash': 'Gemini 3.7 Flash',
+  'gemini-3.5-flash': 'Gemini 3.5 Flash',
+  'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+  'gemini-3-pro': 'Gemini 3 Pro',
+  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
   'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-sonnet-5-5-low': 'Claude Sonnet 5.5 (Low)',
   'claude-sonnet-5-5-medium': 'Claude Sonnet 5.5 (Medium)',
   'claude-sonnet-5-5-high': 'Claude Sonnet 5.5 (High)',
+  'claude-opus-4-6': 'Claude Opus 4.6',
   'claude-opus-4-6-thinking': 'Claude Opus 4.6 (Thinking)',
+  'claude-opus-5-5': 'Claude Opus 5.5',
+  'claude-opus-5-5-low': 'Claude Opus 5.5 (Low)',
   'claude-opus-5-5-medium': 'Claude Opus 5.5 (Medium)',
   'claude-opus-5-5-high': 'Claude Opus 5.5 (High)',
-  'gpt-oss-120b-medium': 'GPT-OSS 120B (Medium)'
+  'claude-opus-5-5-max': 'Claude Opus 5.5 (Max)',
+  'gpt-oss-120b-medium': 'GPT-OSS 120B (Medium)',
+  'gpt-oss-120b-maas': 'GPT-OSS 120B',
+  'gpt-oss-20b-maas': 'GPT-OSS 20B'
 };
 
-const TA_CACHE_SCHEMA_REV = 3;
+const TA_CACHE_SCHEMA_REV = 5;
 const TA_CACHE_FILE = path.join(CACHE_DIR, 'token-analytics-index.json');
 const TA_CACHE_SALT = crypto
   .createHash('sha1')
@@ -1765,12 +2127,13 @@ function taNormalizeProjectInfo(workspaceUris, projectId = '') {
   return { key: chosen.toLowerCase(), name: base, rawBasename: base, path: chosen, isTemp: false };
 }
 
-function taClassifyModelPool({ label = '', slug = '', modelEnum = '', usedClaude = '' } = {}) {
+function taClassifyModelPool({ label = '', slug = '', modelEnum = '', usedClaude = '', apiProvider = 0 } = {}) {
   const combined = `${label} ${slug} ${modelEnum}`.toLowerCase();
   if (combined.includes('argon')) return 'Argon';
-  if (combined.includes('claude') || combined.includes('gpt')) return 'Claude & GPT';
+  if (combined.includes('claude') || combined.includes('gpt')) return 'Claude';
   if (combined.includes('gemini') || combined.includes('orchestrator')) return 'Gemini';
-  if (String(usedClaude).toLowerCase() === 'true') return 'Claude & GPT';
+  if (apiProvider === 26 || apiProvider === 31 || apiProvider === 32) return 'Claude';
+  if (String(usedClaude).toLowerCase() === 'true') return 'Claude';
   return 'Gemini';
 }
 
@@ -1905,10 +2268,11 @@ function taParseGenMetadataRowToCall(row, { lookupTs, lookupPlanState, stepByIdx
   const slug = taFieldToStr(taGetField(chat, 19));
   const rawLabel = taFieldToStr(taGetField(chat, 21));
   const enumId = taGetField(usage, 1)?.v || taGetField(chat, 3)?.v || 0;
+  const apiProvider = taGetField(usage, 6)?.v || 0;
   const modelEnum = kv.model_enum || '';
   const usedClaude = kv.used_claude || '';
   const baseLabel = taNormalizeModelLabel({ label: rawLabel, slug, modelEnum, enumId });
-  const pool = taClassifyModelPool({ label: baseLabel, slug, modelEnum, usedClaude });
+  const pool = taClassifyModelPool({ label: baseLabel, slug, modelEnum, usedClaude, apiProvider });
 
   const slugLower = String(slug || '').toLowerCase();
   const labelTrim = String(baseLabel || '').trim();
@@ -1950,6 +2314,7 @@ function taParseGenMetadataRowToCall(row, { lookupTs, lookupPlanState, stepByIdx
   if (!state.firstParentCascadeId && parentCascadeId) state.firstParentCascadeId = parentCascadeId;
   if (!state.firstRootCascadeId && rootCascadeId) state.firstRootCascadeId = rootCascadeId;
   if (!state.firstSubagentType && subagentType) state.firstSubagentType = subagentType;
+  if (inTok === 0 && cacheRead === 0 && outTok === 0) return null;
 
   const isSubagentCall = Boolean(trajParentId || state.firstParentCascadeId || subagentType);
   const finalModelLabel =
@@ -2524,7 +2889,9 @@ async function queryTokenAnalytics(
       modelSet.add(c.model);
 
       const callIsSubagent = meta.isSubagent || Boolean(c.subagentType);
-      const subagentType = callIsSubagent ? c.subagentType || meta.agentName || 'subagent' : '';
+      const rawSubType =
+        c.subagentType === 'worker' && meta.agentName ? meta.agentName : c.subagentType || meta.agentName;
+      const subagentType = callIsSubagent ? rawSubType || 'subagent' : '';
       const scenario = taResolveCallScenario(c.baseScenario, callIsSubagent, meta.source);
       const date = taToLocalDateString(c.ts || meta.parsed.mtimeSec);
       const fKey = `${date}\x00${meta.id}\x00${c.model}\x00${c.pool}\x00${scenario}\x00${subagentType}`;
@@ -2753,6 +3120,27 @@ const HOST_PROBE_EXPRESSION = `(function(){
 
 function readPort(portFile) {
   return readPortInfo(portFile).port;
+}
+
+function redactTargetLabelForLog(raw) {
+  return String(raw || '').replace(/([?&#](?:access_)?token=)[^&#\s)]+/gi, '$1<redacted>');
+}
+
+let lastIframeInjectLogAt = 0;
+let lastIframeInjectLogVer = '';
+let suppressedIframeInjectCount = 0;
+
+function shouldLogIframeTargetLifecycle(patchVer) {
+  const now = Date.now();
+  if (patchVer !== lastIframeInjectLogVer || now - lastIframeInjectLogAt >= 600000) {
+    const extra = suppressedIframeInjectCount > 0 ? ` (+${suppressedIframeInjectCount} routine iframe mounts)` : '';
+    lastIframeInjectLogVer = patchVer;
+    lastIframeInjectLogAt = now;
+    suppressedIframeInjectCount = 0;
+    return { log: true, suffix: extra };
+  }
+  suppressedIframeInjectCount += 1;
+  return { log: false, suffix: '' };
 }
 
 function readPortInfo(portFile) {
@@ -3265,23 +3653,26 @@ function attachTarget(target, endpoint) {
       let lastNewDocSig = '';
 
       const buildTargetInjectScript = () => {
+        const uiLangVal = activeConfig.modules?.i18n === false ? 'en' : 'target';
         if (target.type !== 'iframe') {
-          return { script: cachedInjectScript, parentMode: '' };
+          return {
+            script: activeConfig.enabled
+              ? `window.__ag_host_ui_lang=${JSON.stringify(uiLangVal)};\n${cachedInjectScript}`
+              : cachedInjectScript,
+            parentMode: '',
+            uiLangVal
+          };
         }
         if (!activeConfig.enabled) {
-          return { script: cachedIframeInjectScript, parentMode: '' };
+          return { script: cachedIframeInjectScript, parentMode: '', uiLangVal };
         }
         const entry = attachedTargets.get(target.id);
         const parentMode = resolveParentThemeMode(entry || target, entry?.endpoint || endpoint) || '';
-        if (parentMode !== 'dark' && parentMode !== 'light') {
-          return {
-            script: `window.__ag_host_theme_mode=null;\n${cachedIframeInjectScript}`,
-            parentMode: ''
-          };
-        }
+        const modeVal = parentMode === 'dark' || parentMode === 'light' ? parentMode : null;
         return {
-          script: `window.__ag_host_theme_mode=${JSON.stringify(parentMode)};\n${cachedIframeInjectScript}`,
-          parentMode
+          script: `window.__ag_host_theme_mode=${modeVal ? JSON.stringify(modeVal) : 'null'};\nwindow.__ag_host_ui_lang=${JSON.stringify(uiLangVal)};\n${cachedIframeInjectScript}`,
+          parentMode: modeVal || '',
+          uiLangVal
         };
       };
 
@@ -3289,8 +3680,8 @@ function attachTarget(target, endpoint) {
         newDocQueue = newDocQueue
           .then(async () => {
             if (!hostConfirmed || nonHostSettled || ws.readyState !== WebSocket.OPEN) return;
-            const { script, parentMode } = buildTargetInjectScript();
-            const nextSig = `${activeConfig.enabled}|${cachedPatchVersion}|${parentMode}`;
+            const { script, parentMode, uiLangVal } = buildTargetInjectScript();
+            const nextSig = `${activeConfig.enabled}|${cachedPatchVersion}|${uiLangVal || ''}|${parentMode}`;
             if (!force && evalScriptId && nextSig === lastNewDocSig) return;
             if (evalScriptId) {
               await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: evalScriptId });
@@ -3348,7 +3739,16 @@ function attachTarget(target, endpoint) {
               }
             }
           }
-          console.log(`[Daemon] Injected (${cachedPatchVersion}) into target ${target.id} [${endpoint.channel}]`);
+          if (target.type === 'iframe') {
+            const gate = shouldLogIframeTargetLifecycle(cachedPatchVersion);
+            if (gate.log) {
+              console.log(
+                `[Daemon] Injected (${cachedPatchVersion}) into iframe ${target.id} [${endpoint.channel}]${gate.suffix}`
+              );
+            }
+          } else {
+            console.log(`[Daemon] Injected (${cachedPatchVersion}) into target ${target.id} [${endpoint.channel}]`);
+          }
           return true;
         }
       };
@@ -3443,7 +3843,7 @@ function attachTarget(target, endpoint) {
             if (force && payload?.cachedPayload) pendingUpdates.push({ cid, payload: payload.cachedPayload });
             continue;
           }
-          const renderedSig = `${payload.hasData ? '1' : '0'}\n${payload.inlineHtml || ''}\n${payload.tooltipHtml || ''}`;
+          const renderedSig = `${payload.hasData ? '1' : '0'}:${payload.dbFound ? '1' : '0'}\n${payload.inlineHtml || ''}\n${payload.tooltipHtml || ''}`;
           if (force || renderedSig !== state.lastRenderedSig) {
             pendingUpdates.push({ cid, payload, state, renderedSig, sessionKey, canCommitHash: !payload.isDraining && !payload.partialStale });
           } else state.lastPushedHash = !payload.isDraining && !payload.partialStale ? sessionKey : '';
@@ -3474,18 +3874,34 @@ function attachTarget(target, endpoint) {
         }
       };
 
+      let queuedMetricsSync = null;
       const syncMetricsForSession = (force = false, skipDomEval = false) => {
         if (metricsSyncPromise) {
-          metricsQueuedForce ||= force;
+          queuedMetricsSync = {
+            force: Boolean(queuedMetricsSync?.force || force),
+            skipDomEval: queuedMetricsSync ? Boolean(queuedMetricsSync.skipDomEval && skipDomEval) : Boolean(skipDomEval)
+          };
           return metricsSyncPromise;
         }
-        const requestedForce = force || metricsQueuedForce;
-        metricsQueuedForce = false;
-        metricsSyncPromise = runMetricsSync(requestedForce, skipDomEval).catch(() => {}).finally(() => {
-          metricsSyncPromise = null;
-          // Coalesce subscription bursts. The next normal scheduler pass services the
-          // newest generation; no unbounded immediate retry loop can drain DB budgets.
-        });
+        metricsSyncPromise = (async () => {
+          let curForce = force;
+          let curSkip = skipDomEval;
+          try {
+            let hops = 0;
+            while (hops < 2) {
+              hops += 1;
+              await runMetricsSync(curForce, curSkip);
+              if (!queuedMetricsSync) break;
+              curForce = queuedMetricsSync.force;
+              curSkip = queuedMetricsSync.skipDomEval;
+              queuedMetricsSync = null;
+            }
+          } catch {}
+          finally {
+            queuedMetricsSync = null;
+            metricsSyncPromise = null;
+          }
+        })();
         return metricsSyncPromise;
       };
 
@@ -3672,7 +4088,18 @@ function attachTarget(target, endpoint) {
         if (entry && entry.ws === ws) {
           entry.hostConfirmed = true;
         }
-        console.log(`[Daemon] Attached target: ${target.id} (${target.title || 'Untitled'}) [${endpoint.channel}]`);
+        if (target.type === 'iframe') {
+          const gate = shouldLogIframeTargetLifecycle(cachedPatchVersion);
+          if (gate.log) {
+            console.log(
+              `[Daemon] Attached iframe: ${target.id} (${redactTargetLabelForLog(target.title || target.url || 'iframe')}) [${endpoint.channel}]${gate.suffix}`
+            );
+          }
+        } else {
+          console.log(
+            `[Daemon] Attached target: ${target.id} (${redactTargetLabelForLog(target.title || 'Untitled')}) [${endpoint.channel}]`
+          );
+        }
         if (!pageEnabled) {
           pageEnabled = true;
           await send('Page.enable');
@@ -3690,6 +4117,7 @@ function attachTarget(target, endpoint) {
           if (target.type === 'page') {
             await send('Runtime.addBinding', { name: '__agRequestMetrics' });
             await send('Runtime.addBinding', { name: '__agRequestHardReload' });
+            await send('Runtime.addBinding', { name: '__agSetUiLang' });
             await send('Runtime.addBinding', { name: '__agSyncHostThemeMode' });
             await send('Runtime.addBinding', { name: '__agRequestTokenAnalytics' });
           }
@@ -3835,7 +4263,21 @@ function attachTarget(target, endpoint) {
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestMetrics') {
             if (!hostConfirmed || nonHostSettled || target.type !== 'page' || !activeConfig.enabled) return;
             const parsed = parseMetricsSubscriptionPayload(msg.params.payload);
-            if (parsed.valid && acceptMetricsSubscription(parsed.ids)) syncMetricsForSession(true, true);
+            if (parsed.valid) {
+              const changed = acceptMetricsSubscription(parsed.ids);
+              if (changed || parsed.ids.length > 0) {
+                syncMetricsForSession(true, true);
+              }
+            }
+            return;
+          }
+          if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agSetUiLang') {
+            if (!hostConfirmed || nonHostSettled || target.type !== 'page' || !activeConfig.enabled) return;
+            const normLang = normalizeUiLangValue(msg.params.payload);
+            const persistedOk = SAFE_MODE ? true : persistUiLangToUserConfig(normLang, true);
+            if (persistedOk) {
+              broadcastUiLangToTargets(normLang, target.id);
+            }
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestTokenAnalytics') {

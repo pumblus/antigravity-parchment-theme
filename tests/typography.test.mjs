@@ -304,7 +304,7 @@ for (const mode of ['light', 'dark']) {
       assert.equal(await composerTray.evaluate(el => getComputedStyle(el).boxShadow), 'none');
       assert.equal(await composerTray.evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
       assert.equal(await styleOf('composer-card', 'boxShadow'), 'none');
-      assert.equal(await styleOf('composer-card', 'borderTopWidth'), '1px');
+      assert.equal(await styleOf('composer-card', 'borderTopWidth'), '0px');
 
       // Primary Send CTA uses Anthropic Clay (#D97757 -> rgb(217, 119, 87)) with #FAF9F5 text and zero shadow.
       assert.equal(await styleOf('send-btn', 'backgroundColor'), 'rgb(217, 119, 87)');

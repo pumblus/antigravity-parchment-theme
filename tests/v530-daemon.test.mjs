@@ -39,7 +39,7 @@ test('v530 actual top-level cold startup supports custom context limits without 
 });
 test('v530 explicit origins still strictly override defaults',async t=>{for(const allowedOrigins of [[],['plugin://swarm--mine']]){const h=await harness(t,{allowedOrigins});assert.deepEqual(Array.from(h.api.activeConfig.allowedOrigins),allowedOrigins);}});
 test('v530 temporary SQLite parses model context, stream ratio, override and tail replacement',async t=>{
- const h=await harness(t);const p=h.makeDb(parent);let n=0;const run=()=>h.api.parseConversationMetrics(parent,h.dir,{dbPath:p,sig:'s'+(++n)},{sig:'c'+n,descendantIds:[]});
+ const h=await harness(t,{metricsMode:'full'});const p=h.makeDb(parent);let n=0;const run=()=>h.api.parseConversationMetrics(parent,h.dir,{dbPath:p,sig:'s'+(++n)},{sig:'c'+n,descendantIds:[]});
  let result=run();assert.match(result.inlineHtml,/100 tok\/s/);assert.match(result.inlineHtml,/TTFT/);assert.match(result.inlineHtml,/\/1M/);
  const db=new DatabaseSync(p);t.after(()=>db.close());db.prepare('UPDATE gen_metadata SET data=?').run(generation(100,99,1));result=run();assert.match(result.inlineHtml,/1 tok\/s/);assert.match(result.inlineHtml,/Hold/);assert.match(result.tooltipHtml,/总计 100 /);
  db.prepare('UPDATE gen_metadata SET data=?').run(generation(200,1,2));result=run();assert.match(result.tooltipHtml,/总计 200 /);assert.doesNotMatch(result.tooltipHtml,/总计 300 /);
@@ -73,8 +73,8 @@ test('v530 lineage indexing obeys per-tick open budget and retries metadata popu
  h.api.refreshLineageIndex(h.dir);assert.ok(h.api.findDescendantIds(parent,h.api.lineageStateByDir.get(h.dir)).includes(child));
 });
 test('v530 config hot reload invalidates rendered payload cache and applies override',async t=>{
- const h=await harness(t);h.makeDb(parent);const old=h.api.parseConversationMetrics(parent,h.dir);assert.match(old.inlineHtml,/\/1M/);assert.ok(h.api.metricsCache.size>0);
- const cfg=path.join(h.tmp,'user/config.json');fs.writeFileSync(cfg,JSON.stringify({contextLimitOverride:500000}));const future=new Date(Date.now()+5000);fs.utimesSync(cfg,future,future);
+ const h=await harness(t,{metricsMode:'full'});h.makeDb(parent);const old=h.api.parseConversationMetrics(parent,h.dir);assert.match(old.inlineHtml,/\/1M/);assert.ok(h.api.metricsCache.size>0);
+ const cfg=path.join(h.tmp,'user/config.json');fs.writeFileSync(cfg,JSON.stringify({metricsMode:'full',contextLimitOverride:500000}));const future=new Date(Date.now()+5000);fs.utimesSync(cfg,future,future);
  assert.equal(h.api.rebuildBundleIfNeeded(),true);assert.equal(h.api.metricsCache.size,0);const next=h.api.parseConversationMetrics(parent,h.dir);assert.match(next.inlineHtml,/\/500k/);
 });
 test('v530 lineage rotation rechecks >64 placeholders and corrects existing parent relationships',async t=>{
@@ -90,7 +90,7 @@ test('v530 lineage rotation rechecks >64 placeholders and corrects existing pare
  assert.equal(h.api.findDescendantIds(parent,state).includes(id),false);assert.equal(h.api.findDescendantIds(grand,state).includes(id),true);
 });
 test('v530 child-only writes invalidate parent capsule cache and deleted children leave the index',async t=>{
- const h=await harness(t);const p=h.makeDb(parent);const cp=h.makeDb(child,generation(200),parent,parent);
+ const h=await harness(t,{metricsMode:'full'});const p=h.makeDb(parent);const cp=h.makeDb(child,generation(200),parent,parent);
  const beforeStat=fs.statSync(p);const first=h.api.parseConversationMetrics(parent,h.dir);assert.match(first.tooltipHtml,/总计 300/);
  const cached=h.api.parseConversationMetrics(parent,h.dir);assert.equal(cached,first);
  const db=new DatabaseSync(cp);db.prepare('UPDATE gen_metadata SET data=?').run(generation(400));db.close();
@@ -155,6 +155,6 @@ test('translation review macOS trash defaults preserve exact personal overrides'
  assert.equal(browser.__testBoot.i18nDict.Trash,'我的自定义名称');
 });
 test('translation review metrics labels distinguish model capacity from compression and parent totals', async t => {
- const h=await harness(t);h.makeDb(parent);h.makeDb(child,generation(200),parent,parent);
+ const h=await harness(t,{metricsMode:'full'});h.makeDb(parent);h.makeDb(child,generation(200),parent,parent);
  const result=h.api.parseConversationMetrics(parent,h.dir);assert.match(result.tooltipHtml,/上下文窗口用量/);assert.match(result.tooltipHtml,/剩余容量/);assert.match(result.tooltipHtml,/主会话累计/);assert.match(result.tooltipHtml,/主会话累计输入/);assert.match(result.tooltipHtml,/总计 300 \(主 100 \+ 子 200\)/);assert.doesNotMatch(result.tooltipHtml,/压缩水位|距压缩/);
 });

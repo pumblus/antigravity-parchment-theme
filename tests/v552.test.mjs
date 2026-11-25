@@ -150,7 +150,7 @@ test('v552 daemon Browser CDP event discovery attaches created targets, guards r
         let value = true;
         if (m.method === 'Runtime.evaluate') {
           if (m.params.expression.includes("return 'non_host'")) value = 'host';
-          else if (m.params.expression === 'TEST_INJECT') {
+          else if (m.params.expression.includes('TEST_INJECT')) {
             attachedUrls.push(this.url);
             value = 'light';
           }

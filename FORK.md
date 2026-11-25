@@ -2,8 +2,8 @@
 
 ## 来源与版本
 
-- 版本：`5.5.5-eric.1`（macOS 专用）。
-- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v5.5.5` / `7cfffb878df1720dd9333b04d6c7532eccf51f09`，不是完整合并。
+- 版本：`6.0.3-eric.1`（macOS 专用）。
+- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v6.0.3` / `c345f54`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
 - 保留 `d0d7d87` 及之前的全部用户设计提交；未推送、未触发远端 CI。
 
@@ -16,6 +16,22 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 6.0.3-eric.1 源码选择性融合（2026-11-25）
+
+- 保留本分支 Anthropic 暖羊皮纸（`#FAF9F5` / `#F0EEE6` / `#E3DACC`）与 Slate Dark 暖墨黑（`#141413` / `#191917` / `#1F1E1C`）视觉体系、`Anthropic Sans/Serif/Mono` + `PingFang SC` 字体栈、零 `#FFFFFF`、零 `box-shadow` 与 macOS 同心超椭圆几何；选择性移植上游 `v6.0.0..v6.0.3` 中适用于 macOS 专版的交互、性能与 Antigravity `2.35.1` 适配：
+  1. **三段式样式隔离、单层输入框与零 `:has()` 性能清理（`core/theme.css` / `core/runtime.js`）**：
+     - 拆分 `#ag-font-faces`（常驻 `@font-face` 注册表，永不移动）、`#ag-custom-fonts`（主题规则）与 `#ag-ui-widgets`（语言切换、指标胶囊、Token 统计）三段 `<style>`；
+     - 输入框外框去内边距、内卡去独立描边，收敛为单层 `1px` 扁平细边并保持 `12px/11px` 同心圆角与顶栏托盘分隔；
+     - 移除 `core/theme.css` 与 `core/runtime.js` 中全部 `:has()` 反向选择器；补充侧栏不透明 `--sidebar` 覆盖、工具栏按钮柔和焦点态及暖羊皮纸/Slate Dark 低饱和 `--syntax-*` / `--color-diffEditor-*` 变量。
+  2. **设置 → 外观免刷新 `[EN | 中文]` 语言切换与 `2.35.1` 汉化（`core/i18n.json` / `core/runtime.js` / `core/daemon.mjs`）**：
+     - 仅在 `.agy-card` 末尾挂载独立 `[EN | 中文]` 切换行，不改动原生 3 枚主题按钮；切换时免重新注入实时翻译/还原全部页面与 Swarm 子帧，并经 `__agSetUiLang` 原子写回 `user/config.json` 的 `modules.i18n`（保留其余字段）；
+     - 词典扩至 `2,226` 条（零重复、零大小写与弯直引号碰撞，统一双引号与“任务组”/“浏览器 Agent”术语），完成 `2.35.1` 35 处 Title Case → Sentence case 迁移，补齐子 Agent、步骤计划、面包屑实体防误译、蜂巢图谱动态规则及 Swarm 1.5s 轮询实例级 DOM 防闪烁护盾。
+  3. **底部圆环指标胶囊与 Token 统计升级（`core/daemon.mjs` / `core/runtime.js` / `core/theme.css`）**：
+     - 默认切换为 `metricsMode: 'compact'`（SVG 圆环进度 + 4 行条形悬浮详情卡，仍支持 `metricsMode: 'full'`），补齐 Claude 合并思考展示、子 Agent/Swarm `step_type = 101` `[Message]` 唤醒轮次口径、`dbFound` 远程 SSH 采样门禁、260ms 悬停意图防误触、自愈订阅重试、DOM 局部观察器与 2-hop 队列合批；
+     - Token 统计升级至 `TA_CACHE_SCHEMA_REV = 5`（55 项模型标签映射、合并配额池名为 `Claude`、跳过全零行、Swarm `worker` 归入实际成员名），前端升级为容器查询 `4:3` 布局、CSS `subgrid` 列对齐、定高日期舞台、常驻筛选条与 `ResizeObserver` 溢出渐隐遮罩。
+  4. **诊断增强（`install.mjs`）**：`inspectLiveWindow` 增加 `uiLang` 字段；`doctor` 新增 `coreIntegrity.sourceSync` 比对源码仓库与已安装目录的 SHA-256 同步状态。
+- 未带入上游莫兰迪色与 5 槽主题切换器、外观「跟随系统」开关、Google Sans Flex / macOS 润墨、`claude-warm` 预设、Windows/WSL/Linux 代码及 `v6.0.2` Google Drive 字体自动下载器。
 
 ## 5.5.5-eric.1 源码同步与实机热更新（2026-11-23 UTC）
 

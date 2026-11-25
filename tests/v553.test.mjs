@@ -65,7 +65,7 @@ test('v553 CSS adapts 2.34.0 browser holes, file inline-pills, removes trailing 
 });
 
 test('v553 i18n adds 80 entries with unified terminology, ellipsis fallback, effortless model labels, and Quote/Comment context guards', () => {
-  assert.equal(Object.keys(dict).length, 1958);
+  assert.equal(Object.keys(dict).length, 2226);
   assert.equal(dict['Where each worker is, by thread'], '按任务组查看各成员当前位置');
   assert.equal(dict['Cannot promote during Battle Mode — end the battle first'], '对战模式进行中无法转为独立对话，请先结束当前对战');
   assert.equal(
@@ -254,7 +254,7 @@ test('v553 daemon SQLite Token Analytics aggregates main + subagent trajectories
     assert.equal(first.conversations[subId].rootId, rootId);
     assert.ok(first.facts.some((f) => f.cid === rootId && f.scenario === 'tools' && f.pool === 'Gemini'));
     assert.ok(first.facts.some((f) => f.cid === rootId && f.scenario === 'planning' && f.model === 'Orchestrator (Neon)'));
-    assert.ok(first.facts.some((f) => f.cid === subId && f.scenario === 'subagent' && f.pool === 'Claude & GPT'));
+    assert.ok(first.facts.some((f) => f.cid === subId && f.scenario === 'subagent' && f.pool === 'Claude'));
     assert.ok(first.facts.some((f) => f.cid === tmpConvId && f.scenario === 'internal'));
 
     const second = await ctx.api.runTokenAnalyticsQuery({ channel: 'stable', conversationsDir: convDir }, { maxDays: 30, nowSec });

@@ -28,7 +28,7 @@ test('v543 runtime two panes receive separate payloads, one primary ID, own tool
  assert.match(await page.locator('[data-pane-id="one"] '+pill).textContent(),/Alpha/);assert.match(await page.locator('[data-pane-id="two"] '+pill).textContent(),/Beta/);
  assert.equal(await page.locator('#ag-live-metrics-pill').count(),1);assert.equal(await page.locator('#ag-live-metrics-text').count(),1);
  assert.equal(await page.locator('#ag-live-metrics-pill').getAttribute('data-ag-cascade-id'),B);
- for(const [name,label] of [['one','Alpha'],['two','Beta']]){await page.locator(`[data-pane-id="${name}"] ${pill}`).hover();assert.equal(await page.locator('#ag-live-metrics-tooltip').textContent(),label+' detail');}
+ for(const [name,label] of [['one','Alpha'],['two','Beta']]){await page.locator(`[data-pane-id="${name}"] ${pill}`).hover();await page.waitForFunction(exp=>document.getElementById('ag-live-metrics-tooltip')?.getAttribute('data-visible')==='1'&&document.getElementById('ag-live-metrics-tooltip')?.textContent===exp,label+' detail');}
  const styles=await page.locator('[data-pane-id="one"] '+pill).evaluate(el=>({font:getComputedStyle(el).fontFamily,badge:getComputedStyle(el.querySelector('.ag-sub-badge')).color}));
  assert.match(styles.font,/Anthropic Sans/);assert.equal(styles.badge,'rgb(86, 85, 79)');
 });

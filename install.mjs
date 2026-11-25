@@ -109,7 +109,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.5.5-eric.1',
+    version: '6.0.3-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -519,6 +519,7 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
                   hasUserStyle: !!document.getElementById('antigravity-user-custom-style'),
                   preset: document.documentElement ? document.documentElement.getAttribute('data-ag-preset') : null,
                   themeMode: document.documentElement ? document.documentElement.getAttribute('data-ag-theme-mode') : null,
+                  uiLang: document.documentElement ? document.documentElement.getAttribute('data-ag-lang') : null,
                   pageType: document.documentElement ? document.documentElement.getAttribute('data-ag-page-type') : null,
                   waxSeal: document.documentElement ? document.documentElement.getAttribute('data-ag-wax-seal') : null,
                   dictCount: window.__ag_i18n_dict ? Object.keys(window.__ag_i18n_dict).length : 0,
@@ -590,11 +591,91 @@ async function inspectLiveWindow(portFileOrEnv, fallbackPort = 9222) {
 // ============================================================================
 // 3. 子命令实现：doctor / install / verify / rollback / uninstall
 // ============================================================================
+function extractBaseSemverTuple(verStr) {
+  const m = String(verStr || '').match(/v?(\d+)\.(\d+)\.(\d+)/i);
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+}
+
+function compareSemverTuples(a, b) {
+  if (!a || !b) return 0;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+function inspectSourceSync(sourceDir, targetDir) {
+  if (isSameTargetPath(sourceDir, targetDir)) {
+    return { sameDirectory: true, inSync: true, sourceOlder: false, outdatedFiles: [] };
+  }
+  const srcManifestPath = path.join(sourceDir, 'core', 'manifest.json');
+  const dstManifestPath = path.join(targetDir, 'core', 'manifest.json');
+  if (!fs.existsSync(srcManifestPath)) return null;
+  if (!fs.existsSync(dstManifestPath)) {
+    return {
+      sourceDir,
+      targetDir,
+      inSync: false,
+      sourceOlder: false,
+      reason: 'target_manifest_missing',
+      outdatedFiles: ['core/manifest.json']
+    };
+  }
+  try {
+    const srcManifest = JSON.parse(fs.readFileSync(srcManifestPath, 'utf8'));
+    const dstManifest = JSON.parse(fs.readFileSync(dstManifestPath, 'utf8'));
+    const fileNames = new Set([
+      ...Object.keys(srcManifest.files || {}),
+      ...Object.keys(dstManifest.files || {})
+    ]);
+    const outdatedFiles = [];
+    for (const name of fileNames) {
+      const srcFile = path.join(sourceDir, 'core', name);
+      const dstFile = path.join(targetDir, 'core', name);
+      const srcSha = fs.existsSync(srcFile) ? sha256File(srcFile) : null;
+      const dstSha = fs.existsSync(dstFile) ? sha256File(dstFile) : null;
+      if (srcSha !== dstSha) {
+        outdatedFiles.push(`core/${name}`);
+      }
+    }
+    if (sha256File(srcManifestPath) !== sha256File(dstManifestPath)) {
+      outdatedFiles.push('core/manifest.json');
+    }
+    const srcInstaller = path.join(sourceDir, 'install.mjs');
+    const dstInstaller = path.join(targetDir, 'install.mjs');
+    if (fs.existsSync(srcInstaller) && fs.existsSync(dstInstaller) && sha256File(srcInstaller) !== sha256File(dstInstaller)) {
+      outdatedFiles.push('install.mjs');
+    }
+    const verCmp = compareSemverTuples(
+      extractBaseSemverTuple(srcManifest.version),
+      extractBaseSemverTuple(dstManifest.version)
+    );
+    const sourceOlder = verCmp < 0;
+    return {
+      sourceDir,
+      targetDir,
+      sourceVersion: srcManifest.version || null,
+      targetVersion: dstManifest.version || null,
+      sourceOlder,
+      inSync: outdatedFiles.length === 0,
+      outdatedFiles,
+      syncHint:
+        outdatedFiles.length > 0 && !sourceOlder
+          ? `node ${JSON.stringify(path.join(sourceDir, 'install.mjs'))} install`
+          : null
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function runDoctor() {
   const channel = getArg('--channel', 'auto');
   const targetDir = path.resolve(getArg('--target-dir', resolveDefaultTargetDir()));
   const env = await detectEnvironment(channel);
   const integrity = verifyCoreIntegrity(targetDir);
+  const sourceSync = inspectSourceSync(__dirname, targetDir);
   const live = await inspectLiveWindow(env);
 
   const report = {
@@ -624,7 +705,8 @@ async function runDoctor() {
     coreIntegrity: {
       targetDir,
       clean: integrity.ok,
-      modifiedFiles: integrity.modified
+      modifiedFiles: integrity.modified,
+      ...(sourceSync && !sourceSync.sameDirectory ? { sourceSync } : {})
     },
     liveWindow: live
   };

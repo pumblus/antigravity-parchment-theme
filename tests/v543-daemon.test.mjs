@@ -21,7 +21,7 @@ function harness(){
    if(e.includes('const ack = []')){const window={__ag_patch_version:model.version,__ag_watched_cascade_sig:model.sig};if(model.renderer)window.__ag_render_metrics=p=>{model.rendered.push(p);return model.ids.includes(p.cascadeId);};value=vm.runInNewContext(e,{window});}
    else if(e.includes('Array.isArray(window.__ag_watched_cascade_ids)'))value={ids:[...model.ids],...(model.explicit?{signature:model.sig}:{})};
    else if(e.includes("return 'non_host'"))value=model.kind;
-   else if(e==='TEST_INJECT')value='light';
+   else if(e.includes('TEST_INJECT'))value='light';
   }
   const respond=()=>this.handlers.message({data:JSON.stringify({id:m.id,result:{identifier:'s',result:{value}}})});
   if(model.hold?.(m)){model.held.push(respond);}else queueMicrotask(respond);
@@ -49,12 +49,13 @@ test('v543 multi-pane batches render by cid, deduplicate unchanged payload and u
 });
 test('v543 stale DOM response cannot overwrite a newer explicit subscription',async()=>{
  const h=harness();await h.open();await h.subscribe([A]);h.model.hold=m=>m.params.expression?.includes('Array.isArray(window.__ag_watched_cascade_ids)');
- const pending=h.entry().syncMetricsForSession(true);await flush();await h.subscribe([B]);h.model.hold=null;for(const done of h.model.held)done();await pending;
- h.reads.length=0;h.model.rendered=[];await h.entry().syncMetricsForSession();assert.deepEqual(h.reads,[B]);assert.deepEqual(h.model.rendered.map(p=>p.cascadeId),[B]);
+ const pending=h.entry().syncMetricsForSession(true);await flush();await h.subscribe([B]);h.reads.length=0;h.model.rendered=[];h.model.hold=null;for(const done of h.model.held)done();await pending;await flush();
+ assert.deepEqual(h.reads,[B]);assert.deepEqual(h.model.rendered.map(p=>p.cascadeId),[B]);
+ h.reads.length=0;h.model.rendered=[];h.model.dbVersion++;await h.entry().syncMetricsForSession();assert.deepEqual(h.reads,[B]);assert.deepEqual(h.model.rendered.map(p=>p.cascadeId),[B]);
 });
 test('v543 stale render ack cannot commit new subscription state',async()=>{
- const h=harness();await h.open();h.model.hold=m=>m.params.expression?.includes('const ack = []');await h.subscribe([A]);await h.subscribe([B]);h.model.hold=null;for(const done of h.model.held)done();await flush();
- h.model.rendered=[];await h.entry().syncMetricsForSession();assert.deepEqual(h.model.rendered.map(p=>p.cascadeId),[B]);
+ const h=harness();await h.open();h.model.hold=m=>m.params.expression?.includes('const ack = []');await h.subscribe([A]);await h.subscribe([B]);h.model.rendered=[];h.model.hold=null;for(const done of h.model.held)done();await flush();
+ assert.deepEqual(h.model.rendered.map(p=>p.cascadeId),[B]);
 });
 test('v543 missing renderer and false acknowledgement never suppress retry',async()=>{
  const h=harness();await h.open();h.model.renderer=false;await h.subscribe([A]);assert.equal(h.model.rendered.length,0);

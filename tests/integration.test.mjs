@@ -33,7 +33,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '5.5.5-eric.1');
+  assert.equal(manifest.version, '6.0.3-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -41,7 +41,7 @@ test('core manifest matches every shipped byte', () => {
   }
 });
 test('dictionary keeps upstream coverage and clear permission labels without case duplicates', () => {
-  assert.equal(Object.keys(dict).length, 1958);
+  assert.equal(Object.keys(dict).length, 2226);
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map(k => k.toLowerCase().replace(/[‘’]/g, "'"))).size, keys.length);
@@ -255,7 +255,7 @@ test('translation review audits all 32 divergent and 16 supplemental entries', (
  const review=JSON.parse(read('translation-review.json'));
  assert.equal(review.sameKeyDifferences,32);assert.equal(review.additionalKeys,16);assert.equal(review.entries.length,48);
  for(const item of review.entries)assert.equal(dict[item.key],item.chosen,item.key);
- assert.equal(Object.keys(dict).length,1958);
+ assert.equal(Object.keys(dict).length,2226);
  for(const key of ['Notice','Display'])assert.equal(dict[key],key==='Notice'?'提示':'显示');
  assert.equal(dict['At mention code block'],'引用代码块（@）');
  assert.equal(dict['Agent response'],'Agent 回复');
@@ -283,7 +283,7 @@ test('translation review distinguishes active elapsed states and queue timing', 
 test('translation review preserves privacy, billing and review distinctions', () => {
  const review=JSON.parse(read('translation-review.json'));for(const item of review.sharedCorrections)assert.equal(dict[item.key],item.chosen,item.key);
  assert.equal(dict['Telemetry will be enabled for this conversation; click to disable.'],'此对话将启用遥测上报；点击可关闭。');
- assert.equal(dict['Enable AI Credit Overages'],'启用 AI 点数超额使用');
+ assert.equal(dict['Enable AI credit overages'],'启用 AI 点数超额使用');
  assert.equal(dict['Allow full browser script execution without prompting.'],'允许执行所有浏览器脚本，不请求确认。');
  const strict=dict[Object.keys(dict).find(k=>k.startsWith('Enforce settings that prevent'))];for(const word of ['定向漏洞利用','所有 Agent 操作','人工审阅','antigravity.google/docs/strict-mode'])assert.ok(strict.includes(word),word);
  assert.equal(dict['Plan Review Policy'],'计划审阅策略');

@@ -148,8 +148,8 @@ function buildTaVm(DatabaseSync, cacheDir, { safeMode = false, runOnce = false }
 }
 
 test('v554 static checks: composer eliminates :not(:has), Token Analytics CSS keeps flat Anthropic spec, daemon stays macOS-only', () => {
-  const composerBlock = sliceBetween(cssSrc, '/* 具体会话（基础层', '/* 显式关闭外框三态模块时固定 1px 石色细边 */').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.ok(!composerBlock.includes(':not(:has('), 'composer border cascade must not use :not(:has(...))');
+  const composerBlock = sliceBetween(cssSrc, '/* 输入框单层 1px 扁平细边几何', '/* 显式关闭外框三态模块时固定 1px 石色细边 */').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!composerBlock.includes(':has('), 'composer border cascade must not use :has(...)');
   assert.ok(!/#74221a\b/i.test(composerBlock), 'composer border must stay Anthropic flat neutral border');
 
   const taCss = sliceBetween(cssSrc, '/* __AG_TOKEN_ANALYTICS_CSS_START__ */', '/* __AG_TOKEN_ANALYTICS_CSS_END__ */');
@@ -227,7 +227,7 @@ test('v554 daemon Token Analytics: memory JSON guard, Orchestrator plan timeline
     assert.equal(r1.stats.totalCalls, 4);
     assert.ok(r1.facts.some((f) => f.model === 'Orchestrator (Neon · High)' && f.scenario === 'planning' && f.pool === 'Gemini'));
     assert.ok(r1.facts.some((f) => f.model === 'Gemini 4 Argon' && f.scenario === 'tools' && f.pool === 'Argon'));
-    assert.ok(r1.facts.some((f) => f.model === 'GPT-OSS 120B (Medium)' && f.scenario === 'memory' && f.pool === 'Claude & GPT'));
+    assert.ok(r1.facts.some((f) => f.model === 'GPT-OSS 120B (Medium)' && f.scenario === 'memory' && f.pool === 'Claude'));
     assert.ok(r1.facts.some((f) => f.model === 'Orchestrator (Carbon)' && f.scenario === 'planning'));
 
     // 3) Verify _inc state kept for recent (<24h) DB and incremental delta append works
@@ -244,7 +244,7 @@ test('v554 daemon Token Analytics: memory JSON guard, Orchestrator plan timeline
 
     const r2 = await api.runTokenAnalyticsQuery({ channel: 'stable', conversationsDir: convDir }, { maxDays: 30, nowSec });
     assert.equal(r2.stats.totalCalls, 5);
-    assert.ok(r2.facts.some((f) => f.model === 'Claude Sonnet 5.5 (Medium)' && f.scenario === 'chat' && f.pool === 'Claude & GPT'));
+    assert.ok(r2.facts.some((f) => f.model === 'Claude Sonnet 5.5 (Medium)' && f.scenario === 'chat' && f.pool === 'Claude'));
 
     // 4) Simulate Undo rewriting frozen anchor row (idx=2) while keeping row count >= prev => anchor fails -> full rescan picks up change
     const db3 = new DatabaseSync(dbPath);
@@ -458,10 +458,10 @@ test('v554 runtime Token Analytics: Today range, Shift+hard refresh, debounced s
     assert.ok((await page.textContent('#ag-ta-filter-pills')).includes(oldStr));
     await page.click('#ag-ta-range-sw [data-range="1"]');
     const todayState = await page.evaluate(() => ({
-      filtersHidden: document.getElementById('ag-ta-filters-bar').hidden,
+      filtersActive: document.getElementById('ag-ta-filters-bar').getAttribute('data-active'),
       tbodyText: document.getElementById('ag-ta-sessions-tbody').textContent
     }));
-    assert.equal(todayState.filtersHidden, true, 'out-of-range selectedDate cleared on range switch');
+    assert.equal(todayState.filtersActive, '0', 'out-of-range selectedDate cleared on range switch');
     assert.ok(todayState.tbodyText.includes('Very Long Session Title'));
     assert.ok(!todayState.tbodyText.includes('Older Ten Day Session'));
 

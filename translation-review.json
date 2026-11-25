@@ -389,7 +389,7 @@
       "chosen": "此对话将关闭遥测上报；点击可开启。"
     },
     {
-      "key": "Enable AI Credit Overages",
+      "key": "Enable AI credit overages",
       "previous": "启用 AI 超额抵扣",
       "chosen": "启用 AI 点数超额使用"
     },
