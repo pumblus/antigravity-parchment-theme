@@ -1,76 +1,64 @@
 ---
-name: chuanban-antigravity-theme-patch
-description: Antigravity 2.0 主题、字体与汉化补丁（macOS 专用融合版 5.5.3-eric.1 · 适配 Antigravity 2.34.0+、Browser 级 CDP 事件发现与在线快路径、Swarm 跨域子帧同步、原生幕布底色桥接、昼夜双模式独立配色、1,956 条无大小写冲突词典与 DICT_CI 兜底、SQLite 实时指标胶囊与设置弹窗 Token 统计）。采用「core/ 只读核心目录 + user/ 独立改装层 + install.mjs 生命周期 CLI」，支持直接部署、2.5 秒热重载定制与 --safe-mode 排障。当用户提到“安装船板 Antigravity 主题”、“升级/修复 Antigravity 汉化与字体”、“定制 Antigravity 界面样式或汉化词条”时触发。
+name: antigravity-parchment-theme
+description: Antigravity 暖纸主题与增强补丁（macOS 专版 6.0.3-eric.1，基于 Anarcadia/chuanban-antigravity-theme-patch）。适配 Antigravity 2.35.1+，提供类 Anthropic 暖羊皮纸/暖墨黑零投影昼夜主题、Anthropic 三族字体 + PingFang SC、2,226 条静态汉化与外观 [EN | 中文] 免刷新切换、底部圆环指标胶囊与实时模型配额（Gemini 常驻斜杠 + 双列悬浮卡）、以及设置弹窗 Token 统计。采用「core/ 只读核心 + user/ 2.5s 热重载改装层 + install.mjs CLI」。当用户提到安装、升级、定制或排查 antigravity-parchment-theme / 暖纸主题补丁时触发。
 ---
 
-> **2.33.0+ 启动边界**：默认不再暴露本地 CDP。融合版不引入自动退出/重启、`--force` 接力、快捷方式改写或启动器回收。必须先取得本地调试及启动/部署授权，再在已保存工作、退出客户端后按诊断提示显式启动；文件存在不等于端口可用。
+> **上游致谢与分支定位**：本仓库（`antigravity-parchment-theme`）是基于 **[忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)**（MIT 协议）维护的 **macOS 专用个人融合分支（`6.0.3-eric.1`）**。移除了 Windows/WSL/Linux 代码、上游莫兰迪与 5 槽切换器、自动重启（`relaunch`）、`--sync-user` 与外部中文标题 Python 脚本路径；保留上游核心热重载架构、Browser 级 CDP 事件发现、只读 SQLite 遥测/Token 统计与 `2,226` 条汉化基线，并加入 Anthropic 暖纸/暖墨视觉规范与底部模型配额显示（`modules.quota`）。完整差异与验证边界见 [FORK.md](FORK.md)。
 
-> **融合分支说明（5.5.3-eric.1 · macOS 专用）**：此源码包选择性精简融合上游至 `v5.5.3`（`0aec663`）的 macOS 可用改进（2.34.0 三层浏览器打孔与行内文件胶囊隔离、1,956 条词典与上下文翻译门禁、Browser 级 CDP 事件发现与在线快路径、渲染器与 CSS 性能优化、以及 Anthropic 视觉风格的设置弹窗「Token 统计」Tab），移除 Windows/WSL/Linux 客户端与服务代码。详细差异见 [FORK.md](FORK.md)。本分支保留用户文件、自定义 `allowedOrigins`（显式空列表仍禁止注入）与 selectors，不使用 `--sync-user`；不自动执行仓库外的中文标题 Python 补丁。真实安装会配置 macOS `LaunchAgent` 守护服务；本地调试启动须单独授权。
+> **2.33.0+ 启动边界**：客户端默认不再暴露本地 CDP。本分支不引入自动退出/重启、`--force` 接力、快捷方式改写或启动器回收。必须先取得本地调试及安装授权，再在已保存工作、退出客户端后由用户显式以 `--remote-debugging-port=0` 启动；端口文件存在不等于端点可用。
 
-# Antigravity 主题、字体与汉化补丁（macOS · 5.5.3-eric.1）
+# Antigravity 暖纸主题与增强补丁（macOS · `6.0.3-eric.1`）
 
-> **说明（致用户与执行端 AI Agent）**：
-> - **设计目标**：通过运行时 CDP 注入，参考 Anthropic 设计规范为 Google Antigravity 提供**昼夜暖调主题与排版调整**：
->   - **白天模式（`body:not(.dark)`）**：提供三套暖羊皮纸配色预设（默认 `high-contrast`：`#F0EEE6` 侧栏 + `#FAF9F5` 阅读区 + `#141413` 暖墨字 + `1px solid #CCCBC8` 石色细边，不使用 `#FFFFFF` 纯冷白和悬浮投影），输入框采用扁平层叠与 `1px` 细边三态过渡，仅发送主按钮使用 `#D97757` 陶土色；
->   - **黑夜模式（`body.dark`）**：切换客户端「深色 / Dark」（或跟随系统深色）时，保持三族字体排版与扁平几何结构不变，切换为暖墨黑反色配色（`#141413` 主背景 / `#191917` 侧栏 / `#1F1E1C` 卡片 / `1px solid #3D3D3A` 细边 / `#FAF9F5` 文字 / `#D97757` 发送主按钮）；
->   - **全局共享能力**：Anthropic 三族中西文排版（`Anthropic Sans` / `Anthropic Serif` / `Anthropic Serif Display` / `Anthropic Mono` + 中文优先 `PingFang SC` 回退更纱黑体，适配 `[data-markdown-root]`、`data-agy-font` 与 Lexical 输入框）、1,956 条静态界面汉化（内置 `DICT_CI` 首字母大写与省略号兜底）以及基于 SQLite 只读游标的同行实时指标胶囊与设置弹窗「Token 统计」面板（使用 `Anthropic Sans` + `tabular-nums`）。
-> - **执行原则**：
->   1. **直接部署预封装核心，不要重写**：样式、词典、DOM 引擎与守护进程已存放在只读的 `core/` 目录，**不要让 Agent 重写守护代码**，直接运行 `node install.mjs install` 完成部署；
->   2. **个性化改动仅限 `user/` 目录**：`user/` 目录在升级时默认保留不覆盖，修改保存后守护进程每 2.5 秒检测变更并热重载。
+> **致执行端 AI Agent 的核心原则**：
+> 1. **直接部署预封装核心，不要重写**：样式、词典、DOM 引擎与守护进程都在只读的 `core/` 目录，直接运行 `node install.mjs install` 完成部署；
+> 2. **个性化改动仅限 `user/` 目录**：`user/` 目录在升级时默认原样保留不覆盖，修改保存后守护进程每 `2.5s` 自动热重载；
+> 3. **严守平台与隔离边界**：仅支持 macOS（全局安装会注册 `LaunchAgent`）；任何 `--target-dir` 沙箱演练不得触发宿主服务或客户端操作。
 
 ---
 
-## 一、资源链接（上游字体资源与融合版源码分开）
+## 一、项目入口与字体前提
 
-1. **Google Drive 资源包（上游包 + 字体库）**
-   - 链接：<https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC>
-   - 包含：**上游资源（版本需另行核对，不含本融合版）+ 字体包（Anthropic 字体族 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono` + 更纱黑体 `Sarasa-SuperTTC.ttc`）**。
-   - *备用字体获取渠道*：若大文件 `Sarasa-SuperTTC.ttc`（~791 MB）触发 Google Drive 24 小时下载配额限制，macOS 可执行 `brew install --cask font-sarasa-gothic`。
-2. **GitHub 代码库（本融合分支与 `SKILL.md`）**
-   - 仓库：<https://github.com/pumblus/chuanban-antigravity-theme-patch>
-   - 包含：`core/` 核心代码、`user/` 改装模板、`install.mjs` CLI 与本 `SKILL.md`（字体文件请从上方 Google Drive 链接下载）。
-3. **Notion 引导主页**
-   - 链接：<https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554>
-
-### 上游历史实机样式参考（非本融合版验收依据）
-- **三栏对话与工件视图（上游历史截图）**：[`assets/preview-workspace-chat-and-artifact.png`](assets/preview-workspace-chat-and-artifact.png)
-- **新建对话首页视图（上游历史截图）**：[`assets/preview-home-new-conversation.png`](assets/preview-home-new-conversation.png)
+- **本分支仓库**：<https://github.com/pumblus/antigravity-parchment-theme>
+- **上游原版仓库（致谢）**：<https://github.com/Anarcadia/chuanban-antigravity-theme-patch>
+- **字体说明**：本仓库不打包闭源商业字体。若本机未安装 `Anthropic Sans` / `Anthropic Serif` / `Anthropic Mono`，请引导用户自行安装至 `~/Library/Fonts/`（或运行 `node install.mjs install-fonts --from <字体目录>`）；未安装时将自动回退至 `PingFang SC` 与系统字体族。
 
 ---
 
 ## 二、Node.js 分级兼容策略
 
-守护进程（`core/daemon.mjs`）按运行时版本自动分级，避免因 Node 小版本缺少内置 SQLite 而异常退出：
+守护进程（`core/daemon.mjs`）按运行时版本自动分级：
 
-| 运行时版本 | 昼夜主题 / 扁平三态 / Anthropic 三族字体 | 1,956 条静态汉化 + 原型安全词典 | 死锁自愈 + 缩放快捷键修复 | SQLite 实时指标胶囊 & Token 统计 (`node:sqlite`) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Node.js `>= 22.13.0`**（推荐） | ✅ 启用 | ✅ 启用 | ✅ 启用 | ✅ 自动启用（显示生成速度、耗时、上下文窗口、缓存命中率与设置弹窗 Token 统计） |
-| **Node.js `22.0.0 ~ 22.12.x`** | ✅ 启用 | ✅ 启用 | ✅ 启用 | ⚠️ 自动降级关闭（无需 `--experimental-sqlite` 标志） |
-| **Node.js `< 22.0.0`** | ❌ `install.mjs` 拦截提示 | ❌ 需升级至 Node 22+ | — | — |
+| 运行时版本 | 昼夜主题 / 字体 / 2,226 条汉化 / 底部配额 | 死锁自愈 / 缩放快捷键修复 | SQLite 实时指标胶囊 & Token 统计 (`node:sqlite`) |
+| :--- | :---: | :---: | :---: |
+| **Node.js `>= 22.13.0`**（推荐） | ✅ 启用 | ✅ 启用 | ✅ 自动启用 |
+| **Node.js `22.0.0 ~ 22.12.x`** | ✅ 启用 | ✅ 启用 | ⚠️ 自动降级关闭 |
+| **Node.js `< 22.0.0`** | ❌ `install.mjs` 拦截提示 | — | — |
 
 ---
 
 ## 三、目录结构：`core/` 只读核心 + `user/` 改装层
 
-安装后部署于 macOS 路径 `~/.gemini/antigravity/theme-patch/`：
+安装后部署于 macOS 路径 `~/.gemini/antigravity/theme-patch/`（与上游共享目录以防双守护冲突，不可同时安装）：
 
 ```text
-chuanban-antigravity-theme-patch/
-├── install.mjs                 # macOS 生命周期 CLI（install / install-fonts / doctor / verify / rollback / uninstall / pack）
+antigravity-parchment-theme/
+├── install.mjs                 # macOS 生命周期 CLI（install / install-fonts / doctor / verify / rollback / uninstall / build-manifest / pack）
 ├── SKILL.md                    # 面向 AI Agent 的部署与二次改装规范（本文件）
-├── README.md                   # 项目说明与使用指南
-├── CHANGELOG.md                # 历次版本演进与修复记录
+├── README.md                   # 项目介绍、差异对比与快速上手
+├── FORK.md                     # 与上游的逐版差异、视觉规范与验证记录
+├── CHANGELOG.md                # 变更日志（含上游历史记录）
+├── LICENSE                     # MIT License（保留原作者与本分支版权声明）
 ├── core/                       # 【只读核心】随版本升级整体替换，Agent 不得直接修改
-│   ├── manifest.json           # 版本号（5.5.3-eric.1）、仓库地址与 core/* 文件 SHA-256 清单
-│   ├── daemon.mjs              # Node CDP 守护进程（Browser 级 CDP 事件发现与快路径、SQLite 指标与 Token 统计、Swarm 子帧裁剪注入、2.5s 热重载感知）
-│   ├── runtime.js              # 浏览器端注入引擎（昼夜模式与 curtainView 底色联动、表面同步签名短路、实验性冷启动检测（默认关）、弯引号/省略号与 DICT_CI 兜底索引、设置弹窗 Token 统计、macOS 防双倍缩放保护）
-│   ├── theme.css               # 五段式 CSS 样式表（Part I 共享排版与几何 / Part II 白天暖纸 / Part III 独立黑夜 / Part IV 指标胶囊 / Part V Token 统计）
-│   └── i18n.json               # 1,956 条无大小写冲突标准 JSON 基准词典（挂载至 Object.create(null)）
-└── user/                       # 【用户改装层】升级时默认保留不覆盖，守护进程每 2.5s 检测 mtimeMs 热重载
-    ├── config.json             # 开关配置（enabled / channel / preset / contextLimit / contextLimitOverride / modules / themeVars）
+│   ├── manifest.json           # 版本号（6.0.3-eric.1）、仓库元信息与 core/* SHA-256 清单
+│   ├── daemon.mjs              # Node CDP 守护进程（Browser 级 CDP 事件发现、只读增量 SQLite 指标与 Token 统计、Swarm 裁剪注入、2.5s 热重载）
+│   ├── runtime.js              # 浏览器注入引擎（三段式样式隔离、昼夜与幕布同步、外观 [EN | 中文] 切换、2,226 条词典 + DICT_CI、底部圆环胶囊、React Fiber 配额显示、Token 统计、macOS 缩放去重）
+│   ├── theme.css               # 类 Anthropic 暖纸/暖墨无投影扁平样式表（零 #FFFFFF、零 box-shadow、零 :has()）
+│   └── i18n.json               # 2,226 条零大小写/弯直引号冲突基准词典（Object.create(null)）
+└── user/                       # 【用户改装层】升级时原样保留不覆盖，守护进程每 2.5s 热重载
+    ├── config.json             # 开关配置（enabled / channel / preset / metricsMode / contextLimit / contextLimitOverride / modules / themeVars）
     ├── custom.css              # 自定义追加 CSS（独立挂载于 #antigravity-user-custom-style）
-    ├── i18n.override.json      # 自定义词条覆盖或新增（支持扁平键值对或 "exact": { ... }，优先级高于 core/i18n.json）
-    └── custom.js               # 前端自定义 JS 钩子（支持 ctx.onCleanup(fn) 在热重载或卸载前清理）
+    ├── i18n.override.json      # 自定义词条覆盖或新增（扁平键值对或 "exact": { ... }）
+    └── custom.js               # 前端自定义 JS 钩子（支持 ctx.onCleanup(fn)）
 ```
 
 ---
@@ -79,58 +67,64 @@ chuanban-antigravity-theme-patch/
 
 当用户要求安装或更新本补丁时，按顺序执行以下 3 步：
 
-### Step 1：环境与字体前置检查
+### Step 1：环境、字体与源码同步检查
 ```bash
 node install.mjs doctor
 ```
-- **若缺少字体**：引导用户从 [Google Drive 资源包](https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC) 下载字体并安装到 `~/Library/Fonts/`（或运行 `node install.mjs install-fonts --from <解压目录>`；若 `Sarasa-SuperTTC.ttc` 受限流，可用 `brew install --cask font-sarasa-gothic`）。
+- 检查 `node.tier`、`fonts.anthropicInstalled`、`antigravity.cdpStatus` 与 `coreIntegrity.sourceSync`。
+- 若缺少字体，提示用户自行安装至 `~/Library/Fonts/` 或运行 `node install.mjs install-fonts --from <目录>`。
 
-### Step 2：确认本次安装权限后安装并注册守护服务
+### Step 2：取得本次安装权限确认后执行安装
 ```bash
-# 默认安装（channel="auto"，单守护进程同时监听 Stable 与 Insiders 窗口）
+# 默认安装（channel="auto"，单守护进程同时监听 Stable 与 Insiders）
 node install.mjs install
 
-# 如需仅监听单一通道，显式指定 --channel stable 或 --channel insiders
+# 仅监听单一通道
 node install.mjs install --channel stable
 ```
 `install.mjs install` 会依次完成：
-1. 校验 `core/manifest.json` SHA-256 完整性；
-2. 当 `core/` 有变化时，先原样校验旧快照；有效核心才更新 `core.prev/`，损坏或手改核心保存到 `backups/*-invalid-*/snapshot` 且不参与自动回滚；
-3. 更新 `core/`，**初始化或保留已有的 `user/` 文件**（保留自定义 `selectors`，兼容处理在守护进程内存中完成）；
-4. 优先读取 `DevToolsActivePort` 并实际探测本地端点，再尝试旧版 `9222/9223` 回退。2.33.0+ 不再默认开放端口；不能把端口文件或 `argv.json` 条目存在当作连接成功。未连通时只报告诊断与显式启动建议，不自动关闭或启动客户端；
-5. 生成 `~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs` 兼容包装入口，解析稳定的 Homebrew/fnm Node 软链，并注册 macOS `LaunchAgent` 后台自启服务。
+1. 校验 `core/manifest.json` 的 4 个核心文件 SHA-256 完整性；
+2. 当 `core/` 有变化时，先校验旧快照（兼容 `antigravity-parchment-theme` 与旧 `chuanban-antigravity-theme-patch` 备份）再更新 `core.prev/`；
+3. 更新 `core/`，**原样保留既有 `user/` 文件字节**（保留自定义 `selectors` 与 `allowedOrigins`）；
+4. 探测 `DevToolsActivePort` 本地端点；未连通时只输出显式启动建议，绝不自动关闭或重启客户端；
+5. 生成 `~/.gemini/antigravity/scripts/antigravity-font-daemon.mjs` 兼容包装脚本，解析稳定的 Homebrew/fnm Node 软链，注册 macOS `LaunchAgent`（`com.antigravity.theme`）。
 
 ### Step 3：CDP 实机注入验收
 ```bash
 node install.mjs verify
 ```
-当终端输出 `"ok": true` 且显示 `"version": "20261121-v5.5.3-eric.1-..."`、`"bodyReady": true`、`"themeStyle": true`、`"themeMode": "light" | "dark"` 时，说明基础运行时与样式已注入。仍需实际检查明暗切换、字体命中、界面翻译、指标数据与设置弹窗 Token 统计，不能仅凭这些标志认定所有功能通过验收。
+确认输出 `"ok": true`、`"version": "20261125-v6.0.3-eric.1-..."`、`"bodyReady": true`、`"hasStyle": true`、`"uiLang"` 与 `"pillMounted": true`。仍需人工或实机抽查明暗切换、字体命中、底部配额与设置弹窗 Token 统计，不可仅凭标志位宣称全部体验无误。
 
 ---
 
-## 隔离与重载边界
+## 五、隔离与安全边界
 
-- 本融合版不支持 `--sync-user`，不以“备份后覆盖”替代用户文件保留。
-- 显式 `--target-dir` 是隔离演练边界：不修改宿主 argv、wrapper 或系统服务。`--register-service` 不得用来绕过隔离；真实部署使用默认目标，另行取得本次安装权限。
-- 回滚候选必须含完整 manifest 和四个核心文件，并匹配字节数与 SHA-256；用户文件备份不能作为核心备份。回滚只恢复 core，不恢复 user 或其他全局配置。
-- `modules.coldBootHealer` 默认为 `false`，只有布尔 `true` 才启用实验功能。页面需通过首页/前台/无草稿/无输入/无弹窗任务等门禁，daemon 只对发起主上下文回调，最后在同一同步调用内复查再普通重载。不使用 daemon `Page.reload(ignoreCache)` 或 280ms 延迟强刷，不能保证绕过缓存；实机草稿与多窗口安全尚未验证。本轮维护不启用它。
+- 本分支不支持 `--sync-user`，不以覆盖方式改写已有 `user/` 文件。
+- 显式 `--target-dir` 为隔离演练模式：不修改宿主 `argv`、包装脚本或系统服务，且禁止搭配 `--register-service`。
+- `modules.coldBootHealer` 默认为 `false`，仅显式布尔 `true` 才开启，且不调用 `Page.reload(ignoreCache)`。
+- **底部模型配额模块（`modules.quota`）**：默认启用（Swarm 子帧强制关闭），通过只读遍历前端 React Fiber 调用宿主已有 `retrieveUserQuotaSummary()`，不接触凭据、不拦截网络请求；采用事件驱动 + `20s` 全局节流 + `120s` 兜底轮询 + `document.hidden` 休眠。若需完全关闭，仅需在 `user/config.json` 设置 `"modules": { "quota": false }`。
 
-## 五、个性化改装与排障
+---
 
-**修改原则**：所有个性化配置仅在 `~/.gemini/antigravity/theme-patch/user/` 下修改，**无需重启守护进程或 Antigravity**（`core/daemon.mjs` 每 2.5 秒检测 `user/*` 文件的 `mtimeMs` 变化并热更新已连接窗口）。
+## 六、个性化改装与排障
 
-### 1. 修改色彩预设、字号变量或模块开关（编辑 `user/config.json`）
+**修改原则**：所有个性化配置仅在 `~/.gemini/antigravity/theme-patch/user/` 下修改，保存后约 2.5 秒热生效，**无需重启守护进程或 Antigravity**。
 
-上下文水位优先级为正数 `contextLimitOverride` > 当前会话元数据窗口 > `contextLimit`（默认 256000）。不会自动往已有配置中写入这些字段。子会话统计是本地只读数据库的渐进汇总，同步中或慢路径退避时并非完整总数；`Hold` 表示缓冲型输出等待，不应理解为流式生成速率。
+### 1. 修改配色预设、指标样式、字号变量或模块开关（`user/config.json`）
+
+上下文水位优先级为正数 `contextLimitOverride` > 当前会话元数据窗口 > `contextLimit`（默认 `256000`）。
+
 ```json
 {
   "enabled": true,
   "channel": "auto",
   "preset": "high-contrast",
+  "metricsMode": "compact",
   "contextLimit": 256000,
   "modules": {
     "i18n": true,
     "metrics": true,
+    "quota": true,
     "composerWaxSeal": true,
     "deadlockHealer": true,
     "coldBootHealer": false,
@@ -140,37 +134,31 @@ node install.mjs verify
     "customJs": true
   },
   "themeVars": {
-    "--ag-chat-font-size": "16px",
-    "--ag-wax-seal-hover": "#3D3D3A",
-    "--ag-dark-wax-seal-hover": "#87867F"
+    "--ag-chat-font-size": "16px"
   }
 }
 ```
-- **`preset`（白天模式暖纸预设）**：支持 `"high-contrast"`（默认暖纸）、`"claude-desktop-purewhite"`（轻浅象牙纸，不使用 `#FFFFFF` 纯冷白）、`"vintage-deep"`（深暖燕麦羊皮纸），保存后 2.5 秒内热切换；在客户端切换为深色（Dark）模式时进入暖墨黑深色模式。
-- **`modules`**：支持单独开关任意子模块（含 `zoomShortcuts` 与 `cdpEventDiscovery`）；将顶层 `"enabled": false` 保存后，页面会在 2.5 秒内移除注入样式并将已翻译文字还原为英文。
-- **`themeVars`**：由 `runtime.js` 注入到独立 `<style id="ag-user-theme-vars">` 节点（位于 `#ag-custom-fonts` 之后、`#antigravity-user-custom-style` 之前；`--ag-dark-*` 作用于黑夜模式，`--ag-*` 全局排版变量作用于 `:root, body`，普通色彩变量如 `--sidebar` 仅作用于白天模式，不影响黑夜模式）。
+- **`preset`（白天暖纸预设）**：`"high-contrast"`（默认暖纸）、`"claude-desktop-purewhite"`（轻浅象牙纸，零 `#FFFFFF`）、`"vintage-deep"`（深暖燕麦纸）；客户端切换深色模式时自动进入暖墨黑。
+- **`metricsMode`**：`"compact"`（默认 SVG 圆环 + 4 行条形详情卡）或 `"full"`（完整内联速度文字）。
+- **`modules`**：支持单独关闭任意子模块（如 `"quota": false` 关闭底部配额、`"i18n": false` 退回英文）；顶层 `"enabled": false` 将在 2.5 秒内完整撤除注入样式并还原英文界面。
+- **`themeVars`**：注入至 `#ag-user-theme-vars`（`--ag-dark-*` 作用于黑夜模式，`--ag-*` 作用于 `:root, body`，普通色彩变量仅作用于白天模式）。
 
-### 2. 追加或微调界面 CSS（编辑 `user/custom.css`）
-直接编写标准 CSS（无需反斜杠转义），保存后 2.5 秒内在独立 `<style id="antigravity-user-custom-style">` 节点生效（位于 `#ag-user-theme-vars` 之后，优先级高于内置主题变量）。若只针对白天或黑夜微调，请分别加上 `body:not(.dark)` 或 `body.dark` 前缀。
+### 2. 追加 CSS / 覆盖汉化 / 编写自定义 JS
+- **`user/custom.css`**：标准 CSS，挂载于 `#antigravity-user-custom-style`；针对单模式请加 `body:not(.dark)` 或 `body.dark` 前缀。
+- **`user/i18n.override.json`**：扁平键值对 `"英文原词": "自定义中文"`（或 `"exact": { ... }`），实时生效且可热还原。
+- **`user/custom.js`**：在 `try/catch` 中执行（仅隔离异常，非安全沙箱），接收 `ctx`（`version` / `preset` / `config` / `modules` / `themeVars` / `dict` / `metrics` / `syncPreset()` / `ensureMetricsPill(true)` / `onCleanup(fn)`）。
 
-### 3. 覆盖或新增汉化词条（编辑 `user/i18n.override.json`）
-支持写入扁平键值对 `"英文原词": "自定义中文"`（或包裹在 `"exact": { ... }` 对象中）。由于运行时使用 `WeakMap` 记录原始英文文本，新增、修改或删除覆盖词条后，2.5 秒内页面上已渲染的文字会相应更新或还原。
-
-### 4. 编写前端自定义 JS 扩展（编辑 `user/custom.js`）
-脚本在 `try/catch` 隔离中执行（仅隔离异常，非安全沙箱），可访问入参 `ctx`（或同义入参 `boot`）：
-- `ctx.version`、`ctx.preset`、`ctx.config`、`ctx.modules`、`ctx.themeVars`、`ctx.dict`、`ctx.metrics`、`ctx.syncPreset()`、`ctx.ensureMetricsPill(true)`、`ctx.onCleanup(fn)`（注册清理回调，在下一轮热重载或卸载前执行）。
-
-### 5. 故障隔离、回滚与卸载（Safe Mode / Rollback / Uninstall）
+### 3. 排障、回滚与卸载
 ```bash
-# 安全模式：绕过 user/ 层，仅注入 core/ 以定位自定义配置冲突
+# 安全模式：绕过 user/ 层，仅注入 core/ 定位配置冲突
 node install.mjs verify --safe-mode
 
-# 查看核心文件 SHA-256 校验、字体与守护进程状态
+# 完整性、源码同步、字体与 CDP 状态诊断
 node install.mjs doctor
 
-# 回滚到上一次有效备份并重新注入
+# 回滚到上一次有效 core 备份并重新注入
 node install.mjs rollback
 
-# 卸载：停止守护进程与 macOS LaunchAgent，并还原当前打开窗口的样式与英文界面（保留 user/ 配置）
+# 彻底卸载（停止 LaunchAgent 并还原当前窗口样式与英文界面，保留 user/）
 node install.mjs uninstall
 ```

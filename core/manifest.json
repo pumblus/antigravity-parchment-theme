@@ -1,12 +1,11 @@
 {
-  "name": "chuanban-antigravity-theme-patch",
+  "name": "antigravity-parchment-theme",
   "version": "6.0.3-eric.1",
   "minNodeVersion": "22.0.0",
   "fullMetricsNodeVersion": "22.13.0",
   "distribution": {
-    "notionGuide": "https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554",
-    "googleDriveFullBundle": "https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC",
-    "githubRepo": "https://github.com/pumblus/chuanban-antigravity-theme-patch"
+    "githubRepo": "https://github.com/pumblus/antigravity-parchment-theme",
+    "upstreamRepo": "https://github.com/Anarcadia/chuanban-antigravity-theme-patch"
   },
   "files": {
     "daemon.mjs": {

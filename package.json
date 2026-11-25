@@ -1,5 +1,5 @@
 {
-  "name": "chuanban-antigravity-theme-patch-fork-tests",
+  "name": "antigravity-parchment-theme",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.0.0" },

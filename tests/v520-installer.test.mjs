@@ -61,6 +61,10 @@ test('v520 backup validation rejects incomplete, malformed, hash/size mismatched
   const h = harness(t); const dir = path.join(h.tmp, 'backup');
   const reset = () => { fs.rmSync(dir, { recursive: true, force: true }); core(dir); };
   reset(); assert.equal(h.api.isValidCoreBackup(dir), true);
+  const newNameManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json')));
+  newNameManifest.name = 'antigravity-parchment-theme';
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(newNameManifest));
+  assert.equal(h.api.isValidCoreBackup(dir), true);
   for (const file of ['manifest.json', ...names]) { reset(); fs.unlinkSync(path.join(dir, file)); assert.equal(h.api.isValidCoreBackup(dir), false, file); }
   for (const modify of [m => {m.files = {};}, m => {m.files['theme.css'].bytes++;}, m => {m.files['theme.css'].sha256 = '0'.repeat(64);}, m => {m.files['../outside'] = m.files['theme.css'];}, m => {m.name = 'user-backup';}]) {
     reset(); const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'))); modify(manifest); fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest)); assert.equal(h.api.isValidCoreBackup(dir), false);
@@ -128,7 +132,8 @@ test('v520 keeps macOS-only fork packaging and version', () => {
   assert.doesNotMatch(source, /win32|powershell|schtasks|WScript\.Shell|systemd|fc-cache/i);
   assert.doesNotMatch(source, /hasFlag\(['"]--sync-user/);
   assert.match(source, /version: '6\.0\.3-eric\.1'/);
-  assert.match(source, /https:\/\/github.com\/pumblus\/chuanban-antigravity-theme-patch/);
+  assert.match(source, /https:\/\/github.com\/pumblus\/antigravity-parchment-theme/);
+  assert.match(source, /https:\/\/github\.com\/Anarcadia\/chuanban-antigravity-theme-patch/);
   const pack = source.slice(source.indexOf('function buildDistZip'), source.indexOf('function verifyCoreIntegrity'));
   assert.match(pack, /'FORK\.md'/); assert.match(pack, /'CHANGELOG\.md'/);
 });

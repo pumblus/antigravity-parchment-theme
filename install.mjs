@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * chuanban-antigravity-theme-patch · macOS 一键安装、自检、安全模式验证、打包与回滚 CLI (install.mjs)
+ * antigravity-parchment-theme · macOS 一键安装、自检、安全模式验证、打包与回滚 CLI (install.mjs)
+ * Forked from Anarcadia/chuanban-antigravity-theme-patch (MIT License)
  *
  * 支持子命令：
  *   node install.mjs install [--channel auto|stable|insiders] [--preset high-contrast] [--target-dir <dir>]
@@ -33,8 +34,10 @@ process.emitWarning = function (warning, ...rest) {
 };
 
 const GOOGLE_DRIVE_URL = 'https://drive.google.com/drive/folders/1NX92SgVUqtSjWg6bt6sIJXy-cn7J_boC';
-const NOTION_GUIDE_URL = 'https://chuanban.notion.site/chuanban-antigravity-theme-patch-db7c5846f37546be9481cd791aed0554';
-const GITHUB_REPO_URL = 'https://github.com/pumblus/chuanban-antigravity-theme-patch';
+const UPSTREAM_REPO_URL = 'https://github.com/Anarcadia/chuanban-antigravity-theme-patch';
+const GITHUB_REPO_URL = 'https://github.com/pumblus/antigravity-parchment-theme';
+const MANIFEST_NAME = 'antigravity-parchment-theme';
+const ALLOWED_MANIFEST_NAMES = new Set([MANIFEST_NAME, 'chuanban-antigravity-theme-patch']);
 
 const args = process.argv.slice(2);
 const subcommand = args.find((a) => !a.startsWith('-')) || 'help';
@@ -108,14 +111,13 @@ function buildManifest(baseDir = __dirname) {
     };
   }
   const manifest = {
-    name: 'chuanban-antigravity-theme-patch',
+    name: MANIFEST_NAME,
     version: '6.0.3-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
-      notionGuide: NOTION_GUIDE_URL,
-      googleDriveFullBundle: GOOGLE_DRIVE_URL,
-      githubRepo: GITHUB_REPO_URL
+      githubRepo: GITHUB_REPO_URL,
+      upstreamRepo: UPSTREAM_REPO_URL
     },
     files: entries
   };
@@ -1129,7 +1131,7 @@ function isValidCoreBackup(dir) {
     if (JSON.stringify(names) !== JSON.stringify([...required, 'manifest.json'].sort())) return false;
     for (const name of names) if (!fs.lstatSync(path.join(dir, name)).isFile()) return false;
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-    if (manifest.name !== 'chuanban-antigravity-theme-patch' || typeof manifest.version !== 'string' || !manifest.version) return false;
+    if (!ALLOWED_MANIFEST_NAMES.has(manifest.name) || typeof manifest.version !== 'string' || !manifest.version) return false;
     if (!manifest.files || JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify(required.slice().sort())) return false;
     return required.every(name => {
       const meta = manifest.files[name];

@@ -1,6 +1,22 @@
 # Changelog
 
-## 融合版 5.5.3-eric.1（2026-11-21 · macOS 专用）
+> **说明**：本文件记录 `antigravity-parchment-theme`（macOS 专用分支）的演进摘要，并在下方完整保留上游 **[忒修斯的船板（@Anarcadia）`chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)** 的历史变更记录。本分支的详细同步边界与测试记录以 [FORK.md](FORK.md) 为准。
+
+## 6.0.3-eric.1（2026-11-25 · macOS 专用）
+
+- **开源分支规范重构**：项目与包元数据更名为 `antigravity-parchment-theme`（回滚校验向后兼容旧 `chuanban-antigravity-theme-patch` 备份），重构 `README.md` / `SKILL.md` 同步至 `6.0.3-eric.1` 并显式致谢上游作者与 MIT 版权。
+- **底部指标胶囊与悬浮卡模型配额显示（融合版独占）**：只读遍历前端 React Fiber 发现宿主已有 `retrieveUserQuotaSummary()` 服务（`modules.quota` 可关，Swarm 子帧禁用），底栏胶囊右侧以 `1px × 10px` 竖线衔接极简斜杠常驻展示 Gemini 余量（`5h X% / 周 Y%`），悬停详情卡底部追加 Gemini 与 Claude & GPT 双列同心卡、4px 进度条与重置倒计时，配合事件驱动 + 20s 节流 + 120s 兜底轮询刷新。
+- **选择性同步上游 `v6.0.0..v6.0.3`（`c345f54`）**：三段式样式隔离与零 `:has()` 清理、单层扁平输入框、外观 `[EN | 中文]` 免刷新语言切换、`2,226` 条 `2.35.1` 汉化词典、底部默认紧凑圆环胶囊（`metricsMode: 'compact'`）与 Token 统计 `TA_CACHE_SCHEMA_REV = 5` 容器查询布局重构；保留本分支 Anthropic 暖纸/暖墨视觉规范。详见 [FORK.md](FORK.md)。
+
+## 5.5.5-eric.1（2026-11-23 · macOS 专用）
+
+选择性同步上游 `v5.5.5`（`7cfffb8`）：补齐 `2.34.0` 编排器两处汉化至 `1,958` 条，引入仓库根目录 MIT `LICENSE` 并纳入 `install.mjs pack` 打包清单。详见 [FORK.md](FORK.md)。
+
+## 5.5.4-eric.1（2026-11-22 · macOS 专用）
+
+选择性同步上游 `v5.5.4`（`c1e72d3`）Token 统计 SQLite 增量索引与磁盘持久化缓存、前端视图模型缓存、按需挂载热力图浮层与输入三态零 `:has()` 优化（剔除 Windows/WSL2 探测逻辑）。详见 [FORK.md](FORK.md)。
+
+## 5.5.3-eric.1（2026-11-21 · macOS 专用）
 
 选择性精简融合上游 `v5.5.3`（`0aec663`）的 macOS 可用改进与设置弹窗「Token 统计」Tab（PR #25）：适配 Antigravity `2.34.0` 三层浏览器打孔与行内文件胶囊（`[data-uri^="file:"]` 等恢复 `Anthropic Mono` 与 i18n 不可变排除，非文件 `.inline-pill` 保持 `Anthropic Sans`）；词典扩充 80 条至 1,956 条并对齐融合版术语，新增 `…` ↔ `...` 双向兜底、无括号模型努力度后缀与 `Quote`/`Comment` 交互控件上下文门禁；清理 `theme.css` 末尾 `*` 通配符并收窄输入框底栏选择器；升级 i18n 观察器自写入短路、祖先去重、指标胶囊 RAF 布局合批、`scheduleRouteCheck` 防抖与 Swarm 子帧裁剪；守护进程增加 `BrowserWatcher` 在线快路径（减 5/6 `/json/list` 轮询）、`fullScannedChannels` 精确清理与 `noMetaPending` 5 分钟自动毕业；接入精简 macOS 专版 Token 统计面板（移除 Windows/WSL UNC 冗余，采用事件委托与 Anthropic 暖纸/暖墨零阴影样式，Swarm 子帧及关闭模块时自动剥离载荷）。未带入 Windows 保活/快捷方式自愈、M2 冷启动自动重启、外链字体去重或中文标题外挂逻辑。详见 FORK.md。
 

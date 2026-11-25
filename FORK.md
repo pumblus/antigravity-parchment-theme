@@ -1,11 +1,12 @@
-# 融合分支说明
+# 融合分支说明（`antigravity-parchment-theme`）
 
 ## 来源与版本
 
+- 项目名：`antigravity-parchment-theme`（Antigravity 暖纸主题与增强补丁，macOS 专用）。
 - 版本：`6.0.3-eric.1`（macOS 专用）。
-- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v6.0.3` / `c345f54`，不是完整合并。
+- 上游基线：基于 [忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)（MIT License）；早期基线 `v5.3.0`（`6a263b50cb575b22059f4429a9ba9625c0c540df`），本轮选择性精简移植至 `v6.0.3` / `c345f54`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
-- 保留 `d0d7d87` 及之前的全部用户设计提交；未推送、未触发远端 CI。
+- 公开规范对齐：仓库与包元数据统一为 `antigravity-parchment-theme`（`install.mjs` 回滚校验同时兼容新名与旧 `chuanban-antigravity-theme-patch` 备份，保留 `~/.gemini/antigravity/theme-patch/` 路径与 `com.antigravity.theme` 服务兼容），[LICENSE](LICENSE) 完整保留上游版权并追加本分支版权声明。
 
 ## 融合内容
 
