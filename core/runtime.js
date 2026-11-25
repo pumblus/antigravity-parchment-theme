@@ -106,7 +106,7 @@
     }
   }
 
-  const PATCH_VERSION = boot.version || '20261121-v5.5.3-eric.1';
+  const PATCH_VERSION = boot.version || '20261123-v5.5.5-eric.1';
   const DETECTED_OS = 'darwin';
   const ENABLED = boot.enabled !== false;
   const CSS_TEXT = boot.cssText || '';
@@ -4019,7 +4019,7 @@
       const NAV_BTN_ID = 'ag-token-nav-btn';
       const PANEL_ID = 'ag-token-analytics-panel';
       const HM_TOOLTIP_ID = 'ag-ta-tooltip';
-      const CACHE_TTL_MS = 15000;
+      const CACHE_TTL_MS = 60000;
       const REQUEST_TIMEOUT_MS = 25000;
 
       const TA_SCENARIO_META = {
@@ -4063,15 +4063,53 @@
         return inp > 0 ? obj.cacheRead / inp : null;
       };
 
-      const taIsDateInRange = (dateStr, rangeDays, nowSec) => {
-        if (!rangeDays || rangeDays >= 365) return true;
-        const p = String(dateStr || '').split('-').map(Number);
-        if (p.length !== 3 || !p[0] || !p[1] || !p[2]) return false;
-        const target = new Date(p[0], p[1] - 1, p[2], 0, 0, 0, 0);
-        const end = new Date((nowSec || Math.floor(Date.now() / 1000)) * 1000);
+      const taLocalDateStr = (tsSec) => {
+        const d = new Date(tsSec * 1000);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      };
+
+      const taCalcDateRangeBounds = (rangeDays, nowSec) => {
+        if (!rangeDays || rangeDays >= 365) return null;
+        const effectiveSec = Math.max(Number(nowSec) || 0, Math.floor(Date.now() / 1000));
+        const end = new Date(effectiveSec * 1000);
         end.setHours(0, 0, 0, 0);
-        const diff = Math.round((end.getTime() - target.getTime()) / 86400000);
-        return diff >= 0 && diff < rangeDays;
+        const start = new Date(end.getTime() - (rangeDays - 1) * 86400000);
+        return {
+          minDate: taLocalDateStr(Math.floor(start.getTime() / 1000)),
+          maxDate: taLocalDateStr(Math.floor(end.getTime() / 1000))
+        };
+      };
+
+      const taIsDateInRange = (dateStr, rangeDays, nowSec, precomputedBounds = undefined) => {
+        if (!rangeDays || rangeDays >= 365) return true;
+        if (!dateStr) return false;
+        const bounds = precomputedBounds !== undefined ? precomputedBounds : taCalcDateRangeBounds(rangeDays, nowSec);
+        if (!bounds) return true;
+        return dateStr >= bounds.minDate && dateStr <= bounds.maxDate;
+      };
+
+      const taFilterAndSortSessions = (baseSessions, state) => {
+        if (!Array.isArray(baseSessions) || baseSessions.length === 0) return [];
+        const metric = state?.metric || 'weighted';
+        const searchKw = String(state?.search || '').trim().toLowerCase();
+        const onlyLow = Boolean(state?.onlyLowCache);
+        const sortBy = state?.sort || 'metric';
+        const filtered =
+          !onlyLow && !searchKw
+            ? baseSessions.slice()
+            : baseSessions.filter((s) => {
+                if (onlyLow && !s.lowCacheWarning) return false;
+                if (searchKw && !s._searchHay.includes(searchKw)) return false;
+                return true;
+              });
+        return filtered.sort((a, b) => {
+          if (sortBy === 'lowCache') return (a.cacheRate ?? 1) - (b.cacheRate ?? 1);
+          if (sortBy === 'recent') return (b.lastTs || 0) - (a.lastTs || 0);
+          if (sortBy === 'total' || sortBy === 'weighted' || sortBy === 'inTok' || sortBy === 'outTok' || sortBy === 'calls') {
+            return b[sortBy] - a[sortBy];
+          }
+          return taGetMetricVal(b, metric) - taGetMetricVal(a, metric);
+        });
       };
 
       const taMakeEmptyTotals = () => ({
@@ -4102,8 +4140,10 @@
         return bestK;
       };
 
-      function taBuildHeatmapGrid(dailyMap, { weeks = 26, nowSec, metric = 'weighted', rangeDays = 30, selectedDate = null } = {}) {
-        const end = new Date((nowSec || Math.floor(Date.now() / 1000)) * 1000);
+      function taBuildHeatmapGrid(dailyMap, { weeks = 26, nowSec, metric = 'weighted', rangeDays = 30, selectedDate = null, rangeBounds = undefined } = {}) {
+        const effectiveSec = Math.max(Number(nowSec) || 0, Math.floor(Date.now() / 1000));
+        const bounds = rangeBounds !== undefined ? rangeBounds : taCalcDateRangeBounds(rangeDays, effectiveSec);
+        const end = new Date(effectiveSec * 1000);
         end.setHours(0, 0, 0, 0);
         const endWeekMonday = new Date(end.getTime() - ((end.getDay() + 6) % 7) * 86400000);
         const startMonday = new Date(endWeekMonday.getTime() - (weeks - 1) * 7 * 86400000);
@@ -4130,7 +4170,7 @@
             weighted: rec?.weighted || 0,
             billable: rec?.billable || 0,
             topProject: rec?.topProject || '',
-            inRange: taIsDateInRange(date, rangeDays, nowSec),
+            inRange: taIsDateInRange(date, rangeDays, effectiveSec, bounds),
             selected: selectedDate === date,
             level: 0
           };
@@ -4156,16 +4196,17 @@
       }
 
       function taComputeViewModel(payload, state) {
-        const nowSec = payload?.nowSec || Math.floor(Date.now() / 1000);
+        const nowSec = Math.max(Number(payload?.nowSec) || 0, Math.floor(Date.now() / 1000));
         const facts = Array.isArray(payload?.facts) ? payload.facts : [];
         const conversations = payload?.conversations || {};
         const metric = state.metric || 'weighted';
         const rangeDays = Number(state.rangeDays || 30);
+        const rangeBounds = taCalcDateRangeBounds(rangeDays, nowSec);
 
         const matchesFact = (f, opts = {}) => {
           if (!opts.ignoreDate && state.selectedDate) {
             if (f.date !== state.selectedDate) return false;
-          } else if (!opts.ignoreRange && rangeDays < 365 && !taIsDateInRange(f.date, rangeDays, nowSec)) {
+          } else if (!opts.ignoreRange && rangeBounds && (f.date < rangeBounds.minDate || f.date > rangeBounds.maxDate)) {
             return false;
           }
           if (!opts.ignoreProject && state.selectedProject !== 'ALL' && conversations[f.cid]?.projectKey !== state.selectedProject) {
@@ -4317,7 +4358,8 @@
           nowSec,
           metric,
           rangeDays,
-          selectedDate: state.selectedDate
+          selectedDate: state.selectedDate,
+          rangeBounds
         });
         const inRangeActive = heatmap.days.filter((d) => d.inRange && d.total > 0);
         const avgDaily =
@@ -4325,43 +4367,30 @@
             ? inRangeActive.reduce((sum, d) => sum + taGetMetricVal(d, metric), 0) / inRangeActive.length
             : 0;
 
-        const searchKw = String(state.search || '').trim().toLowerCase();
-        const sessions = [...rootGroups.values()]
-          .map((g) => {
-            const cacheRate = taCalcCacheRate(g.rolled);
-            const children = [...g.childrenMap.values()]
-              .map((ch) => ({ ...ch, primaryModel: topKeyByScore(ch.modelScores), cacheRate: taCalcCacheRate(ch) }))
-              .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric));
-            return {
-              id: g.id,
-              title: g.title,
-              projectKey: g.projectKey,
-              projectName: g.projectName,
-              source: g.source,
-              lastTs: g.lastTs,
-              primaryModel: topKeyByScore(g.modelScores),
-              primaryScenario: topKeyByScore(g.scenarioScores) || 'internal',
-              ...g.rolled,
-              cacheRate,
-              lowCacheWarning: cacheRate !== null && cacheRate < 0.8 && g.rolled.inTok >= 200000,
-              children
-            };
-          })
-          .filter((s) => {
-            if (state.onlyLowCache && !s.lowCacheWarning) return false;
-            if (!searchKw) return true;
-            const hay = `${s.title} ${s.projectName} ${s.id} ${s.primaryModel} ${s.children.map((c) => `${c.title} ${c.agentName} ${c.id} ${c.primaryModel}`).join(' ')}`.toLowerCase();
-            return hay.includes(searchKw);
-          })
-          .sort((a, b) => {
-            const sortBy = state.sort || 'metric';
-            if (sortBy === 'lowCache') return (a.cacheRate ?? 1) - (b.cacheRate ?? 1);
-            if (sortBy === 'recent') return (b.lastTs || 0) - (a.lastTs || 0);
-            if (sortBy === 'total' || sortBy === 'weighted' || sortBy === 'inTok' || sortBy === 'outTok' || sortBy === 'calls') {
-              return b[sortBy] - a[sortBy];
-            }
-            return taGetMetricVal(b, metric) - taGetMetricVal(a, metric);
-          });
+        const baseSessions = [...rootGroups.values()].map((g) => {
+          const cacheRate = taCalcCacheRate(g.rolled);
+          const primaryModel = topKeyByScore(g.modelScores);
+          const children = [...g.childrenMap.values()]
+            .map((ch) => ({ ...ch, primaryModel: topKeyByScore(ch.modelScores), cacheRate: taCalcCacheRate(ch) }))
+            .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric));
+          const _searchHay = `${g.title} ${g.projectName} ${g.id} ${primaryModel} ${children.map((c) => `${c.title} ${c.agentName} ${c.id} ${c.primaryModel}`).join(' ')}`.toLowerCase();
+          return {
+            id: g.id,
+            title: g.title,
+            projectKey: g.projectKey,
+            projectName: g.projectName,
+            source: g.source,
+            lastTs: g.lastTs,
+            primaryModel,
+            primaryScenario: topKeyByScore(g.scenarioScores) || 'internal',
+            ...g.rolled,
+            cacheRate,
+            lowCacheWarning: cacheRate !== null && cacheRate < 0.8 && g.rolled.inTok >= 200000,
+            children,
+            _searchHay
+          };
+        });
+        const sessions = taFilterAndSortSessions(baseSessions, state);
 
         return {
           kpi: {
@@ -4382,6 +4411,7 @@
           scenarios: [...scenMap.values()]
             .map((s) => ({ ...s, subAgents: [...s.subAgents].sort() }))
             .sort((a, b) => taGetMetricVal(b, metric) - taGetMetricVal(a, metric)),
+          baseSessions,
           sessions,
           projectsSummary: [...projMap.values()]
             .map((p) => ({
@@ -4410,15 +4440,35 @@
         onlyLowCache: false,
         expandedIds: new Set()
       };
-      const dataState = { loading: false, error: null, fetchedAt: 0, payload: null };
+      const dataState = { loading: false, error: null, fetchedAt: 0, lastMetricsSig: '', modalClosedSinceFetch: false, payload: null };
       const hmDayByDate = new Map();
       const pendingRequests = new Map();
       let reqSeq = 0;
       let pendingOpenTokenTab = false;
       let pendingOpenTimer = null;
+      let searchDebounceTimer = null;
+      let cachedBaseVm = { key: '', payloadRef: null, vm: null };
       let tabActive = false;
       let syncRaf = null;
       let disposed = false;
+      let hmTooltipVisible = false;
+      let hmGlobalListenersBound = false;
+      let activeHmCell = null;
+
+      function getOrComputeViewModel() {
+        if (!dataState.payload) return null;
+        const minuteBucket = Math.floor(Date.now() / 60000);
+        const key = `${minuteBucket}|${uiState.metric}|${uiState.rangeDays}|${uiState.selectedDate || ''}|${uiState.selectedProject || 'ALL'}|${uiState.modelGroup || 'model'}|${uiState.selectedModel || ''}|${uiState.selectedScenario || ''}`;
+        if (cachedBaseVm.payloadRef === dataState.payload && cachedBaseVm.key === key && cachedBaseVm.vm) {
+          return {
+            ...cachedBaseVm.vm,
+            sessions: taFilterAndSortSessions(cachedBaseVm.vm.baseSessions, uiState)
+          };
+        }
+        const vm = taComputeViewModel(dataState.payload, uiState);
+        cachedBaseVm = { key, payloadRef: dataState.payload, vm };
+        return vm;
+      }
 
       const fmtLastActive = (tsSec) => {
         if (!tsSec) return '--';
@@ -4442,7 +4492,11 @@
 
       async function fetchTokenAnalytics(force = false) {
         if (disposed) return;
-        if (!force && dataState.payload && Date.now() - dataState.fetchedAt < CACHE_TTL_MS) return;
+        const now = Date.now();
+        const curMetricsSig = String(window.__ag_last_metrics?.sig || '');
+        const sigChanged = Boolean(curMetricsSig && curMetricsSig !== dataState.lastMetricsSig);
+        const reopenedStale = Boolean(dataState.modalClosedSinceFetch && now - dataState.fetchedAt > 3000);
+        if (!force && !sigChanged && !reopenedStale && dataState.payload && now - dataState.fetchedAt < CACHE_TTL_MS) return;
         if (typeof window.__agRequestTokenAnalytics !== 'function') {
           dataState.error = '当前环境未启用本地 SQLite Token 统计（需 Node.js >= 22.13 且启用 modules.tokenAnalytics）';
           dataState.loading = false;
@@ -4452,7 +4506,15 @@
         if (dataState.loading && !force) return;
         dataState.loading = true;
         dataState.error = null;
-        renderPanel();
+        if (dataState.payload) {
+          const refreshBtn = document.getElementById(PANEL_ID)?.querySelector('#ag-ta-refresh-btn');
+          if (refreshBtn) {
+            refreshBtn.textContent = '刷新中…';
+            refreshBtn.disabled = true;
+          }
+        } else {
+          renderPanel();
+        }
         const reqId = `ta-${Date.now()}-${++reqSeq}`;
         try {
           const data = await new Promise((resolve, reject) => {
@@ -4471,7 +4533,10 @@
           });
           if (disposed) return;
           dataState.payload = data;
+          cachedBaseVm = { key: '', payloadRef: null, vm: null };
           dataState.fetchedAt = Date.now();
+          dataState.lastMetricsSig = String(window.__ag_last_metrics?.sig || '');
+          dataState.modalClosedSinceFetch = false;
         } catch (err) {
           if (!disposed) dataState.error = String(err?.message || err || '获取 Token 统计失败');
         } finally {
@@ -4504,7 +4569,85 @@
         return tip;
       }
 
-      const hideHmTooltip = () => document.getElementById(HM_TOOLTIP_ID)?.setAttribute('data-visible', '0');
+      const onGlobalDismiss = () => {
+        if (hmTooltipVisible) hideHmTooltip();
+      };
+      const onGlobalPointerMove = (ev) => {
+        if (!hmTooltipVisible) return;
+        if (!tabActive || !activeHmCell || !activeHmCell.isConnected) {
+          hideHmTooltip();
+          return;
+        }
+        const t = ev.target;
+        if (!(t instanceof Element) || !t.closest('.ag-ta-hm-cell')) hideHmTooltip();
+      };
+      const onGlobalKeyDown = (ev) => {
+        if (hmTooltipVisible && ev.key === 'Escape') hideHmTooltip();
+      };
+      function bindHmGlobalListeners() {
+        if (hmGlobalListenersBound || disposed) return;
+        hmGlobalListenersBound = true;
+        window.addEventListener('scroll', onGlobalDismiss, { capture: true, passive: true });
+        window.addEventListener('wheel', onGlobalDismiss, { capture: true, passive: true });
+        window.addEventListener('resize', onGlobalDismiss, { passive: true });
+        window.addEventListener('blur', onGlobalDismiss);
+        document.addEventListener('pointermove', onGlobalPointerMove, { passive: true });
+        document.addEventListener('keydown', onGlobalKeyDown, true);
+      }
+      function unbindHmGlobalListeners() {
+        if (!hmGlobalListenersBound) return;
+        hmGlobalListenersBound = false;
+        window.removeEventListener('scroll', onGlobalDismiss, true);
+        window.removeEventListener('wheel', onGlobalDismiss, true);
+        window.removeEventListener('resize', onGlobalDismiss);
+        window.removeEventListener('blur', onGlobalDismiss);
+        document.removeEventListener('pointermove', onGlobalPointerMove);
+        document.removeEventListener('keydown', onGlobalKeyDown, true);
+      }
+      function hideHmTooltip() {
+        hmTooltipVisible = false;
+        activeHmCell = null;
+        unbindHmGlobalListeners();
+        const tip = document.getElementById(HM_TOOLTIP_ID);
+        if (tip && tip.getAttribute('data-visible') !== '0') tip.setAttribute('data-visible', '0');
+      }
+      function positionHmTooltip(tip, cell) {
+        if (!tip || !cell || !cell.isConnected) return hideHmTooltip();
+        const rect = cell.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return hideHmTooltip();
+        const tipRect = tip.getBoundingClientRect();
+        const tw = tipRect.width || 225;
+        const th = tipRect.height || 120;
+        const x = Math.max(8, Math.min(window.innerWidth - tw - 8, rect.left + rect.width / 2 - tw / 2));
+        let y = rect.top - th - 8;
+        if (y < 8) y = Math.min(window.innerHeight - th - 8, rect.bottom + 8);
+        tip.style.left = `${Math.round(x)}px`;
+        tip.style.top = `${Math.round(y)}px`;
+      }
+      function showHmTooltipForCell(cell) {
+        if (!cell || !cell.isConnected || !tabActive) return;
+        const d = hmDayByDate.get(cell.getAttribute('data-hm-date') || '');
+        const tip = d ? ensureHmTooltip() : null;
+        if (!d || !tip) return;
+        const cRate = taCalcCacheRate(d);
+        const cRateStr = cRate !== null ? `${(cRate * 100).toFixed(1)}%` : '--';
+        tip.innerHTML =
+          `<div class="ag-ta-tt-hdr ag-ta-num-font"><span>${esc(d.date)}</span><span style="color:var(--ag-ta-primary);">${esc(taFormatMetricVal(d, uiState.metric))}</span></div>` +
+          (d.calls > 0
+            ? `<div class="ag-ta-tt-row"><span>加权等效</span><strong class="ag-ta-num-font">${taFormatCompact(d.weighted)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>总 Tokens</span><strong class="ag-ta-num-font">${taFormatCompact(d.total)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>新入 / 缓读 / 出</span><strong class="ag-ta-num-font">${taFormatCompact(d.inTok)} / ${taFormatCompact(d.cacheRead)} / ${taFormatCompact(d.outTok)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>调用 / 缓存命中</span><strong class="ag-ta-num-font">${d.calls} 次 · ${cRateStr}</strong></div>` +
+              (d.topProject
+                ? `<div class="ag-ta-tt-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--ag-ta-border);"><span>主力项目</span><strong>${esc(d.topProject)}</strong></div>`
+                : '')
+            : `<div style="color:var(--ag-ta-muted);">当日无本地调用记录</div>`);
+        activeHmCell = cell;
+        hmTooltipVisible = true;
+        bindHmGlobalListeners();
+        tip.setAttribute('data-visible', '1');
+        positionHmTooltip(tip, cell);
+      }
 
       function ensurePanelSkeleton(panel) {
         if (panel.dataset.agSkeletonReady === '1') return;
@@ -4527,12 +4670,13 @@
               <button type="button" class="ag-ta-seg-btn" data-metric="calls">调用次数</button>
             </div>
             <div class="ag-ta-seg" id="ag-ta-range-sw">
+              <button type="button" class="ag-ta-seg-btn" data-range="1">今日</button>
               <button type="button" class="ag-ta-seg-btn" data-range="7">7天</button>
               <button type="button" class="ag-ta-seg-btn active" data-range="30">30天</button>
               <button type="button" class="ag-ta-seg-btn" data-range="90">90天</button>
               <button type="button" class="ag-ta-seg-btn" data-range="365">全部</button>
             </div>
-            <button type="button" id="ag-ta-refresh-btn" class="ag-ta-refresh">刷新</button>
+            <button type="button" id="ag-ta-refresh-btn" class="ag-ta-refresh" title="点击增量刷新；按住 Shift 点击强制忽略磁盘缓存全量重算">刷新</button>
           </div>
         </div>
         <div id="ag-ta-filters-bar" class="ag-ta-filters-bar" hidden>
@@ -4644,7 +4788,7 @@
           if (!el) return;
           const btn = el.closest('[data-metric], [data-range], [data-dmode], [data-mg], [data-emode], [data-hm-date], [data-bar-date], [data-model-key], [data-scen-key], [data-proj-key], [data-proj-card], [data-toggle-sub], [data-clear-filter], #ag-ta-refresh-btn, #ag-ta-clear-filters');
           if (!btn) return;
-          if (btn.id === 'ag-ta-refresh-btn') return void fetchTokenAnalytics(true);
+          if (btn.id === 'ag-ta-refresh-btn') return void fetchTokenAnalytics(e.shiftKey ? 'hard' : true);
           if (btn.id === 'ag-ta-clear-filters') {
             uiState.selectedDate = null;
             uiState.selectedProject = 'ALL';
@@ -4667,7 +4811,13 @@
             return renderExplorerOnly();
           }
           if (btn.hasAttribute('data-metric')) uiState.metric = btn.getAttribute('data-metric') || 'weighted';
-          else if (btn.hasAttribute('data-range')) uiState.rangeDays = Number(btn.getAttribute('data-range') || 30);
+          else if (btn.hasAttribute('data-range')) {
+            const nextRange = Number(btn.getAttribute('data-range') || 30);
+            uiState.rangeDays = nextRange;
+            if (uiState.selectedDate && !taIsDateInRange(uiState.selectedDate, nextRange, dataState.payload?.nowSec)) {
+              uiState.selectedDate = null;
+            }
+          }
           else if (btn.hasAttribute('data-dmode')) uiState.dailyMode = btn.getAttribute('data-dmode') || 'heatmap';
           else if (btn.hasAttribute('data-mg')) {
             uiState.modelGroup = btn.getAttribute('data-mg') || 'model';
@@ -4692,35 +4842,26 @@
           renderPanel();
         });
 
-        panel.addEventListener('mouseover', (e) => {
-          const cell = e.target instanceof Element ? e.target.closest('.ag-ta-hm-cell[data-hm-date]') : null;
-          if (!cell) return;
-          const d = hmDayByDate.get(cell.getAttribute('data-hm-date'));
-          const tip = ensureHmTooltip();
-          if (!d || !tip) return;
-          const cRate = taCalcCacheRate(d);
-          const cRateStr = cRate !== null ? `${(cRate * 100).toFixed(1)}%` : '--';
-          tip.innerHTML =
-            `<div class="ag-ta-tt-hdr ag-ta-num-font"><span>${esc(d.date)}</span><span style="color:var(--ag-ta-primary);">${esc(taFormatMetricVal(d, uiState.metric))}</span></div>` +
-            (d.calls > 0
-              ? `<div class="ag-ta-tt-row"><span>加权等效</span><strong class="ag-ta-num-font">${taFormatCompact(d.weighted)}</strong></div>` +
-                `<div class="ag-ta-tt-row"><span>总 Tokens</span><strong class="ag-ta-num-font">${taFormatCompact(d.total)}</strong></div>` +
-                `<div class="ag-ta-tt-row"><span>新入 / 缓读 / 出</span><strong class="ag-ta-num-font">${taFormatCompact(d.inTok)} / ${taFormatCompact(d.cacheRead)} / ${taFormatCompact(d.outTok)}</strong></div>` +
-                `<div class="ag-ta-tt-row"><span>调用 / 缓存命中</span><strong class="ag-ta-num-font">${d.calls} 次 · ${cRateStr}</strong></div>` +
-                (d.topProject
-                  ? `<div class="ag-ta-tt-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--ag-ta-border);"><span>主力项目</span><strong>${esc(d.topProject)}</strong></div>`
-                  : '')
-              : `<div style="color:var(--ag-ta-muted);">当日无本地调用记录</div>`);
-          tip.setAttribute('data-visible', '1');
-          tip.style.left = `${Math.max(8, Math.min(window.innerWidth - 265, e.clientX + 14))}px`;
-          tip.style.top = `${Math.max(8, Math.min(window.innerHeight - 150, e.clientY - 90))}px`;
-        });
-        panel.addEventListener('mouseout', (e) => {
-          if (e.target instanceof Element && e.target.closest('.ag-ta-hm-cell[data-hm-date]')) hideHmTooltip();
-        });
+        panel.addEventListener('scroll', hideHmTooltip, { passive: true });
+        panel.addEventListener('wheel', hideHmTooltip, { passive: true });
+        panel.querySelector('#ag-ta-hm-wrap')?.addEventListener('scroll', hideHmTooltip, { passive: true });
+        const hmGrid = panel.querySelector('#ag-ta-hm-grid');
+        if (hmGrid) {
+          hmGrid.addEventListener('pointerover', (e) => {
+            const cell = e.target instanceof Element ? e.target.closest('.ag-ta-hm-cell[data-hm-date]') : null;
+            if (cell) showHmTooltipForCell(cell);
+            else hideHmTooltip();
+          });
+          hmGrid.addEventListener('pointerleave', hideHmTooltip);
+          hmGrid.addEventListener('mouseleave', hideHmTooltip);
+        }
         panel.querySelector('#ag-ta-search-input')?.addEventListener('input', (e) => {
           uiState.search = e.target.value || '';
-          renderExplorerOnly();
+          if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+          searchDebounceTimer = setTimeout(() => {
+            searchDebounceTimer = null;
+            renderExplorerOnly();
+          }, 80);
         });
         panel.querySelector('#ag-ta-sort-select')?.addEventListener('change', (e) => {
           uiState.sort = e.target.value || 'metric';
@@ -4780,14 +4921,14 @@
               const oP = Math.max(0, 100 - inP - cP);
               const rateText = s.cacheRate !== null ? `${(s.cacheRate * 100).toFixed(1)}%` : '--';
               rowsHtml.push(
-                `<tr><td><div class="ag-ta-sess-cell">` +
+                `<tr><td class="ag-ta-sess-td"><div class="ag-ta-sess-cell">` +
                   (hasKids ? `<button type="button" class="ag-ta-exp-btn" data-toggle-sub="${esc(s.id)}">${isExp ? '▾' : '▸'}</button>` : `<span class="ag-ta-exp-pad"></span>`) +
-                  `<div style="min-width:0;"><div class="ag-ta-sess-title" title="${esc(s.title)}">${esc(s.title)}</div><div class="ag-ta-sess-tags">` +
-                  `<span class="ag-ta-badge ag-ta-mono">${esc(s.projectName)}</span>` +
+                  `<div style="min-width:0;flex:1 1 auto;"><div class="ag-ta-sess-title" title="${esc(s.title)}">${esc(s.title)}</div><div class="ag-ta-sess-tags">` +
+                  `<span class="ag-ta-badge ag-ta-mono" title="${esc(s.projectName)}">${esc(s.projectName)}</span>` +
                   (s.source === 'cli' ? `<span class="ag-ta-badge ag-ta-mono">CLI</span>` : '') +
                   (hasKids ? `<span class="ag-ta-sub-badge">含 ${s.children.length} 个子 Agent</span>` : '') +
                   `<span class="ag-ta-mono" style="color:var(--ag-ta-muted);font-size:11px;">${esc(s.id.slice(0, 8))}</span></div></div></div></td>` +
-                  `<td style="white-space:nowrap;"><div>${esc(s.primaryModel || '--')}</div><div style="color:var(--ag-ta-muted);font-size:11px;margin-top:2px;">${esc(TA_SCENARIO_META[s.primaryScenario]?.label || s.primaryScenario)}</div></td>` +
+                  `<td class="ag-ta-model-td"><div class="ag-ta-model-cell" title="${esc(s.primaryModel || '--')}">${esc(s.primaryModel || '--')}</div><div style="color:var(--ag-ta-muted);font-size:11px;margin-top:2px;">${esc(TA_SCENARIO_META[s.primaryScenario]?.label || s.primaryScenario)}</div></td>` +
                   `<td class="ag-ta-num ag-ta-num-font">${s.calls}</td>` +
                   `<td class="ag-ta-num"><div class="ag-ta-num-font" style="font-weight:600;">${esc(taFormatMetricVal(s, uiState.metric))}</div>` +
                   `<div class="ag-ta-mini-bar" title="新入 ${taFormatCompact(s.inTok)} · 缓读 ${taFormatCompact(s.cacheRead)} · 出 ${taFormatCompact(s.outTok)}"><div class="ag-ta-seg-in" style="width:${inP}%"></div><div class="ag-ta-seg-cache" style="width:${cP}%"></div><div class="ag-ta-seg-out" style="width:${oP}%"></div></div></td>` +
@@ -4797,8 +4938,8 @@
               if (hasKids && isExp) {
                 for (const c of s.children) {
                   rowsHtml.push(
-                    `<tr class="ag-ta-subrow"><td style="padding-left:24px;"><div style="display:flex;align-items:center;gap:6px;max-width:276px;"><span style="color:var(--ag-ta-muted);">↳</span><span class="ag-ta-badge ag-ta-mono">${esc(c.agentName)}</span><span style="color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.title)}">${esc(c.title)}</span></div></td>` +
-                      `<td style="color:var(--ag-ta-muted);white-space:nowrap;">${esc(c.primaryModel || '--')}</td>` +
+                    `<tr class="ag-ta-subrow"><td class="ag-ta-sess-td" style="padding-left:24px;"><div style="display:flex;align-items:center;gap:6px;max-width:100%;min-width:0;"><span style="color:var(--ag-ta-muted);">↳</span><span class="ag-ta-badge ag-ta-mono">${esc(c.agentName)}</span><span style="color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.title)}">${esc(c.title)}</span></div></td>` +
+                      `<td class="ag-ta-model-td" style="color:var(--ag-ta-muted);"><div class="ag-ta-model-cell" title="${esc(c.primaryModel || '--')}">${esc(c.primaryModel || '--')}</div></td>` +
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.calls}</td>` +
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${esc(taFormatMetricVal(c, uiState.metric))}</td>` +
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.cacheRate !== null ? `${(c.cacheRate * 100).toFixed(1)}%` : '--'}</td>` +
@@ -4835,7 +4976,8 @@
 
       function renderExplorerOnly() {
         const panel = document.getElementById(PANEL_ID);
-        if (panel && dataState.payload) renderExplorerSections(panel, taComputeViewModel(dataState.payload, uiState));
+        const vm = panel ? getOrComputeViewModel() : null;
+        if (panel && vm) renderExplorerSections(panel, vm);
       }
 
       function renderPanel() {
@@ -4845,7 +4987,10 @@
         syncPanelSwitchers(panel);
 
         const refreshBtn = panel.querySelector('#ag-ta-refresh-btn');
-        if (refreshBtn) refreshBtn.textContent = dataState.loading ? '刷新中…' : '刷新';
+        if (refreshBtn) {
+          refreshBtn.textContent = dataState.loading ? '刷新中…' : '刷新';
+          refreshBtn.disabled = Boolean(dataState.loading);
+        }
 
         const banner = panel.querySelector('#ag-ta-status-banner');
         if (banner) {
@@ -4887,8 +5032,8 @@
             .join('');
         }
 
-        if (!dataState.payload) return;
-        const vm = taComputeViewModel(dataState.payload, uiState);
+        const vm = getOrComputeViewModel();
+        if (!vm) return;
         const { kpi } = vm;
         const metricLabels = {
           weighted: '加权等效消耗（主指标）',
@@ -4906,6 +5051,7 @@
           `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">活跃天数 &amp; 单日峰值</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.activeDays} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">/ ${kpi.windowDays} 天</span></div><div class="ag-ta-kpi-sub ag-ta-num-font">峰值 ${esc(peakText)}</div></div>` +
           `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">归因覆盖范围</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.mainSessions} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">主会话</span></div><div class="ag-ta-kpi-sub">覆盖 <span class="ag-ta-num-font">${kpi.projectCount}</span> 个项目 · 含 <span class="ag-ta-num-font">${kpi.subagentCount}</span> 个子 Agent</div></div>`;
 
+        hideHmTooltip();
         hmDayByDate.clear();
         const monthsHtml = [];
         const colsHtml = [];
@@ -4961,7 +5107,7 @@
               const rateStr = m.cacheRate !== null ? `${Math.round(m.cacheRate * 100)}%` : '--';
               return (
                 `<div class="ag-ta-row-btn ${uiState.selectedModel === m.key ? 'active' : ''}" data-model-key="${esc(m.key)}">` +
-                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span>${esc(m.key)}</span>${uiState.modelGroup === 'model' ? `<span class="ag-ta-badge">${esc(m.pool)}</span>` : ''}</div>` +
+                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span title="${esc(m.key)}">${esc(m.key)}</span>${uiState.modelGroup === 'model' ? `<span class="ag-ta-badge">${esc(m.pool)}</span>` : ''}</div>` +
                 `<div class="ag-ta-row-nums ag-ta-num-font"><span style="color:var(--ag-ta-muted);">${m.calls}次 · ${rateStr}</span><span style="font-weight:600;">${esc(taFormatMetricVal(m, uiState.metric))}</span><span style="color:var(--ag-ta-muted);width:38px;text-align:right;">${((val / mSum) * 100).toFixed(1)}%</span></div></div>` +
                 `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / mMax) * 100)}%;"><div class="ag-ta-seg-in" style="width:${inW}%;"></div><div class="ag-ta-seg-cache" style="width:${cacheW}%;"></div><div class="ag-ta-seg-think" style="width:${thinkW}%;"></div><div class="ag-ta-seg-out" style="width:${respW}%;"></div></div></div></div>`
               );
@@ -4982,7 +5128,7 @@
               const extra = s.subAgents.length > 0 ? ` (${s.subAgents.join(', ')})` : '';
               return (
                 `<div class="ag-ta-row-btn ${uiState.selectedScenario === s.key ? 'active' : ''}" data-scen-key="${esc(s.key)}">` +
-                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span class="ag-ta-swatch" style="background-color:${meta.color};"></span><span class="ag-ta-row-label">${esc(meta.label + extra)}</span></div>` +
+                `<div class="ag-ta-row-top"><div class="ag-ta-row-name"><span class="ag-ta-swatch" style="background-color:${meta.color};"></span><span class="ag-ta-row-label" title="${esc(meta.label + extra)}">${esc(meta.label + extra)}</span></div>` +
                 `<div class="ag-ta-row-nums ag-ta-num-font"><span style="color:var(--ag-ta-muted);">${s.calls}次</span><span style="font-weight:600;">${esc(taFormatMetricVal(s, uiState.metric))}</span><span style="color:var(--ag-ta-muted);width:38px;text-align:right;">${((val / sSum) * 100).toFixed(1)}%</span></div></div>` +
                 `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / sMax) * 100)}%;background-color:${meta.color};"></div></div>` +
                 `<div style="margin-top:3px;font-size:11px;color:var(--ag-ta-muted);">${esc(meta.desc)}</div></div>`
@@ -5030,10 +5176,9 @@
         if (disposed || !document.body) return;
         const modal = findActiveSettingsModal();
         if (!modal) {
-          if (tabActive) {
-            tabActive = false;
-            hideHmTooltip();
-          }
+          if (hmTooltipVisible) hideHmTooltip();
+          if (dataState.fetchedAt > 0) dataState.modalClosedSinceFetch = true;
+          if (tabActive) tabActive = false;
           return;
         }
         observeModalStateAttrs(modal);
@@ -5066,6 +5211,7 @@
           navSection.querySelector(`#${NAV_BTN_ID}`)?.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (tabActive && modal.getAttribute('data-ag-token-tab-active') === '1') return;
             setTokenTabActive(modal, true);
           });
         }
@@ -5149,6 +5295,13 @@
       const nodeTouchesSettingsModal = (n) =>
         n instanceof Element && (Boolean(n.matches?.(MODAL_RELEVANT_SEL)) || Boolean(n.firstElementChild && n.querySelector?.(MODAL_RELEVANT_SEL)));
 
+      const nodeListTouchesSettingsModal = (nodes) => {
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodeTouchesSettingsModal(nodes[i])) return true;
+        }
+        return false;
+      };
+
       let modalObserverStarted = false;
       const modalObs =
         typeof MutationObserver !== 'undefined'
@@ -5158,11 +5311,11 @@
                 const t = m.target;
                 if (t instanceof Element && t.closest?.(MODAL_FAST_SKIP_SEL)) continue;
                 if (
-                  tabActive ||
                   pendingOpenTokenTab ||
+                  (tabActive && !document.getElementById(PANEL_ID)?.isConnected) ||
                   (t instanceof Element && t.closest?.(MODAL_RELEVANT_SEL)) ||
                   (m.type === 'childList' &&
-                    ([...m.addedNodes].some(nodeTouchesSettingsModal) || [...m.removedNodes].some(nodeTouchesSettingsModal)))
+                    (nodeListTouchesSettingsModal(m.addedNodes) || nodeListTouchesSettingsModal(m.removedNodes)))
                 ) {
                   scheduleModalSync();
                   break;
@@ -5188,10 +5341,16 @@
 
       window.__ag_cleanup_fns.push(() => {
         disposed = true;
+        unbindHmGlobalListeners();
+        hmDayByDate.clear();
+        activeHmCell = null;
+        hmTooltipVisible = false;
+        cachedBaseVm = { key: '', payloadRef: null, vm: null };
         modalObs?.disconnect();
         backdropObs?.disconnect();
         if (syncRaf) cancelAnimationFrame(syncRaf);
         if (pendingOpenTimer) clearTimeout(pendingOpenTimer);
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
         for (const entry of pendingRequests.values()) clearTimeout(entry.timer);
         pendingRequests.clear();
         cleanupTokenAnalyticsDom();

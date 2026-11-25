@@ -65,7 +65,7 @@ test('v553 CSS adapts 2.34.0 browser holes, file inline-pills, removes trailing 
 });
 
 test('v553 i18n adds 80 entries with unified terminology, ellipsis fallback, effortless model labels, and Quote/Comment context guards', () => {
-  assert.equal(Object.keys(dict).length, 1956);
+  assert.equal(Object.keys(dict).length, 1958);
   assert.equal(dict['Where each worker is, by thread'], '按任务组查看各成员当前位置');
   assert.equal(dict['Cannot promote during Battle Mode — end the battle first'], '对战模式进行中无法转为独立对话，请先结束当前对战');
   assert.equal(
@@ -198,22 +198,41 @@ test('v553 daemon SQLite Token Analytics aggregates main + subagent trajectories
   );
 
   const taCode =
+    sliceBetween(daemonSrc, 'function parseProtoAll(', 'function fmtTok(') +
+    '\n' +
     sliceBetween(daemonSrc, 'const textDecoder =', 'const MAX_CHILD_METRICS_CACHE_SIZE =') +
     '\n' +
     sliceBetween(daemonSrc, 'function getDbStatByPath(', 'function resolveConversationDbPath(') +
     '\n' +
-    sliceBetween(daemonSrc, 'const TA_MEMORY_PATH_RE =', '// ============================================================================\n// 5. CDP 目标发现');
+    sliceBetween(daemonSrc, 'const TA_MEM_FILE_RE =', '// ============================================================================\n// 5. CDP 目标发现');
 
   const ctx = vm.createContext({
     fs,
     path,
     os,
+    crypto: await import('node:crypto'),
+    Buffer,
     performance,
     TextDecoder,
     DatabaseSync,
     setImmediate,
+    setTimeout,
+    clearTimeout,
+    BASE_VERSION: '20261123-v5.5.5-eric.1',
+    CACHE_DIR: path.join(tmpRoot, '.cache'),
+    SAFE_MODE: true,
+    RUN_ONCE: true,
+    daemonExiting: false,
     tokenAnalyticsDbCache: new Map(),
     tokenAnalyticsSummariesCache: new Map(),
+    tokenAnalyticsCacheState: {
+      diskLoaded: false,
+      persistTimer: null,
+      flushInFlight: false,
+      flushPending: false,
+      lastJsonDataRef: null,
+      lastJsonStr: ''
+    },
     lastTokenAnalyticsAccessMs: 0,
     inFlightTokenAnalyticsPromise: null,
     inFlightTokenAnalyticsKey: ''

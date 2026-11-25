@@ -10,7 +10,7 @@ const addedKeys = ["Your Plan", "You are subscribed to the best Google AI plan."
 const v550Keys = ["System UI", "Appears larger on mobile", "Did restarting the desktop app help?", "Browser is currently being operated by this conversation in another Hub window", "Choose what to clear from the built-in browser. It can't be undone.", "Couldn't clear browsing data. Try again.", "No sites have cookies in the built-in browser.", "Error: Artifacts from remote conversations are not available here.", "Add bundle", "Remove bundle", "Loading bundles...", "No bundles available.", "Review bundle before adding", "Review contents", "Curated sets of plugins for common workflows and roles.", "Disabling or removing this bundle doesn't affect it.", "Installed separately", "Add anyway", "Browsing Data", "Visited URLs and autocomplete suggestions.", "Cookies and other site data", "Cookies by Site", "Sites with cookies", "Search sites", "Search sites...", "Cleared built-in browser data", "Cleared built-in browser history", "Couldn't load cookies.", "Enable Browser Agent", "Browser screenshot", "Open browser screenshot", "No browser steps recorded", "Keybinding Scheme", "Customize Shortcuts", "Antigravity (AGY) Style", "VS Code Default", "VS Code Keyboard Shortcuts", "Manage your keybinding scheme and customize shortcuts in VS Code.", "Managed by application menu", "Insert into main conversation", "Side Question Selection", "Unarchive the main conversation to insert", "The main conversation's input isn't available right now.", "This side question isn't available in this conversation.", "Interrupt Agent", "Waiting for subagent", "Response actions", "Open in settings", "Always open", "System default app", "Access restricted", "Checking access...", "Stop transcription", "Voice dictation unavailable", "Microphone problem", "Microphone silent", "Microphone capture failed.", "Microphone capture ended unexpectedly.", "Microphone capture is not supported in this environment.", "Microphone is already in use by another recording session.", "Toggle Virtual Machine", "Setup Script", "Saved setup routine", "Saving setup routine", "Deleted setup routine", "Deleting setup routine", "Canceled saving setup routine", "Canceled deletion of setup routine", "Compare then and now", "In review"];
 const v553Keys = Object.keys(dict).slice(1876);
 test('v543 dictionary adds all 50 UI labels without changing 1756 fusion translations', () => {
-  assert.equal(Object.keys(dict).length,1956);
+  assert.equal(Object.keys(dict).length,1958);
   for(const key of addedKeys) assert.equal(typeof dict[key],'string',key);
   const prior = Object.fromEntries(Object.entries(dict).filter(([k])=>!addedKeys.includes(k) && !v550Keys.includes(k) && !v553Keys.includes(k)));
   assert.equal(crypto.createHash('sha256').update(JSON.stringify(prior)).digest('hex'),
@@ -18,7 +18,7 @@ test('v543 dictionary adds all 50 UI labels without changing 1756 fusion transla
 });
 test('v543 dictionary has no duplicate keys or case/curly-apostrophe aliases', () => {
   const keys = [...raw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m=>JSON.parse(m[1]));
-  assert.equal(keys.length,1956);
+  assert.equal(keys.length,1958);
   assert.equal(new Set(keys).size,keys.length);
   assert.equal(new Set(keys.map(k=>k.toLowerCase().replace(/[‘’]/g,"'"))).size,keys.length);
 });
@@ -54,6 +54,6 @@ test('v543 diagnostics report absent pills and retain nonhost classification', (
   assert.equal(result.pillCount,0); assert.equal(result.pillMounted,false); assert.equal(result.pillText,null); assert.equal(result.__isHost,false);
 });
 test('v543 installer records fusion version and never restores sync-user', () => {
-  assert.match(source,/version: '5\.5\.3-eric\.1'/);
+  assert.match(source,/version: '5\.5\.5-eric\.1'/);
   assert.doesNotMatch(source,/hasFlag\(['"]--sync-user/);
 });

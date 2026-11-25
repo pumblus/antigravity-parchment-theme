@@ -2,10 +2,10 @@
 
 ## 来源与版本
 
-- 版本：`5.5.3-eric.1`（macOS 专用）。
-- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v5.5.3` / `0aec6635f898a3b8f761326a54f2de8d4478921c`，不是完整合并。
+- 版本：`5.5.5-eric.1`（macOS 专用）。
+- 集成基线：Anarcadia 上游 `v5.3.0`，提交 `6a263b50cb575b22059f4429a9ba9625c0c540df`；本轮选择性精简移植至 `v5.5.5` / `7cfffb878df1720dd9333b04d6c7532eccf51f09`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
-- 本次源码更新位于本机 `main`（先提交 `5.5.2-eric.1` 基线 `52993c9`）；未推送、未触发远端 CI。保留 d0d7d87 及之前的全部用户设计提交。
+- 保留 `d0d7d87` 及之前的全部用户设计提交；未推送、未触发远端 CI。
 
 ## 融合内容
 
@@ -16,6 +16,30 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 5.5.5-eric.1 源码同步与实机热更新（2026-11-23 UTC）
+
+- 选择性合入上游 `v5.5.5`（`7cfffb8`）中适用于 macOS 专用融合版的变更：
+  1. **`2.34.0` 编排器两处汉化补齐（`core/i18n.json`）**：补齐系统设置「编排器设置」说明文案与聊天模型选择器编排器行悬停提示两处词条，基准词典由 `1,956` 条增至 `1,958` 条（零重复、零大小写与弯直引号碰撞）。
+  2. **MIT 开源协议声明（`LICENSE` / `install.mjs`）**：在仓库根目录补充上游 MIT `LICENSE`（保留原版权声明），并将其纳入 `install.mjs` `buildDistZip()` 打包清单。
+  3. **版本号同步（`core/daemon.mjs` / `core/runtime.js` / `install.mjs` / `core/manifest.json`）**：升级至 `5.5.5-eric.1` / `20261123-v5.5.5-eric.1`。
+- 未带入上游 Windows 与非 LaunchAgent 专属变更：Windows 计划任务 `TimeTrigger` 5 分钟保活与 `doctor`/`install` XML 触发器自检（融合版使用 macOS `LaunchAgent` 原生 `KeepAlive`）、`--keep-alive` 跳过 `rebuildBundleIfNeeded()`（无该轮询路径）、`install.mjs` `detached: true` 后台 `spawn` 固定 `cwd`（无 `detached spawn` / `relaunch` 路径），以及直接写入 `/tmp/ag-theme-daemon.log` 的 `uncaughtExceptionMonitor`/启动日志（延续不直接追加共享 `/tmp` 文件的安全边界，且 `LaunchAgent` 已将 `stdout`/`stderr` 重定向至 `/tmp/antigravity-font-daemon.{log,err}`）。
+- 验证与部署结果：三项语法检查、`142` 项单测与 `195` 项全量回归（含新增 `tests/v555.test.mjs` 2 项）全部通过（0 失败 / 0 跳过）；`node install.mjs pack` 生成 `dist/chuanban-antigravity-theme-patch-v5.5.5-eric.1.zip` 并校验 4 个核心文件 SHA-256 及 `LICENSE` 入包。随后执行 `node install.mjs install` 热更新至 `~/.gemini/antigravity/theme-patch`（保留 `user/`、不重启客户端），`verify` 与 `doctor` 实测确认当前运行中 Antigravity 主窗口及 3 个 Swarm 子帧已注入 `20261123-v5.5.5-eric.1-stable-f51d0cce`，`dictCount: 1958`、`hasStyle: true`、`coreIntegrity.clean: true`、`LaunchAgent` 正常运行。未提交、未推送远端。
+
+## 5.5.4-eric.1 源码同步与实机热更新（2026-11-22 UTC）
+
+- 选择性移植上游 `v5.5.4`（`c1e72d3` / PR #28 `83f5451`）中适用于 macOS 专版的 Token 统计全链路加速、归因校准、前端交互与 CSS 层叠优化：
+  1. **Token 统计 SQLite 增量引擎与磁盘持久化（`core/daemon.mjs` / `install.mjs` / `.gitignore`）**：
+     - 合并重复的 Protobuf 解码器为 `parseProtoAll(buf, tolerant)` 并统一复用于指标与统计；`taResolveStepLookup` 改为二分查找；
+     - `steps` 查询通过 SQL `CASE` 跳过 `step_type = 132` 冗余 `step_payload` 溢出页（保留完整 `metadata` 与 `step_type = 14/101` 所需内容），0 调用空库直接短路；近 24h 活跃库保留 `_inc` 状态，按 `WHERE idx >= ?` 配合冻结行 `len` 与前 24 字节 `hex` 锚点增量重读尾部（Undo 改写历史行时自动回退全量重算，并清理上游冗余的 `aRow.headHex === undefined` 校验）；
+     - 新增带 `TA_CACHE_SALT` 算法指纹的 `.cache/token-analytics-index.json` 单飞异步原子磁盘缓存（损坏或盐值不匹配自愈、`--safe-mode` 豁免、`force === 'hard'` 全量重算、2 秒防抖落盘；10 分钟空闲 GC 同步重置磁盘加载标记与 IPC JSON 缓存）；`install.mjs uninstall`（含 `--target-dir` 沙箱）自动清理 `.cache/`，`.gitignore` 忽略 `.cache/`；
+     - 将 `memory` 归因收窄为工具名 `memory_*` 或工具 JSON 入参路径（`Path`/`TargetFile`/`File`/`path`/`file_path`/`uri`）匹配 `MEMORY.md`/`knowledge`/`memories`，消除正文误判；合入 `2.34.0` Orchestrator 规划时间线归因（`step_type = 14/101` + `exit_plan_mode` + `Orchestrator (...)` 标签格式化）；修正 `taClassifyModelPool` 中 `usedClaude` 优先度并补齐 6 条新模型映射；IPC 回包升级为缓存化 `JSON.parse("<escaped>")`，为 `runTokenAnalyticsQuery` 的 `.finally()` 补 `.catch(() => {})`。
+  2. **前端视图模型缓存、防粘滞浮层与表格防溢出（`core/runtime.js` / `core/theme.css`）**：
+     - 时间窗新增「今日」（`data-range="1"`）并在切换范围时自动清理越界 `selectedDate`；支持 `Shift+点击刷新` 触发 `'hard'` 重算，已有数据刷新时仅置灰按钮不闪清面板；缓存 TTL 调至 60s 并结合 `__ag_last_metrics.sig` 变化及弹窗关闭 >3s 重开自动刷新；
+     - 引入 `taCalcDateRangeBounds`（含跨午夜时钟校正）、`cachedBaseVm` + 预置 `_searchHay` 的 `baseSessions` 与 `80ms` 搜索防抖；热力图浮层改为按需挂载/卸载 6 个全局监听器（未悬停时为 0）并按格子坐标居中定位，滚动/滚轮/缩放/失焦/`Escape`/移出即关；`modalObs` 消除数组展开并将重扫条件收窄为 `tabActive && !panel.isConnected`；沿用本分支单事件委托与 `ag-ta-num-font`；
+     - `core/theme.css` 将输入框三态改为「具体会话基础层 + 首页高特异度覆盖」，消除 3 条 `:not(:has(...))` 反向子树匹配（完整保留 1px Stone/Cloud Dark/Slate 扁平细边与零阴影）；补齐会话表列宽省略、悬停横向滚动条与 `#ag-ta-tooltip` 隐藏去延迟，保持暖纸/暖墨与零纯白规范。
+- 未带入上游约 450 行 Windows WSL2 异步探测（`wsl.exe` / `reg query Lxss` / `inspectWin32WslProbeDemand`）、UNC 退避回填、WSL P9 SQLite 基库复用缓存、`EPERM/EBUSY` 重试循环及暗红蜡封样式；`core/i18n.json` 本版无改动。
+- 验证与部署结果：三项语法检查、`140` 项单测与 `193` 项完整回归（含 `tests/v554.test.mjs` 3 项，覆盖真实 `node:sqlite` 与本机 Chrome 无头合成 DOM）全部通过（0 失败 / 0 跳过）；`node install.mjs pack` 打包并校验 4 个核心文件 SHA-256。随后按用户要求执行 `node install.mjs install` 热更新至 `~/.gemini/antigravity/theme-patch`（保留 `user/`、不重启客户端），`verify` 与 `doctor` 实测确认当前运行中 Antigravity 主窗口及 3 个 Swarm 子帧已注入 `20261122-v5.5.4-eric.1-stable-6219e2de`，`hasStyle: true`、`coreIntegrity.clean: true`、`LaunchAgent` 正常运行。未推送远端。
 
 ## 5.5.3-eric.1 源码同步与精简边界（2026-11-21 UTC）
 

@@ -109,7 +109,7 @@ function buildManifest(baseDir = __dirname) {
   }
   const manifest = {
     name: 'chuanban-antigravity-theme-patch',
-    version: '5.5.3-eric.1',
+    version: '5.5.5-eric.1',
     minNodeVersion: '22.0.0',
     fullMetricsNodeVersion: '22.13.0',
     distribution: {
@@ -133,6 +133,7 @@ function buildDistZip(baseDir = __dirname) {
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
 
   const includeItems = [
+    'LICENSE',
     'SKILL.md',
     'README.md',
     'FORK.md',
@@ -1216,6 +1217,10 @@ async function runUninstall() {
   const realDaemon = path.join(targetDir, 'core', 'daemon.mjs');
 
   if (isCustomSandboxTarget) {
+    const localCacheDir = path.join(targetDir, '.cache');
+    try {
+      if (fs.existsSync(localCacheDir)) fs.rmSync(localCacheDir, { recursive: true, force: true });
+    } catch {}
     console.log(`[Uninstall] Cleaned custom sandbox target (${targetDir}); global daemon and services were left untouched.`);
     return;
   }
@@ -1239,6 +1244,10 @@ async function runUninstall() {
     } catch {}
   }
   stopRunningDaemonProcesses();
+  try {
+    const cacheDir = path.join(targetDir, '.cache');
+    if (fs.existsSync(cacheDir)) fs.rmSync(cacheDir, { recursive: true, force: true });
+  } catch {}
 
   // 2. 在无后台守护进程干扰的纯净状态下，向打开的窗口发送一次禁用还原载荷，即时卸载样式并恢复英文原貌
   if (fs.existsSync(userConfigPath) && fs.existsSync(realDaemon)) {
