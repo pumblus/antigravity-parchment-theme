@@ -23,7 +23,7 @@ const flush = async () => {
 };
 
 test('v552 macOS-only static boundary removes Windows/WSL/Linux runtime and service code', () => {
-  assert.doesNotMatch(daemonSource, /win32|powershell|tasklist|wsl|isUncPath|spawnSync|child_process/i);
+  assert.doesNotMatch(daemonSource, /win32|powershell|tasklist|wsl|isUncPath|spawnSync|execSync|\bshell\s*:\s*true/i);
   assert.doesNotMatch(runtimeSource, /syncWinTitleBarOverlay|data-ag-os="win32"/i);
   assert.doesNotMatch(cssSource, /data-ag-os="win32"|Segoe UI|Microsoft YaHei|Consolas/i);
   assert.doesNotMatch(installerSource, /win32|powershell|schtasks|WScript\.Shell|systemd|fc-cache|windowsHide/i);

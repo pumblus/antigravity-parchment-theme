@@ -1,13 +1,13 @@
 ---
 name: antigravity-parchment-theme
-description: Antigravity 暖纸主题与增强补丁（macOS 专版 6.0.3-eric.1，基于 Anarcadia/chuanban-antigravity-theme-patch）。适配 Antigravity 2.35.1+，提供类 Anthropic 暖羊皮纸/暖墨黑零投影昼夜主题、Anthropic 三族字体 + PingFang SC、2,226 条静态汉化与外观 [EN | 中文] 免刷新切换、底部圆环指标胶囊与实时模型配额（Gemini 常驻斜杠 + 双列悬浮卡）、以及设置弹窗 Token 统计。采用「core/ 只读核心 + user/ 2.5s 热重载改装层 + install.mjs CLI」。当用户提到安装、升级、定制或排查 antigravity-parchment-theme / 暖纸主题补丁时触发。
+description: Antigravity 暖纸主题与增强补丁（macOS 专版 6.0.4-eric.1，基于 Anarcadia/chuanban-antigravity-theme-patch）。适配 Antigravity 2.35.2+，提供类 Anthropic 暖羊皮纸/暖墨黑零投影昼夜主题、Anthropic 三族字体 + PingFang SC、2,244 条静态汉化与原生右键菜单跨隔离世界汉化、仿 Claude 扁平右键浮窗与 macOS 外部 IDE 桥接、外观 [EN | 中文] 免刷新切换、底部圆环指标胶囊与实时模型配额（Gemini 常驻斜杠 + 双列悬浮卡）、以及设置弹窗 Token 统计。采用「core/ 只读核心 + user/ 2.5s 热重载改装层 + install.mjs CLI」。当用户提到安装、升级、定制或排查 antigravity-parchment-theme / 暖纸主题补丁时触发。
 ---
 
-> **上游致谢与分支定位**：本仓库（`antigravity-parchment-theme`）是基于 **[忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)**（MIT 协议）维护的 **macOS 专用个人融合分支（`6.0.3-eric.1`）**。移除了 Windows/WSL/Linux 代码、上游莫兰迪与 5 槽切换器、自动重启（`relaunch`）、`--sync-user` 与外部中文标题 Python 脚本路径；保留上游核心热重载架构、Browser 级 CDP 事件发现、只读 SQLite 遥测/Token 统计与 `2,226` 条汉化基线，并加入 Anthropic 暖纸/暖墨视觉规范与底部模型配额显示（`modules.quota`）。完整差异与验证边界见 [FORK.md](FORK.md)。
+> **上游致谢与分支定位**：本仓库（`antigravity-parchment-theme`）是基于 **[忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)**（MIT 协议）维护的 **macOS 专用个人融合分支（`6.0.4-eric.1`）**。移除了 Windows/WSL/Linux 代码、上游莫兰迪与 5 槽切换器、自动重启（`relaunch`）、`--sync-user`、字体自动下载镜像与外部中文标题 Python 脚本路径；保留上游核心热重载架构、Browser 级 CDP 事件发现、只读 SQLite 遥测/Token 统计、Electron 原生右键菜单汉化、macOS 精简版仿 Claude 右键浮窗/IDE 桥接与 `2,244` 条汉化基线，并加入 Anthropic 暖纸/暖墨视觉规范与底部模型配额显示（`modules.quota`）。完整差异与验证边界见 [FORK.md](FORK.md)。
 
 > **2.33.0+ 启动边界**：客户端默认不再暴露本地 CDP。本分支不引入自动退出/重启、`--force` 接力、快捷方式改写或启动器回收。必须先取得本地调试及安装授权，再在已保存工作、退出客户端后由用户显式以 `--remote-debugging-port=0` 启动；端口文件存在不等于端点可用。
 
-# Antigravity 暖纸主题与增强补丁（macOS · `6.0.3-eric.1`）
+# Antigravity 暖纸主题与增强补丁（macOS · `6.0.4-eric.1`）
 
 > **致执行端 AI Agent 的核心原则**：
 > 1. **直接部署预封装核心，不要重写**：样式、词典、DOM 引擎与守护进程都在只读的 `core/` 目录，直接运行 `node install.mjs install` 完成部署；
@@ -28,7 +28,7 @@ description: Antigravity 暖纸主题与增强补丁（macOS 专版 6.0.3-eric.1
 
 守护进程（`core/daemon.mjs`）按运行时版本自动分级：
 
-| 运行时版本 | 昼夜主题 / 字体 / 2,226 条汉化 / 底部配额 | 死锁自愈 / 缩放快捷键修复 | SQLite 实时指标胶囊 & Token 统计 (`node:sqlite`) |
+| 运行时版本 | 昼夜主题 / 字体 / 2,244 条汉化 / 右键浮窗 / 底部配额 | 死锁自愈 / 缩放快捷键修复 | SQLite 实时指标胶囊 & Token 统计 (`node:sqlite`) |
 | :--- | :---: | :---: | :---: |
 | **Node.js `>= 22.13.0`**（推荐） | ✅ 启用 | ✅ 启用 | ✅ 自动启用 |
 | **Node.js `22.0.0 ~ 22.12.x`** | ✅ 启用 | ✅ 启用 | ⚠️ 自动降级关闭 |
@@ -49,11 +49,11 @@ antigravity-parchment-theme/
 ├── CHANGELOG.md                # 变更日志（含上游历史记录）
 ├── LICENSE                     # MIT License（保留原作者与本分支版权声明）
 ├── core/                       # 【只读核心】随版本升级整体替换，Agent 不得直接修改
-│   ├── manifest.json           # 版本号（6.0.3-eric.1）、仓库元信息与 core/* SHA-256 清单
-│   ├── daemon.mjs              # Node CDP 守护进程（Browser 级 CDP 事件发现、只读增量 SQLite 指标与 Token 统计、Swarm 裁剪注入、2.5s 热重载）
-│   ├── runtime.js              # 浏览器注入引擎（三段式样式隔离、昼夜与幕布同步、外观 [EN | 中文] 切换、2,226 条词典 + DICT_CI、底部圆环胶囊、React Fiber 配额显示、Token 统计、macOS 缩放去重）
+│   ├── manifest.json           # 版本号（6.0.4-eric.1）、仓库元信息与 core/* SHA-256 清单
+│   ├── daemon.mjs              # Node CDP 守护进程（Browser 级 CDP 事件发现、原生右键菜单 IPC 钩子、macOS 外部 IDE 白名单桥接、只读增量 SQLite 指标与 Token 统计、Swarm 裁剪注入、2.5s 热重载）
+│   ├── runtime.js              # 浏览器注入引擎（三段式样式隔离、昼夜与幕布同步、外观 [EN | 中文] 切换、2,244 条词典 + DICT_CI、仿 Claude 右键浮窗、底部圆环胶囊、React Fiber 配额显示、Token 统计、macOS 缩放去重）
 │   ├── theme.css               # 类 Anthropic 暖纸/暖墨无投影扁平样式表（零 #FFFFFF、零 box-shadow、零 :has()）
-│   └── i18n.json               # 2,226 条零大小写/弯直引号冲突基准词典（Object.create(null)）
+│   └── i18n.json               # 2,244 条零大小写/弯直引号冲突基准词典（Object.create(null)）
 └── user/                       # 【用户改装层】升级时原样保留不覆盖，守护进程每 2.5s 热重载
     ├── config.json             # 开关配置（enabled / channel / preset / metricsMode / contextLimit / contextLimitOverride / modules / themeVars）
     ├── custom.css              # 自定义追加 CSS（独立挂载于 #antigravity-user-custom-style）
@@ -93,7 +93,7 @@ node install.mjs install --channel stable
 ```bash
 node install.mjs verify
 ```
-确认输出 `"ok": true`、`"version": "20261125-v6.0.3-eric.1-..."`、`"bodyReady": true`、`"hasStyle": true`、`"uiLang"` 与 `"pillMounted": true`。仍需人工或实机抽查明暗切换、字体命中、底部配额与设置弹窗 Token 统计，不可仅凭标志位宣称全部体验无误。
+确认输出 `"ok": true`、`"version": "20261126-v6.0.4-eric.1-..."`、`"bodyReady": true`、`"hasStyle": true`、`"uiLang"` 与 `"pillMounted": true`。仍需人工或实机抽查明暗切换、字体命中、底部配额、右键浮窗与设置弹窗 Token 统计，不可仅凭标志位宣称全部体验无误。
 
 ---
 

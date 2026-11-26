@@ -131,7 +131,7 @@ test('v520 LaunchAgent runningNow requires PID, not loaded state', t => {
 test('v520 keeps macOS-only fork packaging and version', () => {
   assert.doesNotMatch(source, /win32|powershell|schtasks|WScript\.Shell|systemd|fc-cache/i);
   assert.doesNotMatch(source, /hasFlag\(['"]--sync-user/);
-  assert.match(source, /version: '6\.0\.3-eric\.1'/);
+  assert.match(source, /version: '6\.0\.4-eric\.1'/);
   assert.match(source, /https:\/\/github.com\/pumblus\/antigravity-parchment-theme/);
   assert.match(source, /https:\/\/github\.com\/Anarcadia\/chuanban-antigravity-theme-patch/);
   const pack = source.slice(source.indexOf('function buildDistZip'), source.indexOf('function verifyCoreIntegrity'));

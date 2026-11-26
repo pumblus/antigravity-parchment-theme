@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * chuanban-antigravity-theme-patch · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
+ * antigravity-parchment-theme · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（融合版 v6.0.3-eric.1 · macOS 专用）：
+ * 架构特性（融合版 v6.0.4-eric.1 · macOS 专用）：
  * 1. 动态 Node 分级：
- *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、输入框三态、扩展汉化、宿主隔离、Browser 级 CDP 事件发现与在线快路径、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
+ *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、单层扁平输入框、扩展汉化（含 Electron 原生右键菜单跨隔离世界免 GC 汉化）、仿 Claude 右键浮窗卡片与 macOS 外部 IDE / 本地浏览器白名单安全桥接、宿主隔离、Browser 级 CDP 事件发现与在线快路径、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）与设置弹窗「Token 统计」增量归因分析；低版本优雅降级绝不崩溃。
  * 2. 模块化与热重载：
  *    - 周期性检测 `user/config.json`、`user/custom.css`、`user/i18n.override.json`、`user/custom.js` 的 mtime，
@@ -20,7 +20,8 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -156,7 +157,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261125-v6.0.3-eric.1';
+const BASE_VERSION = '20261126-v6.0.4-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedIframeInjectScript = '';
@@ -280,8 +281,15 @@ function broadcastUiLangToTargets(rawUiLang, excludeTargetId = null) {
         tasks.push(entry.send('Runtime.evaluate', { expression: expr, returnByValue: false }).catch(() => {}));
       }
     }
-    if (entry.type !== 'iframe' && entry.syncMetricsForSession) {
-      tasks.push(entry.syncMetricsForSession(true).catch(() => {}));
+    if (entry.type !== 'iframe') {
+      if (wantI18n && entry.ensurePreloadContextMenuHook) {
+        tasks.push(entry.ensurePreloadContextMenuHook().catch(() => {}));
+      } else if (!wantI18n && entry.removePreloadContextMenuHook) {
+        tasks.push(entry.removePreloadContextMenuHook().catch(() => {}));
+      }
+      if (entry.syncMetricsForSession) {
+        tasks.push(entry.syncMetricsForSession(true).catch(() => {}));
+      }
     }
   }
   if (tasks.length > 0) {
@@ -352,6 +360,286 @@ function persistUiLangToUserConfig(rawUiLang, skipNewDocSync = false) {
   }
 }
 
+const BROWSER_PREVIEW_EXT_WHITELIST_RE = /^\.(html?|pdf|svg)$/i;
+const EXTERNAL_EDITOR_PROBE_TTL_MS = 300000;
+const EXTERNAL_EDITORS_CACHE_FILE = path.join(CACHE_DIR, 'external-editors.json');
+let lastOpenExternalActionAt = 0;
+let cachedExternalEditors = {
+  probedAt: 0,
+  sig: '',
+  publicList: [],
+  byId: new Map()
+};
+
+const EXTERNAL_EDITOR_SPECS = [
+  {
+    id: 'vscode',
+    label: 'VS Code',
+    scheme: 'vscode',
+    family: 'vscode',
+    macApps: ['/Applications/Visual Studio Code.app', '~/Applications/Visual Studio Code.app'],
+    macCliRel: 'Contents/Resources/app/bin/code'
+  },
+  {
+    id: 'vscode-insiders',
+    label: 'VS Code Insiders',
+    scheme: 'vscode-insiders',
+    family: 'vscode',
+    macApps: ['/Applications/Visual Studio Code - Insiders.app', '~/Applications/Visual Studio Code - Insiders.app'],
+    macCliRel: 'Contents/Resources/app/bin/code-insiders'
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    scheme: 'cursor',
+    family: 'vscode',
+    macApps: ['/Applications/Cursor.app', '~/Applications/Cursor.app'],
+    macCliRel: 'Contents/Resources/app/bin/cursor'
+  },
+  {
+    id: 'windsurf',
+    label: 'Windsurf',
+    scheme: 'windsurf',
+    family: 'vscode',
+    macApps: ['/Applications/Windsurf.app', '~/Applications/Windsurf.app'],
+    macCliRel: 'Contents/Resources/app/bin/windsurf'
+  },
+  {
+    id: 'zed',
+    label: 'Zed',
+    scheme: 'zed',
+    family: 'zed',
+    macApps: ['/Applications/Zed.app', '~/Applications/Zed.app'],
+    macCliRel: 'Contents/MacOS/cli'
+  },
+  {
+    id: 'idea',
+    label: 'IntelliJ IDEA',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: [
+      '/Applications/IntelliJ IDEA.app',
+      '/Applications/IntelliJ IDEA CE.app',
+      '~/Applications/IntelliJ IDEA.app',
+      '~/Applications/IntelliJ IDEA CE.app'
+    ],
+    macCliRel: 'Contents/MacOS/idea'
+  },
+  {
+    id: 'pycharm',
+    label: 'PyCharm',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: [
+      '/Applications/PyCharm.app',
+      '/Applications/PyCharm CE.app',
+      '~/Applications/PyCharm.app',
+      '~/Applications/PyCharm CE.app'
+    ],
+    macCliRel: 'Contents/MacOS/pycharm'
+  },
+  {
+    id: 'webstorm',
+    label: 'WebStorm',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: ['/Applications/WebStorm.app', '~/Applications/WebStorm.app'],
+    macCliRel: 'Contents/MacOS/webstorm'
+  },
+  {
+    id: 'goland',
+    label: 'GoLand',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: ['/Applications/GoLand.app', '~/Applications/GoLand.app'],
+    macCliRel: 'Contents/MacOS/goland'
+  },
+  {
+    id: 'clion',
+    label: 'CLion',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: ['/Applications/CLion.app', '~/Applications/CLion.app'],
+    macCliRel: 'Contents/MacOS/clion'
+  },
+  {
+    id: 'rustrover',
+    label: 'RustRover',
+    scheme: 'jetbrains',
+    family: 'jetbrains',
+    macApps: ['/Applications/RustRover.app', '~/Applications/RustRover.app'],
+    macCliRel: 'Contents/MacOS/rustrover'
+  },
+  {
+    id: 'sublimetext',
+    label: 'Sublime Text',
+    scheme: '',
+    family: 'sublime',
+    macApps: ['/Applications/Sublime Text.app', '~/Applications/Sublime Text.app'],
+    macCliRel: 'Contents/SharedSupport/bin/subl'
+  }
+];
+const EXTERNAL_EDITOR_SPEC_MAP = new Map(EXTERNAL_EDITOR_SPECS.map((s) => [s.id, s]));
+
+function isExistingRegularFile(filePath) {
+  try {
+    return Boolean(filePath && fs.statSync(filePath, { throwIfNoEntry: false })?.isFile());
+  } catch {
+    return false;
+  }
+}
+
+function isValidMacEditorEntryOnDisk(spec, execPath, isMacApp = false) {
+  if (!spec || typeof execPath !== 'string' || !execPath || /[\0\r\n]/.test(execPath) || !path.isAbsolute(execPath)) {
+    return false;
+  }
+  if (isMacApp) {
+    try {
+      return fs.existsSync(execPath);
+    } catch {
+      return false;
+    }
+  }
+  return isExistingRegularFile(execPath);
+}
+
+function applyExternalEditorsEntries(entries, probedAt = Date.now()) {
+  const byId = new Map();
+  const publicList = [];
+  for (const entry of entries) {
+    byId.set(entry.id, entry);
+    publicList.push({
+      id: entry.id,
+      label: entry.label,
+      scheme: entry.scheme
+    });
+  }
+  cachedExternalEditors = {
+    probedAt,
+    sig: entries.map((e) => `${e.id}:${e.execPath}`).join('|'),
+    publicList,
+    byId
+  };
+  return cachedExternalEditors;
+}
+
+function loadExternalEditorsDiskCache(now = Date.now()) {
+  if (SAFE_MODE) return null;
+  try {
+    const raw = readJsonSafe(EXTERNAL_EDITORS_CACHE_FILE, null);
+    if (!raw || typeof raw !== 'object' || raw.v !== 1 || raw.platform !== 'darwin') return null;
+    const probedAt = Number(raw.probedAt);
+    if (!Number.isFinite(probedAt) || probedAt <= 0 || now - probedAt >= EXTERNAL_EDITOR_PROBE_TTL_MS) {
+      return null;
+    }
+    if (!Array.isArray(raw.entries)) return null;
+    const validEntries = [];
+    for (const item of raw.entries) {
+      if (!item || typeof item !== 'object') continue;
+      const spec = EXTERNAL_EDITOR_SPEC_MAP.get(String(item.id || ''));
+      const execPath = typeof item.execPath === 'string' ? item.execPath : '';
+      const isMacApp = Boolean(item.isMacApp);
+      if (!spec || !isValidMacEditorEntryOnDisk(spec, execPath, isMacApp)) continue;
+      validEntries.push({
+        id: spec.id,
+        label: spec.label,
+        scheme: spec.scheme,
+        family: spec.family,
+        execPath,
+        isMacApp
+      });
+    }
+    return applyExternalEditorsEntries(validEntries, probedAt);
+  } catch {
+    return null;
+  }
+}
+
+function saveExternalEditorsDiskCache(state) {
+  if (SAFE_MODE || !state || !state.byId) return;
+  const tmpPath = `${EXTERNAL_EDITORS_CACHE_FILE}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const payload = {
+      v: 1,
+      platform: 'darwin',
+      probedAt: state.probedAt,
+      entries: Array.from(state.byId.values()).map((e) => ({
+        id: e.id,
+        execPath: e.execPath,
+        isMacApp: Boolean(e.isMacApp)
+      }))
+    };
+    fs.writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    fs.renameSync(tmpPath, EXTERNAL_EDITORS_CACHE_FILE);
+  } catch {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {}
+  }
+}
+
+function pruneMissingCachedExternalEditors() {
+  if (cachedExternalEditors.probedAt <= 0) return cachedExternalEditors;
+  let changed = false;
+  const kept = [];
+  for (const [id, entry] of cachedExternalEditors.byId.entries()) {
+    const spec = EXTERNAL_EDITOR_SPEC_MAP.get(id);
+    if (isValidMacEditorEntryOnDisk(spec, entry.execPath, entry.isMacApp)) {
+      kept.push(entry);
+    } else {
+      changed = true;
+    }
+  }
+  return changed ? applyExternalEditorsEntries(kept, cachedExternalEditors.probedAt) : cachedExternalEditors;
+}
+
+function detectInstalledExternalEditors(opts = {}) {
+  const force = Boolean(opts && opts.force);
+  const now = Date.now();
+  if (!force && cachedExternalEditors.probedAt > 0 && now - cachedExternalEditors.probedAt < EXTERNAL_EDITOR_PROBE_TTL_MS) {
+    return pruneMissingCachedExternalEditors();
+  }
+  if (!force) {
+    const diskHit = loadExternalEditorsDiskCache(now);
+    if (diskHit) return diskHit;
+  }
+  const home = os.homedir();
+  const entries = [];
+  for (const spec of EXTERNAL_EDITOR_SPECS) {
+    let resolvedPath = '';
+    let isMacApp = false;
+    for (const rawApp of spec.macApps || []) {
+      const appPath = rawApp.startsWith('~/') ? path.join(home, rawApp.slice(2)) : rawApp;
+      if (!fs.existsSync(appPath)) continue;
+      if (spec.macCliRel) {
+        const cliPath = path.join(appPath, spec.macCliRel);
+        if (isExistingRegularFile(cliPath)) {
+          resolvedPath = cliPath;
+          isMacApp = false;
+          break;
+        }
+      }
+      resolvedPath = appPath;
+      isMacApp = true;
+      break;
+    }
+    if (resolvedPath) {
+      entries.push({
+        id: spec.id,
+        label: spec.label,
+        scheme: spec.scheme,
+        family: spec.family,
+        execPath: resolvedPath,
+        isMacApp
+      });
+    }
+  }
+  const next = applyExternalEditorsEntries(entries, now);
+  saveExternalEditorsDiskCache(next);
+  return next;
+}
+
 function readHostThemeMode() {
   const fileSig = getFileMtimeSig(HOST_CONFIG_PATH);
   if (fileSig === cachedHostCfgFileSig) {
@@ -392,9 +680,10 @@ function rebuildBundleIfNeeded(opts = {}) {
       ];
 
   const hostThemeMode = readHostThemeMode();
+  const externalEditorsState = detectInstalledExternalEditors();
   const sig =
     [...coreFiles, ...userFiles].map(getFileMtimeSig).join('|') +
-    `|hostTheme:${hostThemeMode || ''}|safe:${SAFE_MODE}|cli:${CLI_CHANNEL || ''}`;
+    `|hostTheme:${hostThemeMode || ''}|editors:${externalEditorsState.sig}|safe:${SAFE_MODE}|cli:${CLI_CHANNEL || ''}`;
   if (sig === cachedBundleSig && cachedInjectScript) {
     return false;
   }
@@ -434,6 +723,7 @@ function rebuildBundleIfNeeded(opts = {}) {
       metrics: true,
       quota: true,
       tokenAnalytics: true,
+      contextMenu: true,
       composerWaxSeal: true,
       deadlockHealer: true,
       coldBootHealer: false,
@@ -499,17 +789,20 @@ function rebuildBundleIfNeeded(opts = {}) {
   const baseCss = readTextSafe(path.join(CORE_DIR, 'theme.css'), '');
   const customCss = !SAFE_MODE && modules.customCss ? readTextSafe(path.join(USER_DIR, 'custom.css'), '') : '';
 
+  const userOverrideDict =
+    installedLocale === 'none' || SAFE_MODE
+      ? {}
+      : normalizeOverrideDict(readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {}));
+  const i18nOverrideKeys = Object.keys(userOverrideDict);
+
   const mergedDict =
     installedLocale === 'none'
       ? {}
-      : Object.assign(
-          {},
-          readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {}),
-          !SAFE_MODE ? normalizeOverrideDict(readJsonSafe(path.join(USER_DIR, 'i18n.override.json'), {})) : {}
-        );
+      : Object.assign({}, readJsonSafe(path.join(CORE_DIR, 'i18n.json'), {}), userOverrideDict);
 
   const customJs = !SAFE_MODE && modules.customJs ? readTextSafe(path.join(USER_DIR, 'custom.js'), '') : '';
   const runtimeTemplate = readTextSafe(path.join(CORE_DIR, 'runtime.js'), '');
+  const installedEditors = modules.contextMenu !== false ? externalEditorsState.publicList : [];
 
   const { i18n: _omitI18nFromHash, ...hashModules } = modules;
   const hash = crypto
@@ -524,8 +817,10 @@ function rebuildBundleIfNeeded(opts = {}) {
       JSON.stringify({
         preset,
         installedLocale,
+        i18nOverrideKeys,
         metricsMode,
         modules: hashModules,
+        installedEditors,
         themeVars,
         selectors: activeConfig.selectors,
         hostThemeMode
@@ -545,11 +840,17 @@ function rebuildBundleIfNeeded(opts = {}) {
 
   const RE_STRIP_TA_CSS = /\/\* __AG_TOKEN_ANALYTICS_CSS_START__ \*\/[\s\S]*?\/\* __AG_TOKEN_ANALYTICS_CSS_END__ \*\//g;
   const RE_STRIP_TA_JS = /\/\* __AG_TOKEN_ANALYTICS_JS_START__ \*\/[\s\S]*?\/\* __AG_TOKEN_ANALYTICS_JS_END__ \*\//g;
+  const RE_STRIP_CM_CSS = /\/\* __AG_CONTEXT_MENU_CSS_START__ \*\/[\s\S]*?\/\* __AG_CONTEXT_MENU_CSS_END__ \*\//g;
+  const RE_STRIP_CM_JS = /\/\* __AG_CONTEXT_MENU_JS_START__ \*\/[\s\S]*?\/\* __AG_CONTEXT_MENU_JS_END__ \*\//g;
 
-  const pageCss = modules.tokenAnalytics ? baseCss : baseCss.replace(RE_STRIP_TA_CSS, '');
-  const pageRuntime = modules.tokenAnalytics
+  let pageCss = modules.tokenAnalytics ? baseCss : baseCss.replace(RE_STRIP_TA_CSS, '');
+  let pageRuntime = modules.tokenAnalytics
     ? runtimeTemplate
     : runtimeTemplate.replace(RE_STRIP_TA_JS, '  cleanupTokenAnalyticsDom();');
+  if (modules.contextMenu === false) {
+    pageCss = pageCss.replace(RE_STRIP_CM_CSS, '');
+    pageRuntime = pageRuntime.replace(RE_STRIP_CM_JS, '  cleanupContextMenuDom();');
+  }
 
   const bootPayload = {
     version: cachedPatchVersion,
@@ -562,7 +863,9 @@ function rebuildBundleIfNeeded(opts = {}) {
     customCss,
     themeVars,
     i18nDict: mergedDict,
+    i18nOverrideKeys,
     modules,
+    installedEditors,
     selectors: activeConfig.selectors,
     config: {
       enabled,
@@ -580,15 +883,17 @@ function rebuildBundleIfNeeded(opts = {}) {
 
   cachedInjectScript = pageRuntime.replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(bootPayload)});`);
 
-  // Swarm 子 iframe 不承载设置弹窗，固定裁剪 Token 统计 CSS+JS 且保持同一 version 哈希
-  const iframeModules = Object.assign({}, modules, { tokenAnalytics: false, quota: false });
+  // Swarm 子 iframe 不承载设置弹窗与自定义右键浮窗，固定裁剪对应 CSS+JS 且保持同一 version 哈希
+  const iframeModules = Object.assign({}, modules, { tokenAnalytics: false, quota: false, contextMenu: false });
   const iframePayload = Object.assign({}, bootPayload, {
-    cssText: baseCss.replace(RE_STRIP_TA_CSS, ''),
+    cssText: baseCss.replace(RE_STRIP_TA_CSS, '').replace(RE_STRIP_CM_CSS, ''),
     modules: iframeModules,
+    installedEditors: [],
     config: Object.assign({}, bootPayload.config, { modules: iframeModules })
   });
   cachedIframeInjectScript = runtimeTemplate
     .replace(RE_STRIP_TA_JS, '')
+    .replace(RE_STRIP_CM_JS, '')
     .replace('})(__AG_BOOT_PAYLOAD__);', () => `})(${JSON.stringify(iframePayload)});`);
   cachedBundleSig = sig;
   return true;
@@ -3573,6 +3878,260 @@ function parseMetricsSubscriptionPayload(rawPayload) {
   return { valid: ids.length > 0, ids };
 }
 
+function resolveSafeLocalFileFromUrl(rawUrl) {
+  if (typeof rawUrl !== 'string') return { ok: false, reason: 'invalid_type' };
+  const raw = rawUrl.trim();
+  if (!raw || raw.length > 4096 || /[\0\r\n]/.test(raw)) {
+    return { ok: false, reason: 'invalid_url' };
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return { ok: false, reason: 'malformed_url' };
+  }
+  const proto = parsed.protocol.toLowerCase();
+  if (proto !== 'file:' && proto !== 'vscode-file:') {
+    return { ok: false, reason: 'disallowed_protocol' };
+  }
+  const hostLow = (parsed.hostname || '').toLowerCase();
+  if (hostLow && hostLow !== 'localhost') {
+    return { ok: false, reason: 'disallowed_file_host' };
+  }
+  let pathname = parsed.pathname || '';
+  if (proto === 'vscode-file:') {
+    pathname = pathname.replace(/^\/vscode-app(?=\/)/i, '');
+  }
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return { ok: false, reason: 'invalid_uri_encoding' };
+  }
+  if (!decoded || !decoded.startsWith('/') || /[\0\r\n]/.test(decoded)) {
+    return { ok: false, reason: 'invalid_posix_path' };
+  }
+  let realPath = '';
+  try {
+    realPath = fs.realpathSync(decoded);
+  } catch {
+    return { ok: false, reason: 'realpath_failed' };
+  }
+  if (!realPath || !realPath.startsWith('/') || /[\0\r\n]/.test(realPath)) {
+    return { ok: false, reason: 'invalid_resolved_path' };
+  }
+  let st;
+  try {
+    st = fs.statSync(realPath);
+  } catch {
+    return { ok: false, reason: 'stat_failed' };
+  }
+  if (!st.isFile()) {
+    return { ok: false, reason: 'not_regular_file' };
+  }
+  return { ok: true, realPath };
+}
+
+function resolveSafeBrowserPreviewFileUrl(rawPayload) {
+  const fileRes = resolveSafeLocalFileFromUrl(rawPayload);
+  if (!fileRes.ok) return fileRes;
+  const { realPath } = fileRes;
+  const ext = path.extname(realPath);
+  if (!BROWSER_PREVIEW_EXT_WHITELIST_RE.test(ext)) {
+    return { ok: false, reason: 'extension_not_allowed', ext };
+  }
+  const safeFileUrl = pathToFileURL(realPath).href;
+  if (!safeFileUrl.startsWith('file://') || /[\0\r\n]/.test(safeFileUrl)) {
+    return { ok: false, reason: 'invalid_safe_file_url' };
+  }
+  return { ok: true, realPath, safeFileUrl };
+}
+
+function launchSafeFileUrlInDefaultBrowser(safeFileUrl) {
+  if (!safeFileUrl || typeof safeFileUrl !== 'string') return;
+  execFile('/usr/bin/open', [safeFileUrl], () => {});
+}
+
+function launchSafeFileInDetectedEditor(rawPayload) {
+  if (typeof rawPayload !== 'string' || rawPayload.length > 4608) {
+    return { ok: false, reason: 'invalid_payload' };
+  }
+  let req;
+  try {
+    req = JSON.parse(rawPayload);
+  } catch {
+    return { ok: false, reason: 'invalid_json' };
+  }
+  const editorId = typeof req?.id === 'string' ? req.id.trim().toLowerCase() : '';
+  const editors = detectInstalledExternalEditors();
+  const editor = editors.byId.get(editorId);
+  if (!editor || !editor.execPath) {
+    return { ok: false, reason: 'editor_not_installed' };
+  }
+  if (!fs.existsSync(editor.execPath)) {
+    return { ok: false, reason: 'editor_missing_on_disk' };
+  }
+  const fileRes = resolveSafeLocalFileFromUrl(req?.fileUrl);
+  if (!fileRes.ok) return fileRes;
+  const { realPath } = fileRes;
+  const rawLine = Number(req?.line);
+  const line = Number.isInteger(rawLine) && rawLine > 0 && rawLine <= 10000000 ? rawLine : 0;
+
+  let editorArgs;
+  if (editor.family === 'jetbrains') {
+    editorArgs = line > 0 ? ['--line', String(line), realPath] : [realPath];
+  } else if (editor.family === 'zed') {
+    editorArgs = [line > 0 ? `${realPath}:${line}:1` : realPath];
+  } else if (editor.family === 'sublime') {
+    editorArgs = [line > 0 ? `${realPath}:${line}` : realPath];
+  } else {
+    editorArgs = ['--goto', line > 0 ? `${realPath}:${line}:1` : realPath];
+  }
+
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.ELECTRON_RUN_AS_NODE;
+
+  if (editor.isMacApp) {
+    execFile('/usr/bin/open', ['-a', editor.execPath, '--args', ...editorArgs], { env: cleanEnv }, () => {});
+  } else {
+    execFile(editor.execPath, editorArgs, { env: cleanEnv }, () => {});
+  }
+  return { ok: true, editorId, realPath, line };
+}
+
+const PRELOAD_CM_HOOK_REV = 2;
+const cmHookUnsupportedEndpoints = new Set(); // key: `${channel}:${port}`
+
+// Runs inside Electron Isolated Context: unwraps ipcRenderer or owner along prototype chain, installs REV=2 CustomEvent wrapper + mergeLabelsOnly + clean unhook
+const PRELOAD_CM_INSTALLER_EXPR = `(function(cand) {
+  const ipc = cand && typeof cand === 'object'
+    ? (typeof cand.invoke === 'function' && typeof cand.send === 'function' && typeof cand.on === 'function'
+        ? cand
+        : (cand.ipcRenderer && typeof cand.ipcRenderer.invoke === 'function' && typeof cand.ipcRenderer.send === 'function'
+            ? cand.ipcRenderer
+            : null))
+    : null;
+  if (!ipc) return 0;
+  let owner = ipc;
+  while (owner && owner !== Object.prototype && !Object.prototype.hasOwnProperty.call(owner, 'invoke')) {
+    owner = Object.getPrototypeOf(owner);
+  }
+  if (!owner || owner === Object.prototype || typeof owner.invoke !== 'function') return 0;
+  const origInvoke = typeof owner.__ag_orig_invoke === 'function' ? owner.__ag_orig_invoke : owner.invoke;
+  if (typeof owner.__ag_orig_invoke !== 'function') {
+    Object.defineProperty(owner, '__ag_orig_invoke', {
+      value: origInvoke,
+      configurable: true,
+      enumerable: false,
+      writable: false
+    });
+  }
+  function mergeLabelsOnly(origArr, transArr) {
+    if (!Array.isArray(origArr) || !Array.isArray(transArr) || origArr.length !== transArr.length) {
+      return origArr;
+    }
+    let changed = false;
+    const out = new Array(origArr.length);
+    for (let i = 0; i < origArr.length; i++) {
+      const o = origArr[i];
+      const t = transArr[i];
+      if (!o || typeof o !== 'object') {
+        out[i] = o;
+        continue;
+      }
+      if (!t || typeof t !== 'object' || (o.id ?? '') !== (t.id ?? '') || (o.type ?? '') !== (t.type ?? '')) {
+        return origArr;
+      }
+      const nextLabel = typeof t.label === 'string' && typeof o.label === 'string' ? t.label : o.label;
+      let nextSub = o.submenu;
+      if (Array.isArray(o.submenu) && o.submenu.length > 0 && Array.isArray(t.submenu)) {
+        nextSub = mergeLabelsOnly(o.submenu, t.submenu);
+      }
+      if (nextLabel !== o.label || nextSub !== o.submenu) {
+        changed = true;
+        const copy = Object.assign({}, o, { label: nextLabel });
+        if (Array.isArray(o.submenu)) copy.submenu = nextSub;
+        out[i] = copy;
+      } else {
+        out[i] = o;
+      }
+    }
+    return changed ? out : origArr;
+  }
+  const wrapper = function(channel, ...args) {
+    if (
+      channel === 'window:show-context-menu' &&
+      Array.isArray(args[0]) &&
+      args[0].length > 0 &&
+      typeof document !== 'undefined' &&
+      document.documentElement
+    ) {
+      const uiLang = document.documentElement.getAttribute('data-ag-lang');
+      if (uiLang && uiLang !== 'en') {
+        let resStr = null;
+        const onRes = (ev) => {
+          if (resStr === null && ev && typeof ev.detail === 'string') {
+            resStr = ev.detail;
+          }
+        };
+        document.addEventListener('__ag_cm_res', onRes);
+        try {
+          document.dispatchEvent(new CustomEvent('__ag_cm_req', { detail: JSON.stringify(args[0]) }));
+          if (resStr) {
+            const parsed = JSON.parse(resStr);
+            if (Array.isArray(parsed)) {
+              args[0] = mergeLabelsOnly(args[0], parsed);
+            }
+          }
+        } catch (e) {
+        } finally {
+          try {
+            document.removeEventListener('__ag_cm_res', onRes);
+          } catch (e2) {}
+        }
+      }
+    }
+    return origInvoke.apply(this, [channel, ...args]);
+  };
+  try {
+    Object.defineProperty(owner, 'invoke', {
+      value: wrapper,
+      writable: true,
+      enumerable: false,
+      configurable: true
+    });
+  } catch (e) {
+    return 0;
+  }
+  if (owner.invoke !== wrapper) return 0;
+  const symIpc = Symbol.for('ag.ipcR');
+  const symUnhook = Symbol.for('ag.unhookCm');
+  Object.defineProperty(globalThis, symIpc, { value: owner, configurable: true, enumerable: false, writable: true });
+  Object.defineProperty(globalThis, symUnhook, {
+    value: function() {
+      try {
+        if (typeof owner.__ag_orig_invoke === 'function') {
+          Object.defineProperty(owner, 'invoke', {
+            value: owner.__ag_orig_invoke,
+            writable: true,
+            enumerable: false,
+            configurable: true
+          });
+        }
+        delete owner.__ag_orig_invoke;
+        delete globalThis.__ag_preload_cm_hook_rev;
+        delete globalThis[symIpc];
+        delete globalThis[symUnhook];
+      } catch (e) {}
+    },
+    configurable: true,
+    enumerable: false,
+    writable: true
+  });
+  globalThis.__ag_preload_cm_hook_rev = ${PRELOAD_CM_HOOK_REV};
+  return 1;
+})`;
+
 function attachTarget(target, endpoint) {
   const wsUrl = target.webSocketDebuggerUrl;
   if (!wsUrl) return Promise.resolve(false);
@@ -3635,21 +4194,231 @@ function attachTarget(target, endpoint) {
       };
       let evalScriptId = null;
       const pendingCallbacks = new Map();
+      let currentTargetUrl = String(target.url || '');
+      let currentTargetTitle = String(target.title || '');
+      let navigationGeneration = 0;
+      let hostConfirmed = false;
+      let nonHostSettled = false;
+      let pendingProbe = false;
+      let probingPending = false;
+      let pendingRecheckQueued = false;
+      let pendingRetryCount = 0;
+      let pendingRetryTimer = null;
+      let runtimeEnabled = false;
+      let pageEnabled = false;
+      let bindingsAdded = false;
+      let initialAttachDone = false;
+      let navDebounceTimer = null;
+      let lastHardReloadAt = 0;
+      let preloadIsolatedContextId = null;
+      let preloadCmHookedContextId = null;
+      let preloadCmHookInFlight = null;
+      const cmHookAttemptsByCtx = new Map();
 
-      const send = (method, params = {}) =>
+      const send = (method, params = {}, timeoutMs = 2500) =>
         new Promise((resolve) => {
           if (ws.readyState !== WebSocket.OPEN) return resolve(null);
           const id = msgId++;
           const timer = setTimeout(() => {
             pendingCallbacks.delete(id);
             resolve(null);
-          }, 2500);
+          }, timeoutMs);
           pendingCallbacks.set(id, (msg) => {
             clearTimeout(timer);
             resolve(msg);
           });
           ws.send(JSON.stringify({ id, method, params }));
         });
+
+      const removePreloadContextMenuHook = async () => {
+        preloadCmHookedContextId = null;
+        const ctxId = preloadIsolatedContextId;
+        if (target.type !== 'page' || ctxId === null || ws.readyState !== WebSocket.OPEN) {
+          return false;
+        }
+        try {
+          await send('Runtime.evaluate', {
+            contextId: ctxId,
+            returnByValue: true,
+            expression: `(function(){ const fn = globalThis[Symbol.for('ag.unhookCm')]; if (typeof fn === 'function') { fn(); return true; } return false; })()`
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const ensurePreloadContextMenuHook = () => {
+        const endpointKey = `${endpoint.channel}:${endpoint.port}`;
+        if (
+          target.type !== 'page' ||
+          !hostConfirmed ||
+          nonHostSettled ||
+          !activeConfig.enabled ||
+          activeConfig.modules?.i18n === false ||
+          activeConfig.installedLocale === 'none' ||
+          preloadIsolatedContextId === null ||
+          ws.readyState !== WebSocket.OPEN ||
+          cmHookUnsupportedEndpoints.has(endpointKey)
+        ) {
+          return Promise.resolve(false);
+        }
+        if (preloadCmHookedContextId === preloadIsolatedContextId) {
+          return Promise.resolve(true);
+        }
+        if (preloadCmHookInFlight) {
+          return preloadCmHookInFlight;
+        }
+        const ctxId = preloadIsolatedContextId;
+        const attemptRec = cmHookAttemptsByCtx.get(ctxId) || { count: 0, nextAllowedAt: 0 };
+        if (attemptRec.count >= 3 || Date.now() < attemptRec.nextAllowedAt) {
+          return Promise.resolve(false);
+        }
+
+        preloadCmHookInFlight = (async () => {
+          const objGroup = `ag-preload-cm-${ctxId}`;
+          try {
+            const fastRes = await send('Runtime.evaluate', {
+              contextId: ctxId,
+              returnByValue: true,
+              expression: `(function() {
+                if (globalThis.__ag_preload_cm_hook_rev === ${PRELOAD_CM_HOOK_REV}) return 2;
+                const cached = globalThis[Symbol.for('ag.ipcR')];
+                if (cached) return ${PRELOAD_CM_INSTALLER_EXPR}(cached);
+                return 0;
+              })()`
+            });
+            const fastVal = Number(fastRes?.result?.result?.value) || 0;
+            if (fastVal > 0) {
+              preloadCmHookedContextId = ctxId;
+              cmHookAttemptsByCtx.delete(ctxId);
+              return true;
+            }
+            if (ws.readyState !== WebSocket.OPEN || preloadIsolatedContextId !== ctxId) {
+              return false;
+            }
+
+            const winRes = await send('Runtime.evaluate', {
+              contextId: ctxId,
+              objectGroup: objGroup,
+              expression: 'window'
+            });
+            const winObjId = winRes?.result?.result?.objectId;
+            if (winObjId) {
+              const listenersRes = await send('DOMDebugger.getEventListeners', { objectId: winObjId });
+              const listeners = listenersRes?.result?.listeners || [];
+              for (const l of listeners) {
+                if (!l?.handler?.objectId) continue;
+                const propsRes = await send('Runtime.getProperties', {
+                  objectId: l.handler.objectId,
+                  ownProperties: false
+                });
+                const scopesProp = (propsRes?.result?.internalProperties || []).find((p) => p.name === '[[Scopes]]');
+                if (!scopesProp?.value?.objectId) continue;
+                const scopesArrRes = await send('Runtime.getProperties', {
+                  objectId: scopesProp.value.objectId,
+                  ownProperties: true
+                });
+                for (const sp of scopesArrRes?.result?.result || []) {
+                  if (!sp?.value?.objectId || sp.value.description === 'Global') continue;
+                  const varsRes = await send('Runtime.getProperties', {
+                    objectId: sp.value.objectId,
+                    ownProperties: true
+                  });
+                  for (const v of varsRes?.result?.result || []) {
+                    if (!v?.value?.objectId) continue;
+                    const installRes = await send('Runtime.callFunctionOn', {
+                      objectId: v.value.objectId,
+                      returnByValue: true,
+                      functionDeclaration: `function() { return ${PRELOAD_CM_INSTALLER_EXPR}(this); }`
+                    });
+                    if (Number(installRes?.result?.result?.value) > 0) {
+                      preloadCmHookedContextId = ctxId;
+                      cmHookAttemptsByCtx.delete(ctxId);
+                      return true;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (ws.readyState !== WebSocket.OPEN || preloadIsolatedContextId !== ctxId) {
+              return false;
+            }
+
+            const protoRes = await send('Runtime.evaluate', {
+              contextId: ctxId,
+              objectGroup: objGroup,
+              expression: 'Object.prototype'
+            });
+            const protoId = protoRes?.result?.result?.objectId;
+            if (!protoId) {
+              const idx = Math.min(attemptRec.count, 2);
+              attemptRec.count += 1;
+              attemptRec.nextAllowedAt = Date.now() + [5000, 30000, 300000][idx];
+              cmHookAttemptsByCtx.set(ctxId, attemptRec);
+              return false;
+            }
+            const qoRes = await send(
+              'Runtime.queryObjects',
+              { prototypeObjectId: protoId, objectGroup: objGroup },
+              6000
+            );
+            const arrId = qoRes?.result?.objects?.objectId;
+            if (!arrId) {
+              const idx = Math.min(attemptRec.count, 2);
+              attemptRec.count += 1;
+              attemptRec.nextAllowedAt = Date.now() + [5000, 30000, 300000][idx];
+              cmHookAttemptsByCtx.set(ctxId, attemptRec);
+              return false;
+            }
+            const hookRes = await send('Runtime.callFunctionOn', {
+              objectId: arrId,
+              returnByValue: true,
+              functionDeclaration: `function() {
+                const installFn = ${PRELOAD_CM_INSTALLER_EXPR};
+                for (let i = 0; i < this.length; i++) {
+                  const o = this[i];
+                  if (!o || typeof o !== 'object') continue;
+                  try {
+                    if (installFn(o) > 0) return 1;
+                  } catch (e) {}
+                }
+                return 0;
+              }`
+            });
+            if ((Number(hookRes?.result?.result?.value) || 0) > 0) {
+              preloadCmHookedContextId = ctxId;
+              cmHookAttemptsByCtx.delete(ctxId);
+              return true;
+            }
+            cmHookUnsupportedEndpoints.add(endpointKey);
+            console.warn(`[Daemon] Preload IpcRenderer not found on ${endpointKey}; native context menu i18n circuit-breaker tripped for this session.`);
+            return false;
+          } catch {
+            const idx = Math.min(attemptRec.count, 2);
+            attemptRec.count += 1;
+            attemptRec.nextAllowedAt = Date.now() + [5000, 30000, 300000][idx];
+            cmHookAttemptsByCtx.set(ctxId, attemptRec);
+            return false;
+          } finally {
+            try {
+              await send('Runtime.releaseObjectGroup', { objectGroup: objGroup });
+            } catch {}
+            preloadCmHookInFlight = null;
+            if (
+              preloadIsolatedContextId !== null &&
+              preloadIsolatedContextId !== ctxId &&
+              preloadCmHookedContextId !== preloadIsolatedContextId
+            ) {
+              queueMicrotask(() => {
+                void ensurePreloadContextMenuHook();
+              });
+            }
+          }
+        })();
+        return preloadCmHookInFlight;
+      };
 
       let newDocQueue = Promise.resolve();
       let lastNewDocSig = '';
@@ -3728,8 +4497,14 @@ function attachTarget(target, endpoint) {
           return false;
         } else {
           if (target.type === 'page') {
+            const isRunOnce = typeof RUN_ONCE !== 'undefined' && RUN_ONCE;
             if (!activeConfig.enabled) {
               targetThemeModes.delete(target.id);
+              if (isRunOnce) {
+                await removePreloadContextMenuHook();
+              } else {
+                void removePreloadContextMenuHook();
+              }
             } else {
               const resolvedMode = res?.result?.result?.value;
               if (resolvedMode === 'dark' || resolvedMode === 'light') {
@@ -3738,6 +4513,17 @@ function attachTarget(target, endpoint) {
                 if (prevMode !== resolvedMode) {
                   syncThemeToChildIframes(target.id, resolvedMode);
                 }
+              }
+              if (activeConfig.modules?.i18n === false || activeConfig.installedLocale === 'none') {
+                if (isRunOnce) {
+                  await removePreloadContextMenuHook();
+                } else {
+                  void removePreloadContextMenuHook();
+                }
+              } else if (isRunOnce) {
+                await ensurePreloadContextMenuHook();
+              } else {
+                void ensurePreloadContextMenuHook();
               }
             }
           }
@@ -3994,26 +4780,14 @@ function attachTarget(target, endpoint) {
                 syncThemeToChildIframes(target.id, state.mode);
               }
             }
+            if (activeConfig.modules?.i18n === false || activeConfig.installedLocale === 'none') {
+              void removePreloadContextMenuHook();
+            } else {
+              void ensurePreloadContextMenuHook();
+            }
           }
         } catch {}
       };
-
-      let currentTargetUrl = String(target.url || '');
-      let currentTargetTitle = String(target.title || '');
-      let navigationGeneration = 0;
-      let hostConfirmed = false;
-      let nonHostSettled = false;
-      let pendingProbe = false;
-      let probingPending = false;
-      let pendingRecheckQueued = false;
-      let pendingRetryCount = 0;
-      let pendingRetryTimer = null;
-      let runtimeEnabled = false;
-      let pageEnabled = false;
-      let bindingsAdded = false;
-      let initialAttachDone = false;
-      let navDebounceTimer = null;
-      let lastHardReloadAt = 0;
 
       const clearPendingTimer = () => {
         if (pendingRetryTimer) {
@@ -4122,6 +4896,8 @@ function attachTarget(target, endpoint) {
             await send('Runtime.addBinding', { name: '__agSetUiLang' });
             await send('Runtime.addBinding', { name: '__agSyncHostThemeMode' });
             await send('Runtime.addBinding', { name: '__agRequestTokenAnalytics' });
+            await send('Runtime.addBinding', { name: '__agOpenInBrowser' });
+            await send('Runtime.addBinding', { name: '__agOpenInEditor' });
           }
         }
         if (ws.readyState !== WebSocket.OPEN || nonHostSettled || !hostConfirmed || generation !== navigationGeneration) {
@@ -4260,6 +5036,64 @@ function attachTarget(target, endpoint) {
             const cb = pendingCallbacks.get(msg.id);
             pendingCallbacks.delete(msg.id);
             cb(msg);
+            return;
+          }
+          if (msg.method === 'Runtime.executionContextCreated') {
+            const ctx = msg.params?.context;
+            if (
+              ctx &&
+              ctx.name === 'Electron Isolated Context' &&
+              ctx.auxData?.isDefault === false &&
+              (!ctx.auxData.frameId || ctx.auxData.frameId === target.id)
+            ) {
+              preloadIsolatedContextId = ctx.id;
+              if (hostConfirmed && target.type === 'page' && activeConfig.enabled) {
+                void ensurePreloadContextMenuHook();
+              }
+            }
+            return;
+          }
+          if (msg.method === 'Runtime.executionContextsCleared') {
+            preloadIsolatedContextId = null;
+            preloadCmHookedContextId = null;
+            cmHookAttemptsByCtx.clear();
+            return;
+          }
+          if (msg.method === 'Runtime.executionContextDestroyed') {
+            const deadId = msg.params?.executionContextId;
+            if (deadId !== undefined) {
+              cmHookAttemptsByCtx.delete(deadId);
+            }
+            if (deadId === preloadIsolatedContextId) {
+              preloadIsolatedContextId = null;
+              preloadCmHookedContextId = null;
+            }
+            return;
+          }
+          if (
+            msg.method === 'Runtime.bindingCalled' &&
+            (msg.params?.name === '__agOpenInBrowser' || msg.params?.name === '__agOpenInEditor')
+          ) {
+            if (
+              !hostConfirmed ||
+              nonHostSettled ||
+              target.type !== 'page' ||
+              !activeConfig.enabled ||
+              activeConfig.modules?.contextMenu === false
+            ) {
+              return;
+            }
+            const nowAction = Date.now();
+            if (nowAction - lastOpenExternalActionAt < 350) return;
+            lastOpenExternalActionAt = nowAction;
+            if (msg.params.name === '__agOpenInBrowser') {
+              const checked = resolveSafeBrowserPreviewFileUrl(msg.params.payload);
+              if (checked.ok && checked.safeFileUrl) {
+                launchSafeFileUrlInDefaultBrowser(checked.safeFileUrl);
+              }
+            } else {
+              launchSafeFileInDetectedEditor(msg.params.payload);
+            }
             return;
           }
           if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestMetrics') {
@@ -4441,6 +5275,8 @@ function attachTarget(target, endpoint) {
         inject,
         checkAndInject,
         syncMetricsForSession,
+        ensurePreloadContextMenuHook,
+        removePreloadContextMenuHook,
         endpoint,
         get hostConfirmed() {
           return hostConfirmed;

@@ -22,7 +22,7 @@ async function snapshot(page){return page.evaluate(()=>{
  });}
 for(const mode of ['light','dark'])test(`v550 runtime bare 2.33 host retains legacy ${mode} fusion styles, including focused composer`,async t=>{
  const {page,inject}=await fixture(t);await inject({themeMode:mode});
- assert.equal(await page.evaluate(()=>window.__ag_patch_version),'20261125-v6.0.3-eric.1');
+ assert.equal(await page.evaluate(()=>window.__ag_patch_version),'20261126-v6.0.4-eric.1');
  for(const focus of [false,true]){
   if(focus)await page.locator('#focus').focus();
   await page.waitForTimeout(220);

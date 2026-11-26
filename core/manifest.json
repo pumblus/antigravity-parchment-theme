@@ -1,6 +1,6 @@
 {
   "name": "antigravity-parchment-theme",
-  "version": "6.0.3-eric.1",
+  "version": "6.0.4-eric.1",
   "minNodeVersion": "22.0.0",
   "fullMetricsNodeVersion": "22.13.0",
   "distribution": {
@@ -9,20 +9,20 @@
   },
   "files": {
     "daemon.mjs": {
-      "sha256": "c440223d6f06ac05fb75261dd0df9ffaf555e705bd94d5944461f92ad04a69ce",
-      "bytes": 185857
+      "sha256": "aac8980b4bbc35b051c73dab20f030cccf1094b38e19091547d7851184243afb",
+      "bytes": 216007
     },
     "runtime.js": {
-      "sha256": "7de54651e22733ced00bd60137a725ebd6f66371af0fcdc8b285e1a002f6545e",
-      "bytes": 329344
+      "sha256": "5c39b0623b141f66150e10765f66aa0e342adfcc7f609a89ebba41afa23773c0",
+      "bytes": 388881
     },
     "theme.css": {
-      "sha256": "ae9197249b198a39787ad1651ad14d4a1b223ac54d3a04cb77ca3cc95e6ea4a7",
-      "bytes": 118579
+      "sha256": "cf91238e01ca3ddf547a4dc084e3873323de03b19377e339f8a1decbbcd01422",
+      "bytes": 116827
     },
     "i18n.json": {
-      "sha256": "c73dd53ef9faa0831c48b12765b5bb7c7eb9c98927269c24c1a3ba3657e7744e",
-      "bytes": 136206
+      "sha256": "781690b5faa3abc1e80cf74da04685c9abe225254965a7d15e63a52e530d4b50",
+      "bytes": 137093
     }
   }
 }

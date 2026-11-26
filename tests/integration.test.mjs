@@ -33,7 +33,7 @@ async function fixture(t, html) {
 }
 test('core manifest matches every shipped byte', () => {
   const manifest = JSON.parse(read('core/manifest.json'));
-  assert.equal(manifest.version, '6.0.3-eric.1');
+  assert.equal(manifest.version, '6.0.4-eric.1');
   for (const [name, meta] of Object.entries(manifest.files)) {
     const bytes = fs.readFileSync(path.join(root, 'core', name));
     assert.equal(bytes.length, meta.bytes, name);
@@ -41,7 +41,7 @@ test('core manifest matches every shipped byte', () => {
   }
 });
 test('dictionary keeps upstream coverage and clear permission labels without case duplicates', () => {
-  assert.equal(Object.keys(dict).length, 2226);
+  assert.equal(Object.keys(dict).length, 2244);
   const keys = [...read('core/i18n.json').matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m => JSON.parse(m[1]));
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map(k => k.toLowerCase().replace(/[‘’]/g, "'"))).size, keys.length);
@@ -58,7 +58,7 @@ test('dictionary keeps upstream coverage and clear permission labels without cas
   assert.match(warning, /提示注入/); assert.match(warning, /凭证文件、密钥/);
 });
 test('no automatic external title-patch execution or destructive sync-user switch', () => {
-  assert.doesNotMatch(read('core/daemon.mjs'), /ensureZhTitlePatch|antigravity-zh-title-patch\.py|execFile\(/);
+  assert.doesNotMatch(read('core/daemon.mjs'), /ensureZhTitlePatch|antigravity-zh-title-patch\.py|spawnSync|execSync|\bshell\s*:\s*true/);
   assert.doesNotMatch(read('install.mjs'), /hasFlag\(['"]--sync-user/);
 });
 // Exercise the real translation functions without substituting for browser DOM tests.
@@ -255,7 +255,7 @@ test('translation review audits all 32 divergent and 16 supplemental entries', (
  const review=JSON.parse(read('translation-review.json'));
  assert.equal(review.sameKeyDifferences,32);assert.equal(review.additionalKeys,16);assert.equal(review.entries.length,48);
  for(const item of review.entries)assert.equal(dict[item.key],item.chosen,item.key);
- assert.equal(Object.keys(dict).length,2226);
+ assert.equal(Object.keys(dict).length,2244);
  for(const key of ['Notice','Display'])assert.equal(dict[key],key==='Notice'?'提示':'显示');
  assert.equal(dict['At mention code block'],'引用代码块（@）');
  assert.equal(dict['Agent response'],'Agent 回复');

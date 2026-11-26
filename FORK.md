@@ -3,8 +3,8 @@
 ## 来源与版本
 
 - 项目名：`antigravity-parchment-theme`（Antigravity 暖纸主题与增强补丁，macOS 专用）。
-- 版本：`6.0.3-eric.1`（macOS 专用）。
-- 上游基线：基于 [忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)（MIT License）；早期基线 `v5.3.0`（`6a263b50cb575b22059f4429a9ba9625c0c540df`），本轮选择性精简移植至 `v6.0.3` / `c345f54`，不是完整合并。
+- 版本：`6.0.4-eric.1`（macOS 专用）。
+- 上游基线：基于 [忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)（MIT License）；早期基线 `v5.3.0`（`6a263b50cb575b22059f4429a9ba9625c0c540df`），本轮选择性精简移植至 `v6.0.4` / `73dc3e9`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
 - 公开规范对齐：仓库与包元数据统一为 `antigravity-parchment-theme`（`install.mjs` 回滚校验同时兼容新名与旧 `chuanban-antigravity-theme-patch` 备份，保留 `~/.gemini/antigravity/theme-patch/` 路径与 `com.antigravity.theme` 服务兼容），[LICENSE](LICENSE) 完整保留上游版权并追加本分支版权声明。
 
@@ -17,6 +17,24 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 6.0.4-eric.1 源码选择性融合与 Anthropic 规范代码轻量化审计（2026-11-26）
+
+- 选择性移植上游 `v6.0.4`（`c345f54..73dc3e9`）中适用于 macOS 专版的核心能力，并对照官方 Anthropic 设计规范对整套样式与运行时做了一次彻底审计与轻量化重构：
+  1. **Antigravity `2.35.2` 适配与词典扩充至 `2,244` 条（`core/i18n.json` / `core/runtime.js`）**：
+     - 补齐 `2.35.2` 运行期模型选择器解锁后的 3 条提示词条及 13 条原生右键菜单词条（总数 `2,244` 条，零重复、零大小写与弯直引号碰撞）；
+     - 升级 `RE_ARIA_MODEL` 解析句号/逗号拼接的运行态提示尾巴（`. Applies to ...` / `, Model cannot be changed...`）；`DEFAULT_EXCLUDE_I18N` 补齐 `[data-testid^="conversation-group-"]`、`[data-testid^="conversation-project-"]` 与 `[data-ag-context-menu]` 防误译隔离。
+  2. **Electron 原生右键菜单（`showContextMenu`）跨隔离世界三级免 GC 汉化（Issue #44，`core/daemon.mjs` / `core/runtime.js`）**：
+     - 针对左侧会话栏、Monaco 编辑器等走 `window.electronNative.showContextMenu` 的系统原生菜单，通过 CDP 监听 `Electron Isolated Context` 按「`0.3ms` 符号缓存 → `5.9ms` 监听器闭包 `[[Scopes]]` 查找 → 带熔断的 `queryObjects` 兜底」定位 `IpcRenderer.prototype.invoke`；
+     - 同步 `CustomEvent`（`__ag_cm_req` / `__ag_cm_res`）握手 + `mergeLabelsOnly` 结构校验仅替换 `label`，保留 `user/i18n.override.json` 最高优先级并跳过用户分组/项目名，切换英文或禁用补丁时自动 `unhook`。
+  3. **macOS 精简版仿 Claude 右键浮窗卡片与外部 IDE / 本地浏览器安全桥接（PR #46，`core/runtime.js` / `core/theme.css` / `core/daemon.mjs`）**：
+     - 前端彻底剔除 Windows/Linux/日语分支，代码由上游 `1,615` 行精简至 `~680` 行；接管对话正文、代码块（复制代码块）、外链、图片（复制图片/另存图片）、文件胶囊与右侧文件栏（含 `#L10-L20` / `:10:1` 行号解析与访达定位）及输入框，支持 `Shift + 右键` 随时透传原生菜单、键盘方向键导航与按需挂载/解绑关闭监听器；`modules.contextMenu: false` 与 Swarm 子帧自动完整剥离载荷；
+     - 守护进程彻底剔除 Windows 注册表 / HKCR / WSL UNC 探测代码，仅保留 macOS `/Applications` 与 `~/Applications` 12 款主流 IDE 轻量探测（5 分钟 TTL 内存 + `.cache/external-editors.json` 磁盘缓存）与无 Shell `execFile` 白名单桥接（`__agOpenInBrowser` 仅放行真实存在的 `.html/.pdf/.svg` 本地文件，`__agOpenInEditor` 仅放行已探测 IDE 并清洗 `ELECTRON_RUN_AS_NODE`，含 `350ms` 节流）；外部中文标题脚本、`spawnSync`/`execSync`/`shell: true` 仍保持严格禁止。
+  4. **Anthropic 设计规范全量审计与代码轻量化清理（`core/theme.css` / `core/runtime.js`）**：
+     - 清除 `core/theme.css` 残存的 2 处 `:has()` 反向选择器（实现全表严格零 `:has()`）、4 个零引用死变量（`--ag-composer-card-*` / `--ag-seal-home-*`）与 3 个恒为 `none` 的 `--ag-ink-shadow-*` 变量；修复 `#ag-theme-btn-tooltip` 缺少 `transform: translate(-50%, -100%)` 导致的定位偏移 bug 与 `.ag-tt-qcard` 引用未定义 `--ag-radius-row` 拼写 bug；
+     - 严格收敛 `Clay (#D97757)` 仅作用于发送主 CTA（和数据热力图色阶）：消除 Token 统计面板中 6 处非 CTA UI 元素的 Clay 误用（侧栏选中图标、筛选栏激活边框、清除链接改为 `1px` 下划线暖墨文字、柱状图选中日期、列表选中行与复选框 `accent-color`）及 1 处冷灰 `rgba(127,127,127)`；
+     - 将 Part IV 指标胶囊/悬浮卡/配额卡重构为语义 CSS 变量统一驱动，新增 Anthropic 暖纸/暖墨零阴影同心超椭圆 `.ag-ctx-card` 样式后，`core/theme.css` 整体净减 264 行；将语言切换按钮 tooltip 的 `window` 关闭监听器改为按需挂载/解绑。
+- 未带入上游 `v6.0.4` 的 Cloudflare R2 / GitHub Release / 飞书字体自动下载器镜像（`install.mjs` +462 行）及物理分仓变更。
 
 ## 6.0.3-eric.1 源码选择性融合（2026-11-25）
 

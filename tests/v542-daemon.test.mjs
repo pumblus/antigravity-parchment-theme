@@ -112,7 +112,7 @@ test('v542 BOM-safe config reader accepts only objects and never writes config',
   const ctx=vm.createContext({fs:{existsSync:()=>true,readFileSync:()=>raw}});vm.runInContext(slice('function readJsonSafe(', '\nfunction readTextSafe')+'globalThis.read=readJsonSafe;',ctx);
   const result=ctx.read('fixture',{enabled:'fallback'});assert.equal(result.enabled,expected);
  }
- assert.doesNotMatch(source,/persistDarkPresetToUserConfig|__agSetDarkPreset|execFile|ensureZhTitlePatch|['"]Page\.reload['"]/);
+ assert.doesNotMatch(source,/persistDarkPresetToUserConfig|__agSetDarkPreset|ensureZhTitlePatch|antigravity-zh-title-patch\.py|spawnSync|execSync|\bshell\s*:\s*true|['"]Page\.reload['"]/);
 });
 test('v542 skipped cache retries same URL after backoff and immediately retries same-origin navigation',async()=>{
  const h=harness();h.config.endpoints=[{fallbackPort:123,channel:'stable'}];

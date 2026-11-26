@@ -35,7 +35,7 @@ async function harness(t, config={}) {
 }
 test('v530 actual top-level cold startup supports custom context limits without TDZ or host effects',async t=>{
  for(const cfg of [{contextLimit:500000},{contextLimitOverride:1000000},{contextLimit:Infinity},{}]){const h=await harness(t,cfg);assert.equal(h.api.activeConfig.modules.coldBootHealer,false);assert.equal(h.calls.length,0);}
- assert.doesNotMatch(source,/execFile|ensureZhTitlePatch|probeZhTitle|resolveWorkingPython|antigravity-zh-title-patch\.py|['"]Page\.reload['"]/);
+ assert.doesNotMatch(source,/ensureZhTitlePatch|probeZhTitle|resolveWorkingPython|antigravity-zh-title-patch\.py|spawnSync|execSync|\bshell\s*:\s*true|['"]Page\.reload['"]/);
 });
 test('v530 explicit origins still strictly override defaults',async t=>{for(const allowedOrigins of [[],['plugin://swarm--mine']]){const h=await harness(t,{allowedOrigins});assert.deepEqual(Array.from(h.api.activeConfig.allowedOrigins),allowedOrigins);}});
 test('v530 temporary SQLite parses model context, stream ratio, override and tail replacement',async t=>{

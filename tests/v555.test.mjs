@@ -12,8 +12,8 @@ test('v555 adds 2.34.0 Orchestrator localization entries without collisions', ()
   const dict = JSON.parse(raw);
   const keys = [...raw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map((m) => JSON.parse(m[1]));
 
-  assert.equal(Object.keys(dict).length, 2226);
-  assert.equal(keys.length, 2226);
+  assert.equal(Object.keys(dict).length, 2244);
+  assert.equal(keys.length, 2244);
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map((k) => k.toLowerCase().replace(/[\u2018\u2019]/g, "'"))).size, keys.length);
 
@@ -43,8 +43,8 @@ test('v555 ships MIT LICENSE, packs it in dist zip, and keeps macOS-only daemon 
 
   const daemonSrc = read('core/daemon.mjs');
   const runtimeSrc = read('core/runtime.js');
-  assert.match(daemonSrc, /const BASE_VERSION = '20261125-v6\.0\.3-eric\.1';/);
-  assert.match(runtimeSrc, /const PATCH_VERSION = boot\.version \|\| '20261125-v6\.0\.3-eric\.1';/);
+  assert.match(daemonSrc, /const BASE_VERSION = '20261126-v6\.0\.4-eric\.1';/);
+  assert.match(runtimeSrc, /const PATCH_VERSION = boot\.version \|\| '20261126-v6\.0\.4-eric\.1';/);
   assert.doesNotMatch(daemonSrc, /KEEP_ALIVE_ONLY|ag-theme-daemon\.log/);
   assert.doesNotMatch(installSrc, /inspectWindowsTaskXmlTriggers|inspectWindowsKeepAliveTask/);
 });

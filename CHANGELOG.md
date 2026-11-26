@@ -2,6 +2,15 @@
 
 > **说明**：本文件记录 `antigravity-parchment-theme`（macOS 专用分支）的演进摘要，并在下方完整保留上游 **[忒修斯的船板（@Anarcadia）`chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)** 的历史变更记录。本分支的详细同步边界与测试记录以 [FORK.md](FORK.md) 为准。
 
+## 6.0.4-eric.1（2026-11-26 · macOS 专用）
+
+- **选择性同步上游 `v6.0.4`（`73dc3e9`）macOS 专版能力**：
+  - 适配 Antigravity `2.35.2` 运行期模型选择器解锁与句号尾巴 `RE_ARIA_MODEL` 解析，词典扩至 `2,244` 条并补齐侧栏自定义分组/项目名防误译排除；
+  - 合入 Issue #44 Electron 原生右键菜单（`showContextMenu`）跨隔离世界三级免 GC 汉化（支持 `user/i18n.override.json` 最高优先级与切英文自动还原）；
+  - 合入 macOS 精简版 PR #46 仿 Claude 紧凑右键浮窗卡片（`modules.contextMenu` 可关，`Shift + 右键` 透传）及无 Shell `execFile` 白名单外部 IDE（VS Code / Cursor / Windsurf / Zed / JetBrains / Sublime）与本地 `.html/.pdf/.svg` 浏览器预览桥接（彻底剔除 Windows/WSL/Linux 代码，未带入字体自动下载镜像）。
+- **Anthropic 设计规范全量审计与代码轻量化**：
+  - 清除 `core/theme.css` 残存 2 处 `:has()`、7 个死/冗余变量与冷灰残留，修复 `[EN | 中文]` tooltip 居中偏移与未定义 `--ag-radius-row` 拼写 bug；收敛 Token 统计 6 处非 CTA Clay 误用；重构 Part IV 指标/配额样式为语义变量并新增扁平无阴影 `.ag-ctx-card`，全样式表净减 264 行；语言切换 tooltip 监听器改为按需挂载/解绑。详见 [FORK.md](FORK.md)。
+
 ## 6.0.3-eric.1（2026-11-25 · macOS 专用）
 
 - **开源分支规范重构**：项目与包元数据更名为 `antigravity-parchment-theme`（回滚校验向后兼容旧 `chuanban-antigravity-theme-patch` 备份），重构 `README.md` / `SKILL.md` 同步至 `6.0.3-eric.1` 并显式致谢上游作者与 MIT 版权。
