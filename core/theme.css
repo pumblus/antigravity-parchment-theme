@@ -517,9 +517,7 @@ code, pre, samp, .font-mono, [class*="language-"], .monaco-editor, .xterm, :is(.
 }
 
 /* 5. Anthropic 扁平纸张层叠几何 + macOS HIG 同心连续曲率圆角（Zero Box-Shadow + Concentric Continuous Corners） */
-/* 2.33+ omits data-newux-theme; retain the same fusion geometry. */
-body[data-agy-theme],
-body[data-agy-theme][data-newux-theme] {
+body[data-agy-theme] {
   --nux-composer-frame-radius: var(--ag-radius-composer-outer, 12px) !important;
   --nux-composer-radius: var(--ag-radius-composer-inner, 11px) !important;
   --nux-radius-lg: var(--ag-radius-card, 10px) !important;
@@ -604,7 +602,7 @@ kbd {
 }
 
 :is([data-markdown-root], .select-text, .prose, .markdown) blockquote {
-  border-left: 2px solid var(--border, #CCCBC8) !important;
+  border-inline-start: 2px solid var(--border, #CCCBC8) !important;
   color: var(--secondary-foreground, #3D3D3A) !important;
 }
 
@@ -647,13 +645,11 @@ html[data-ag-wax-seal="off"] :is(#antigravity\.agentSidePanelInputBox, [id="anti
 
 /* 输入框内部卡片：移除内层独立描边与阴影，与外框融合为单层 1px 细边 */
 body[data-agy-theme] .surface-composer > .surface-composer-card,
-body[data-agy-theme][data-newux-theme="onyx"] .surface-composer > .surface-composer-card,
 .surface-composer > .surface-composer-card,
 .surface-composer-card.bg-card,
 [id="antigravity.agentSidePanelInputBox"] .surface-composer-card,
 [id="antigravity.agentSidePanelInputBox"] > div.bg-card,
 body[data-agy-theme] .surface-composer:focus-within > .surface-composer-card,
-body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .surface-composer-card,
 .surface-composer:focus-within > .surface-composer-card,
 .surface-composer-card:focus-within,
 [id="antigravity.agentSidePanelInputBox"]:focus-within .surface-composer-card {
@@ -664,21 +660,39 @@ body[data-agy-theme][data-newux-theme="onyx"] .surface-composer:focus-within > .
   outline: none !important;
 }
 
-:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(:empty):not([hidden]) ~ .surface-composer-card {
+:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(.agy-floating-composer-shelf-wrap):not(:empty):not([hidden]) ~ .surface-composer-card {
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
 }
 
 /* 展开的非空顶部附加栏（排队消息/引用块）：托盘暖底 + 1px 底部分隔线，兼容 voice-glow-ring */
-:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:nth-child(1 of div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(:empty):not([hidden])) {
+:is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:nth-child(1 of div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(.agy-floating-composer-shelf-wrap):not(:empty):not([hidden])) {
   background-color: var(--ag-composer-tray-bg, #F0EEE6) !important;
   border-bottom: 1px solid var(--ag-composer-tray-divider, #E3DACC) !important;
   border-radius: var(--ag-radius-composer-inner, 11px) var(--ag-radius-composer-inner, 11px) 0 0 !important;
 }
 
 /* 新建对话首页：保留顶栏托盘暖底，消除中间 1px 水平分界线 */
-html[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:nth-child(1 of div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(:empty):not([hidden])) {
+html[data-ag-page-type="home"] :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:nth-child(1 of div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(.agy-floating-composer-shelf-wrap):not(:empty):not([hidden])) {
   border-bottom: 0 solid transparent !important;
+}
+
+/* 2.36.0 最大化侧栏浮动输入框：状态抽屉闭合时占位包装层高 0px，避免误画托盘底线或削平内卡顶部圆角 */
+.agy-floating-composer-expanded :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:nth-child(1 of div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(.agy-floating-composer-shelf-wrap):not(:empty):not([hidden])) {
+  background-color: transparent !important;
+  border-bottom: 0 solid transparent !important;
+  border-radius: 0 !important;
+}
+
+.agy-floating-composer-expanded :is(#antigravity\.agentSidePanelInputBox, [id="antigravity.agentSidePanelInputBox"], .surface-composer) > div:not(.surface-composer-card):not([aria-hidden="true"]):not(.voice-glow-ring):not(.agy-floating-composer-shelf-wrap):not(:empty):not([hidden]) ~ .surface-composer-card {
+  border-top-left-radius: var(--ag-radius-composer-inner, 11px) !important;
+  border-top-right-radius: var(--ag-radius-composer-inner, 11px) !important;
+}
+
+:is(.agy-floating-composer-pill, .agy-floating-composer-expanded) .agy-floating-composer-shelf-wrap[data-open="true"] {
+  background-color: var(--ag-composer-tray-bg, #F0EEE6) !important;
+  border-bottom: 1px solid var(--ag-composer-tray-divider, #E3DACC) !important;
+  border-radius: var(--ag-radius-composer-inner, 11px) var(--ag-radius-composer-inner, 11px) 0 0 !important;
 }
 
 /* 输入框顶部工具栏（排除 .surface-composer-card 与 .voice-glow-ring）、底部普通控件与唯一主行动按钮（Clay Filled Button） */
@@ -1049,6 +1063,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) {
   --ag-inline-code-border: #E3DACC;
   --ag-code-block-bg: #F0EEE6;
   --ag-code-block-border: #E3DACC;
+  --ag-theme-sub-fg: #56554F;
   --code-foreground: #141413 !important;
   /* 低饱和暖纸语法高亮与 Diff 行级色阶 */
   --color-diffEditor-insertedLineBackground: rgba(47, 111, 78, 0.10) !important;
@@ -1119,98 +1134,13 @@ html:not([data-ag-theme-mode="dark"]):not([data-ag-preset]) body:not(.dark) {
   --home-glow: transparent !important;
 }
 
-/* 白天预设 2：轻浅象牙纸 (claude-desktop-purewhite · 同样严守零 #FFFFFF 纯冷白红线) */
-html:not([data-ag-theme-mode="dark"])[data-ag-preset="claude-desktop-purewhite"],
-html:not([data-ag-theme-mode="dark"])[data-ag-preset="claude-desktop-purewhite"] body:not(.dark) {
-  --primary: #D97757 !important;
-  --primary-foreground: #FAF9F5 !important;
-  --editor-selection-background: rgba(217, 119, 87, 0.22) !important;
-  --background: #FAF9F5 !important;
-  --content: #FAF9F5 !important;
-  --foreground: #141413 !important;
-  --sidebar: #F5F3EC !important;
-  --shell: #F5F3EC !important;
-  --sidebar-secondary: #E8E4DA !important;
-  --sidebar-muted: #EFECE4 !important;
-  --sidebar-border: #DCDAD3 !important;
-  --border: #DCDAD3 !important;
-  --secondary: #F0EEE6 !important;
-  --secondary-foreground: #3D3D3A !important;
-  --muted: #F0EEE6 !important;
-  --muted-foreground: #73726C !important;
-  --placeholder: #87867F !important;
-  --link: #141413 !important;
-  --vscode-sideBar-background: #F5F3EC !important;
-  --card: #FAF9F5 !important;
-  --card-border: #DCDAD3 !important;
-  --card-edge: #DCDAD3 !important;
-  --sash-line: #DCDAD3 !important;
-  --onyx-frame: #ECE9E0 !important;
-  --onyx-well: #F5F3EC !important;
-  --onyx-raised: #FAF9F5 !important;
-  --onyx-selected: #E8E4DA !important;
-  --onyx-key: #F0EEE6 !important;
-  --glass: #FAF9F5 !important;
-  --glass-border: #DCDAD3 !important;
-  --glass-highlight: transparent !important;
-  --home-glow: transparent !important;
-  --ag-composer-tray-bg: #F3F1E9;
-}
-
-/* 白天预设 3：深暖燕麦羊皮纸 (vintage-deep · Oat Warm / Manilla 色阶强化) */
-html:not([data-ag-theme-mode="dark"])[data-ag-preset="vintage-deep"],
-html:not([data-ag-theme-mode="dark"])[data-ag-preset="vintage-deep"] body:not(.dark) {
-  --primary: #D97757 !important;
-  --primary-foreground: #FAF9F5 !important;
-  --editor-selection-background: rgba(217, 119, 87, 0.24) !important;
-  --background: #F6F3EB !important;
-  --content: #F6F3EB !important;
-  --foreground: #141413 !important;
-  --secondary: #EAE3D5 !important;
-  --secondary-foreground: #3D3D3A !important;
-  --muted: #EAE3D5 !important;
-  --muted-foreground: #6E6A61 !important;
-  --placeholder: #87867F !important;
-  --link: #141413 !important;
-  --sidebar: #EAE2D3 !important;
-  --shell: #EAE2D3 !important;
-  --sidebar-secondary: #DDD2BF !important;
-  --sidebar-muted: #E3DAC9 !important;
-  --sidebar-border: #C9BFA9 !important;
-  --border: #C9BFA9 !important;
-  --vscode-sideBar-background: #EAE2D3 !important;
-  --card: #FAF9F5 !important;
-  --card-border: #C9BFA9 !important;
-  --card-edge: #C9BFA9 !important;
-  --sash-line: #C9BFA9 !important;
-  --onyx-frame: #E0D6C4 !important;
-  --onyx-well: #EAE2D3 !important;
-  --onyx-raised: #FAF9F5 !important;
-  --onyx-selected: #DDD2BF !important;
-  --onyx-key: #EAE2D3 !important;
-  --glass: #FAF9F5 !important;
-  --glass-border: #C9BFA9 !important;
-  --glass-highlight: transparent !important;
-  --home-glow: transparent !important;
-  --ag-composer-tray-bg: #E3DACC;
-  --ag-composer-card-bg: #FAF9F5;
-  --ag-user-bubble-bg: #EAE2D3;
-  --ag-user-bubble-border: #D8CEBC;
-  --ag-inline-code-bg: #EAE2D3;
-  --ag-inline-code-border: #D8CEBC;
-  --ag-code-block-bg: #EAE2D3;
-  --ag-code-block-border: #D8CEBC;
-  --code-foreground: #141413 !important;
-}
-
 /* Swarm 宿主旧内联深色变量的浅色回退；其余颜色由融合版暖纸预设完整覆盖。 */
 html[data-ag-page-type="plugin"][data-ag-theme-mode="light"] {
   --error: #B84239 !important;
 }
 
 /* 白天模式侧栏选中项与 1px 石色分割细节 */
-body[data-agy-theme]:not(.dark) .agy-sidebar-row[data-selected="true"],
-body[data-agy-theme][data-newux-theme="onyx"]:not(.dark) .agy-sidebar-row[data-selected="true"] {
+body[data-agy-theme]:not(.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--sidebar-secondary) !important;
   --row-bg: var(--sidebar-secondary) !important;
   box-shadow: none !important;
@@ -1311,6 +1241,7 @@ html[data-ag-preset] body[data-agy-theme].dark {
   --ag-inline-code-border: #3D3D3A;
   --ag-code-block-bg: #191917;
   --ag-code-block-border: #3D3D3A;
+  --ag-theme-sub-bg: #2B2A27;
   --code-foreground: #FAF9F5 !important;
   /* 黑夜低饱和暖墨语法高亮与 Diff 行级色阶 */
   --color-diffEditor-insertedLineBackground: rgba(107, 191, 142, 0.12) !important;
@@ -1340,7 +1271,6 @@ html[data-ag-preset] body[data-agy-theme].dark {
 
 /* 黑夜模式侧栏选中态：扁平暖石板填充，移除立体内发光投影 */
 body[data-agy-theme].dark .agy-sidebar-row[data-selected="true"],
-body[data-agy-theme][data-newux-theme="onyx"].dark .agy-sidebar-row[data-selected="true"],
 :is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-sidebar-row[data-selected="true"] {
   background-color: var(--onyx-selected, #2A2926) !important;
   --row-bg: var(--onyx-selected, #2A2926) !important;
@@ -1445,23 +1375,23 @@ body[data-agy-theme] [data-slot="toggle-group"][data-ag-lang-toggle-group="1"][d
  * PART IV. 模型名称同行实时指标胶囊与悬浮详情卡（扁平无阴影 + 1px 石色/暖墨细边 + 圆环进度）
  * ============================================================================ */
 :root {
-  --ag-pill-fg: #3D3D3A;
-  --ag-pill-hover-fg: #141413;
-  --ag-pill-border: #CCCBC8;
-  --ag-pill-top-border: #E3DACC;
+  --ag-pill-fg: var(--secondary-foreground, #3D3D3A);
+  --ag-pill-hover-fg: var(--foreground, #141413);
+  --ag-pill-border: var(--border, #CCCBC8);
+  --ag-pill-top-border: var(--sidebar-secondary, #E3DACC);
   --ag-pill-ring-track: rgba(61, 61, 58, 0.22);
-  --ag-pill-ring-fill: #3D3D3A;
-  --ag-pill-sub-bg: #E3DACC;
-  --ag-pill-sub-border: #CCCBC8;
-  --ag-pill-sub-fg: #56554F;
-  --ag-tt-fg: #141413;
-  --ag-tt-muted: #73726C;
-  --ag-tt-soft-fg: #3D3D3A;
-  --ag-tt-divider: #E3DACC;
-  --ag-tt-track-bg: #E3DACC;
-  --ag-tt-bar-bg: #F0EEE6;
-  --ag-tt-bar-border: #CCCBC8;
-  --ag-tt-bar-fill: #3D3D3A;
+  --ag-pill-ring-fill: var(--secondary-foreground, #3D3D3A);
+  --ag-pill-sub-bg: var(--sidebar-secondary, #E3DACC);
+  --ag-pill-sub-border: var(--border, #CCCBC8);
+  --ag-pill-sub-fg: var(--ag-theme-sub-fg, var(--secondary-foreground, #56554F));
+  --ag-tt-fg: var(--foreground, #141413);
+  --ag-tt-muted: var(--muted-foreground, #73726C);
+  --ag-tt-soft-fg: var(--secondary-foreground, #3D3D3A);
+  --ag-tt-divider: var(--sidebar-secondary, #E3DACC);
+  --ag-tt-track-bg: var(--sidebar-secondary, #E3DACC);
+  --ag-tt-bar-bg: var(--muted, #F0EEE6);
+  --ag-tt-bar-border: var(--border, #CCCBC8);
+  --ag-tt-bar-fill: var(--secondary-foreground, #3D3D3A);
   --ag-tt-think: #6E5485;
   --ag-tt-think-bar: #7A5BA8;
   --ag-tt-good: #2F6F4E;
@@ -1479,23 +1409,23 @@ body[data-agy-theme] [data-slot="toggle-group"][data-ag-lang-toggle-group="1"][d
 }
 
 :is(html[data-ag-theme-mode="dark"], html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) {
-  --ag-pill-fg: #B0AEA5;
-  --ag-pill-hover-fg: #FAF9F5;
-  --ag-pill-border: #3D3D3A;
-  --ag-pill-top-border: #3D3D3A;
+  --ag-pill-fg: var(--muted-foreground, #B0AEA5);
+  --ag-pill-hover-fg: var(--foreground, #FAF9F5);
+  --ag-pill-border: var(--border, #3D3D3A);
+  --ag-pill-top-border: var(--border, #3D3D3A);
   --ag-pill-ring-track: rgba(250, 249, 245, 0.20);
-  --ag-pill-ring-fill: #B0AEA5;
-  --ag-pill-sub-bg: #2B2A27;
-  --ag-pill-sub-border: #3D3D3A;
-  --ag-pill-sub-fg: #D3D1C7;
-  --ag-tt-fg: #FAF9F5;
-  --ag-tt-muted: #B0AEA5;
-  --ag-tt-soft-fg: #B0AEA5;
-  --ag-tt-divider: #3D3D3A;
-  --ag-tt-track-bg: #2B2A27;
-  --ag-tt-bar-bg: #191917;
-  --ag-tt-bar-border: #3D3D3A;
-  --ag-tt-bar-fill: #B0AEA5;
+  --ag-pill-ring-fill: var(--muted-foreground, #B0AEA5);
+  --ag-pill-sub-bg: var(--ag-theme-sub-bg, var(--sidebar-secondary, #2B2A27));
+  --ag-pill-sub-border: var(--border, #3D3D3A);
+  --ag-pill-sub-fg: var(--secondary-foreground, #D3D1C7);
+  --ag-tt-fg: var(--foreground, #FAF9F5);
+  --ag-tt-muted: var(--muted-foreground, #B0AEA5);
+  --ag-tt-soft-fg: var(--muted-foreground, #B0AEA5);
+  --ag-tt-divider: var(--border, #3D3D3A);
+  --ag-tt-track-bg: var(--sidebar-secondary, #2B2A27);
+  --ag-tt-bar-bg: var(--sidebar, #191917);
+  --ag-tt-bar-border: var(--border, #3D3D3A);
+  --ag-tt-bar-fill: var(--muted-foreground, #B0AEA5);
   --ag-tt-think: #BDA6D9;
   --ag-tt-think-bar: #A98FD6;
   --ag-tt-good: #6BBF8E;
@@ -1734,12 +1664,12 @@ body[data-agy-theme] [data-slot="toggle-group"][data-ag-lang-toggle-group="1"][d
 
 /* 底部常驻 Gemini 配额数字（极简斜杠）与悬浮详情卡双列同心卡（Anthropic 暖纸 / 暖墨扁平规范） */
 :root {
-  --ag-tt-qcard-bg: #F0EEE6;
-  --ag-tt-qcard-border: #E3DACC;
+  --ag-tt-qcard-bg: var(--muted, #F0EEE6);
+  --ag-tt-qcard-border: var(--sidebar-secondary, #E3DACC);
 }
 :is(html[data-ag-theme-mode="dark"], html[data-ag-theme-mode="dark"] body, body.dark, body.theme-dark) {
-  --ag-tt-qcard-bg: #191917;
-  --ag-tt-qcard-border: #2E2D2A;
+  --ag-tt-qcard-bg: var(--sidebar, #191917);
+  --ag-tt-qcard-border: var(--border, #2E2D2A);
 }
 :is(#ag-live-metrics-pill, .ag-live-metrics-pill) .ag-quota-div { display: inline-block; width: 1px; height: 10px; background-color: var(--ag-pill-border); margin: 0 6px; flex-shrink: 0; }
 :is(#ag-live-metrics-pill, .ag-live-metrics-pill) .ag-quota-inline { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -1795,7 +1725,7 @@ body[data-agy-theme] [data-slot="toggle-group"][data-ag-lang-toggle-group="1"][d
   --ag-ta-warn: #9F6B19;
   --ag-ta-err: #B84239;
   --ag-ta-hover: rgba(20, 20, 19, 0.05);
-  --ag-ta-tint: #E3DACC;
+  --ag-ta-tint: var(--sidebar-secondary, #E3DACC);
   --ag-ta-hm-0: rgba(20, 20, 19, 0.07);
   --ag-ta-hm-1: rgba(217, 119, 87, 0.26);
   --ag-ta-hm-2: rgba(217, 119, 87, 0.48);
@@ -1825,7 +1755,7 @@ body.theme-dark {
   --ag-ta-warn: #D9A441;
   --ag-ta-err: #D96055;
   --ag-ta-hover: rgba(250, 249, 245, 0.06);
-  --ag-ta-tint: #2B2A27;
+  --ag-ta-tint: var(--sidebar-secondary, #2B2A27);
   --ag-ta-hm-0: rgba(250, 249, 245, 0.08);
   --ag-ta-hm-1: rgba(217, 119, 87, 0.28);
   --ag-ta-hm-2: rgba(217, 119, 87, 0.50);

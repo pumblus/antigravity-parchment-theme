@@ -213,7 +213,7 @@ test('v603 daemon supports compact SVG ring, Claude merged-thinking, wake-turn S
 });
 
 test('v603 i18n covers 2.35.1 dynamic rules, breadcrumb protection, subagent plural guard, and colon/ellipsis fallbacks', () => {
-  assert.equal(Object.keys(dict).length, 2244);
+  assert.equal(Object.keys(dict).length, 2258);
   const lookupCode =
     sliceBetween(runtimeSrc, '  const SWARM_FRAME_ONLY_DICT =', '  let scanBodyFn = null;') +
     '\n' +

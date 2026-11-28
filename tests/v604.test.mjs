@@ -26,10 +26,10 @@ function sliceBetween(src, startMarker, endMarker) {
   return src.slice(s, e);
 }
 
-test('v604 dictionary expands to 2,244 entries with zero collisions and includes 2.35.2 + context menu + model leaving labels', () => {
+test('v604 dictionary expands to 2,258 entries with zero collisions and includes 2.35.2 + 2.36.0 + context menu + model leaving labels', () => {
   const keys = [...i18nRaw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map((m) => JSON.parse(m[1]));
-  assert.equal(Object.keys(dict).length, 2244);
-  assert.equal(keys.length, 2244);
+  assert.equal(Object.keys(dict).length, 2258);
+  assert.equal(keys.length, 2258);
   assert.equal(new Set(keys).size, keys.length);
   assert.equal(new Set(keys.map((k) => k.toLowerCase().replace(/[\u2018\u2019]/g, "'"))).size, keys.length);
 

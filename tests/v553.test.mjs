@@ -65,7 +65,7 @@ test('v553 CSS adapts 2.34.0 browser holes, file inline-pills, removes trailing 
 });
 
 test('v553 i18n adds 80 entries with unified terminology, ellipsis fallback, effortless model labels, and Quote/Comment context guards', () => {
-  assert.equal(Object.keys(dict).length, 2244);
+  assert.equal(Object.keys(dict).length, 2258);
   assert.equal(dict['Where each worker is, by thread'], '按任务组查看各成员当前位置');
   assert.equal(dict['Cannot promote during Battle Mode — end the battle first'], '对战模式进行中无法转为独立对话，请先结束当前对战');
   assert.equal(

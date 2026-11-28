@@ -325,7 +325,8 @@ test('v552 runtime syncChuanbanPreset short-circuits redundant surface sync unti
   const docEl = {
     style: { colorScheme: '' },
     getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
-    setAttribute: (k, v) => attrs.set(k, v)
+    setAttribute: (k, v) => attrs.set(k, v),
+    removeAttribute: (k) => attrs.delete(k)
   };
   const body = {
     classList: { contains: () => false },
@@ -334,17 +335,15 @@ test('v552 runtime syncChuanbanPreset short-circuits redundant surface sync unti
   const store = new Map();
   const Storage = { prototype: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) } };
   const window = { __ag_style_rev: 1, matchMedia: () => ({ matches: false }) };
-  const code = slice(runtimeSource, '  let lastSyncedHostMode = null;', '\n  window.__ag_sync_preset_fn =');
+  const code = slice(runtimeSource, '  const LEGACY_PRESET_NAMES =', '\n  window.__ag_sync_preset_fn =');
   const ctx = vm.createContext({
     window,
     document: { documentElement: docEl, body },
     Storage,
     localStorage: {},
     boot: {},
+    MODULES: { theme: true },
     IS_SWARM_PLUGIN_FRAME: false,
-    DEFAULT_PRESET: 'high-contrast',
-    PRESETS: { HIGH_CONTRAST: 'high-contrast', CLAUDE_PUREWHITE: 'claude-desktop-purewhite', VINTAGE_DEEP: 'vintage-deep', LEGACY_WARM_WHITE: 'a', LEGACY_OFFICIAL: 'b', LEGACY_CHUANBAN: 'c' },
-    ALL_CUSTOM_PRESET_NAMES: new Set(),
     computeColorLuminance: () => null,
     syncCurtainSurfaceColor: () => { curtainCalls += 1; }
   });

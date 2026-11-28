@@ -2,6 +2,19 @@
 
 > **说明**：本文件记录 `antigravity-parchment-theme`（macOS 专用分支）的演进摘要，并在下方完整保留上游 **[忒修斯的船板（@Anarcadia）`chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)** 的历史变更记录。本分支的详细同步边界与测试记录以 [FORK.md](FORK.md) 为准。
 
+## 6.0.6-eric.1（2026-11-28 · macOS 专用）
+
+- **选择性同步上游 `v6.0.5`（`e52ca77`）与 `v6.0.6`（`b318277`）macOS 专版能力**：
+  - 合入 `v6.0.6` Issue #50 / PR #51：隔离 Review / Diff 视图 `.view-lines, .code-line .line-content, .code-line .token` 防止代码标识符被误译，支持热注入祖先去重原位还原英文代码，并将 `.monaco-diff-editor, .view-lines, .code-line` 纳入三大全局 `MutationObserver` 快速跳过列表；
+  - 合入 `v6.0.5` 原生右键菜单 IPC 钩子 `REV=3`（`reqId` nonce 防串包、10 分钟 TTL 自愈熔断、修复初始英文切中文门禁），补齐 `Standalone` 与 `*-outside*` 侧栏右键，打通自绘右键浮窗对 `user/i18n.override.json` 的最高优先级覆盖；
+  - 补齐 5 项动态用户内容防误译选择器、Swarm `#f-channel` `<select>` 防重置、`<1% left` / `less than a minute` / `d/h/m/s` 动态规则与 `selectors.skipAriaLabels` 扩展；
+  - 补齐设置弹窗「Token 统计」全界面 `[EN | 中文]` 实时双语渲染与 `Claude & GPT` 池标注，`parseGenMetadataRow` 补齐 `gpt-` / `apiProvider 31/32` 思考 Token 识别（未带入 Windows/WSL2 UNC 退避及 5 槽主题状态机，PR #47 已于 `6.0.4-eric.1` 合入）。
+- **Antigravity `2.36.0` 适配与架构精简优化（融合版专属）**：
+  - **修复 `2.36.0` 最大化侧栏浮动输入框展开态顶部圆角异常与指标绑定**：排除闭合态 `.agy-floating-composer-shelf-wrap` 及其占位包装层误触托盘规则，恢复展开态 `12px/11px` 同心圆角与打开态托盘分隔线；扩展 `resolveBoxCascadeId()` 识别 `[data-testid="aux-pane-floating-composer"]` 使浮动展开框同步显示 `tok/s · TTFT` 实时指标；
+  - **补齐 `2.36.0` 新文案与 `2.35.0` RTL 逻辑边框**：词典增至 `2,258` 条（覆盖浮动状态条、`Skipped`、插件 `See more`、组织禁用提示与预付钱包耗尽提示，配套动态规则），`blockquote` 改为 `border-inline-start`；
+  - **历史冗余代码瘦身**：剔除 `coldBootHealer`（含 `__agRequestHardReload`）、`2.33.0` 已废弃的 `data-newux-theme` 兼容层、两套未用白天预设（`claude-desktop-purewhite` / `vintage-deep`）与 `localStorage` 劫持钩子；将缩放快捷键拦截精简为中文输入法 + Swarm 子帧兜底（普通与小键盘交由 `2.36+` 原生菜单），并移除幕布同步的离屏 Canvas / 临时 DOM 探针（核心前端净减约 550 行）；
+  - **长历史冷热分层缓存与独立主题开关（`modules.theme`）**：适配 `2.35.0+` 无限本地对话历史，将 Token 统计磁盘缓存拆分为 `token-analytics-cold.json`（>7 天，热态变更零重写）与 `token-analytics-hot.json`（近 7 天），自动迁移旧单文件并在血缘空闲轮询跳过 >7 天已确认冷库；新增 `modules.theme`（默认 `true`），设为 `false` 时剥离视觉/字体 CSS、保留原版主题（如原生 Everforest / Nord）的同时无缝复用汉化、配额、指标、Token 统计与右键浮窗。详见 [FORK.md](FORK.md)。
+
 ## 6.0.4-eric.1（2026-11-26 · macOS 专用）
 
 - **选择性同步上游 `v6.0.4`（`73dc3e9`）macOS 专版能力**：

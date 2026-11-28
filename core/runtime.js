@@ -50,7 +50,7 @@
       typeof document !== 'undefined' &&
       typeof document.querySelector === 'function' &&
       document.querySelector(
-        'link[href*="/jetbox.css"], body[data-agy-theme], body[data-newux-theme], [id="antigravity.agentSidePanelInputBox"]'
+        'link[href*="/jetbox.css"], body[data-agy-theme], [id="antigravity.agentSidePanelInputBox"]'
       )
     );
   };
@@ -106,7 +106,7 @@
     }
   }
 
-  const PATCH_VERSION = boot.version || '20261126-v6.0.4-eric.1';
+  const PATCH_VERSION = boot.version || '20261128-v6.0.6-eric.1';
   const DETECTED_OS = 'darwin';
   const ENABLED = boot.enabled !== false;
   const CSS_TEXT = boot.cssText || '';
@@ -114,6 +114,7 @@
   const THEME_VARS = boot.themeVars && typeof boot.themeVars === 'object' ? boot.themeVars : {};
   const MODULES = Object.assign(
     {
+      theme: true,
       i18n: true,
       metrics: true,
       quota: true,
@@ -121,7 +122,6 @@
       contextMenu: true,
       composerWaxSeal: true,
       deadlockHealer: true,
-      coldBootHealer: false,
       zoomShortcuts: true,
       customCss: true,
       customJs: true
@@ -180,7 +180,7 @@
   }
 
   const DEFAULT_EXCLUDE_I18N =
-    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-row-history"] a[href^="/c/"], [data-testid="conversation-row-history"] span.truncate, [data-testid^="conversation-group-"], [data-testid^="conversation-project-"], [data-testid^="sidebar-agent-row-"] span.truncate, [data-testid="sidebar-agent-hover-card-title"], [data-testid="coordinator-hover-card-title"], [data-testid="doc-row-title"], [data-testid="conversation-navigator-turn"], [data-testid="side-question-followup-user"], [data-testid="comment-card-text"], [data-testid="automation-name"], [data-testid="automation-instructions-text"], [data-testid="step-plan-item"], [data-testid="live-transcript"], [data-testid="voice-transcript-summary-lead"], [data-testid="voice-transcript-summary-point"], [data-testid="project-header"] span.truncate, .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui], [data-ag-context-menu], [data-ag-lang-row="1"]';
+    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .view-lines, .xterm, .code-line .line-content, .code-line .token, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-row-history"] a[href^="/c/"], [data-testid="conversation-row-history"] span.truncate, [data-testid^="conversation-group-"], [data-testid^="conversation-project-"], [data-testid^="sidebar-agent-row-"] span.truncate, [data-testid="sidebar-agent-hover-card-title"], [data-testid="coordinator-hover-card-title"], [data-testid="coordinator-card-title"], [data-testid="coordinator-card-latest-line"], [data-testid="context-provider-hover-card-title"], [data-testid="ask-question-header-text"], [data-testid="ask-question-option-text"], [data-testid="doc-row-title"], [data-testid="conversation-navigator-turn"], [data-testid="side-question-followup-user"], [data-testid="comment-card-text"], [data-testid="automation-name"], [data-testid="automation-instructions-text"], [data-testid="step-plan-item"], [data-testid="live-transcript"], [data-testid="voice-transcript-summary-lead"], [data-testid="voice-transcript-summary-point"], [data-testid="project-header"] span.truncate, .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui], [data-ag-context-menu], [data-ag-lang-row="1"]';
 
   function cleanupContextMenuDom() {
     try {
@@ -239,19 +239,6 @@
     boot.selectors || {}
   );
 
-  // Cancel callbacks captured by the previous payload before applying new module settings.
-  if (window.__ag_zoom_timer != null) {
-    clearTimeout(window.__ag_zoom_timer);
-    window.__ag_zoom_timer = null;
-  }
-
-  const coldBootGeneration = Symbol('cold-boot-payload');
-  window.__ag_coldboot_generation = coldBootGeneration;
-  window.__ag_commit_coldboot_reload = null;
-  if (window.__ag_self_zoom_timer != null) clearTimeout(window.__ag_self_zoom_timer);
-  window.__ag_self_zoom_timer = null;
-  window.__ag_self_zooming = false;
-
   // 执行上一轮 user/custom.js 或内部注册的生命周期清理函数（防止热重载或卸载逃逸）
   if (Array.isArray(window.__ag_cleanup_fns) && window.__ag_cleanup_fns.length > 0) {
     const prevCleanups = window.__ag_cleanup_fns.splice(0, window.__ag_cleanup_fns.length);
@@ -301,12 +288,6 @@
       window.__ag_user_231_observer.disconnect();
     } catch (e) {}
     window.__ag_user_231_observer = null;
-  }
-  if (window.__ag_coldboot_timer) {
-    try {
-      clearTimeout(window.__ag_coldboot_timer);
-    } catch (e) {}
-    window.__ag_coldboot_timer = null;
   }
 
   if (window.__ag_metrics_tt_hide_timer) clearTimeout(window.__ag_metrics_tt_hide_timer);
@@ -523,30 +504,6 @@
     return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
   }
 
-  let colorProbeCanvasCtx = null;
-  function parseCssColorViaCanvasHex6(rawColor) {
-    if (!rawColor || typeof document === 'undefined') return null;
-    try {
-      if (!colorProbeCanvasCtx) {
-        const c = document.createElement('canvas');
-        c.width = 1;
-        c.height = 1;
-        colorProbeCanvasCtx = c.getContext('2d', { willReadFrequently: true });
-      }
-      if (!colorProbeCanvasCtx) return null;
-      colorProbeCanvasCtx.clearRect(0, 0, 1, 1);
-      colorProbeCanvasCtx.fillStyle = 'rgba(0, 0, 0, 0)';
-      colorProbeCanvasCtx.fillStyle = rawColor;
-      colorProbeCanvasCtx.fillRect(0, 0, 1, 1);
-      const d = colorProbeCanvasCtx.getImageData(0, 0, 1, 1).data;
-      if (!d || d[3] < 242) return null;
-      const h2 = (v) => v.toString(16).padStart(2, '0');
-      return ('#' + h2(d[0]) + h2(d[1]) + h2(d[2])).toUpperCase();
-    } catch (e) {
-      return null;
-    }
-  }
-
   function resolveCssColorToHex6(propName, targetEl, fallbackHex) {
     try {
       const el = targetEl || document.body || document.documentElement;
@@ -561,25 +518,6 @@
           })
           .trim();
         hex = parseColorToHex6(cur);
-      }
-      if (!hex && cur && !cur.includes('var(')) {
-        hex = parseCssColorViaCanvasHex6(cur);
-      }
-      if (!hex && cur) {
-        const host = document.head || document.documentElement;
-        if (host) {
-          const probe = document.createElement('span');
-          probe.style.cssText =
-            'position:fixed!important;left:-9999px!important;top:-9999px!important;pointer-events:none!important;display:none!important;';
-          probe.style.setProperty('color', cur.includes('var(') ? `var(${propName})` : cur, 'important');
-          host.appendChild(probe);
-          try {
-            const resolved = getComputedStyle(probe).color;
-            hex = parseColorToHex6(resolved) || parseCssColorViaCanvasHex6(resolved);
-          } finally {
-            probe.remove();
-          }
-        }
       }
       return hex || fallbackHex;
     } catch (e) {
@@ -656,6 +594,7 @@
       window.__ag_cm_translate_listener = null;
     }
     window.__ag_translate_context_menu_items = null;
+    window.__ag_lookup_user_override = null;
     window.__ag_check_route_fn = null;
     window.__ag_trigger_route_check_fn = null;
     window.__agRequestMetrics?.('[]');
@@ -713,21 +652,8 @@
       } catch (e) {}
       window.__ag_mql_cleanup = null;
     }
-    if (window.__ag_zoom_timer) {
-      try {
-        clearTimeout(window.__ag_zoom_timer);
-      } catch (e) {}
-      window.__ag_zoom_timer = null;
-    }
-    if (window.__ag_self_zoom_timer) {
-      try {
-        clearTimeout(window.__ag_self_zoom_timer);
-      } catch (e) {}
-      window.__ag_self_zoom_timer = null;
-    }
-    window.__ag_self_zooming = false;
     window.__ag_zoom_keydown_fn = null;
-    window.__ag_zoom_resize_fn = null;
+    window.__ag_theme_was_active = false;
     window.__ag_settings_click_fn = null;
     window.__ag_sync_preset_fn = null;
     window.__ag_host_theme_mode = null;
@@ -807,13 +733,15 @@
   // ============================================================================
   const headTarget = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
 
+  const THEME_ENABLED = MODULES.theme !== false;
   const THEME_RULES_SPLIT_MARKER = '/* __AG_THEME_RULES_START__ */';
   const WIDGETS_CSS_SPLIT_MARKER = '/* __AG_WIDGETS_CSS_START__ */';
   const rulesSplitIdx = CSS_TEXT.indexOf(THEME_RULES_SPLIT_MARKER);
   const widgetsSplitIdx = CSS_TEXT.indexOf(WIDGETS_CSS_SPLIT_MARKER);
-  const FONT_FACES_ONLY_CSS = rulesSplitIdx >= 0 ? CSS_TEXT.slice(0, rulesSplitIdx) : '';
-  const THEME_ONLY_CSS =
-    rulesSplitIdx >= 0
+  const FONT_FACES_ONLY_CSS = THEME_ENABLED && rulesSplitIdx >= 0 ? CSS_TEXT.slice(0, rulesSplitIdx) : '';
+  const THEME_ONLY_CSS = !THEME_ENABLED
+    ? ''
+    : rulesSplitIdx >= 0
       ? widgetsSplitIdx >= 0
         ? CSS_TEXT.slice(rulesSplitIdx, widgetsSplitIdx)
         : CSS_TEXT.slice(rulesSplitIdx)
@@ -822,8 +750,9 @@
         : CSS_TEXT;
   const WIDGETS_ONLY_CSS = widgetsSplitIdx >= 0 ? CSS_TEXT.slice(widgetsSplitIdx) : '';
 
-  if (FONT_FACES_ONLY_CSS) {
-    let ffStyle = document.getElementById('ag-font-faces');
+  const existingFfStyle = document.getElementById('ag-font-faces');
+  if (THEME_ENABLED && FONT_FACES_ONLY_CSS) {
+    let ffStyle = existingFfStyle;
     if (!ffStyle) {
       ffStyle = document.createElement('style');
       ffStyle.id = 'ag-font-faces';
@@ -833,16 +762,23 @@
       ffStyle.textContent = FONT_FACES_ONLY_CSS;
     }
     if (ffStyle.disabled) ffStyle.disabled = false;
+  } else if (!THEME_ENABLED && existingFfStyle) {
+    existingFfStyle.remove();
   }
 
   let style = document.getElementById('ag-custom-fonts');
-  if (!style) {
-    style = document.createElement('style');
-    style.id = 'ag-custom-fonts';
-    if (headTarget) headTarget.appendChild(style);
-  }
-  if (style && style.textContent !== THEME_ONLY_CSS) {
-    style.textContent = THEME_ONLY_CSS;
+  if (THEME_ENABLED) {
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'ag-custom-fonts';
+      if (headTarget) headTarget.appendChild(style);
+    }
+    if (style && style.textContent !== THEME_ONLY_CSS) {
+      style.textContent = THEME_ONLY_CSS;
+      window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
+    }
+  } else if (style) {
+    style.remove();
     window.__ag_style_rev = (window.__ag_style_rev || 0) + 1;
   }
 
@@ -861,10 +797,22 @@
     widgetStyle.remove();
   }
 
-  document.documentElement.setAttribute('data-ag-wax-seal', MODULES.composerWaxSeal === false ? 'off' : 'on');
+  if (THEME_ENABLED) {
+    document.documentElement.setAttribute('data-ag-wax-seal', MODULES.composerWaxSeal === false ? 'off' : 'on');
+    applyThemeVars(THEME_VARS);
+    window.__ag_theme_was_active = true;
+  } else {
+    document.documentElement.removeAttribute('data-ag-wax-seal');
+    document.documentElement.removeAttribute('data-ag-preset');
+    applyThemeVars({});
+    if (window.__ag_theme_was_active) {
+      window.__ag_theme_was_active = false;
+      window.__ag_last_surface_sync_key = '';
+      syncCurtainSurfaceColor(true);
+    }
+  }
   const detectedOs = DETECTED_OS;
   document.documentElement.setAttribute('data-ag-os', detectedOs);
-  applyThemeVars(THEME_VARS);
 
   let userStyle = document.getElementById('antigravity-user-custom-style');
   if (MODULES.customCss && CUSTOM_CSS_TEXT.trim()) {
@@ -885,7 +833,7 @@
   function ensureStylesAtEndOfHead() {
     const h = document.head || document.getElementsByTagName('head')[0];
     if (!h) return;
-    const base = document.getElementById('ag-custom-fonts');
+    const base = document.getElementById('ag-custom-fonts') || document.getElementById('ag-ui-widgets');
     if (!base) return;
     let needsMove = base.parentNode !== h;
     if (!needsMove) {
@@ -945,308 +893,8 @@
   }
 
   // ============================================================================
-  // 2.05 冷启动内嵌兜底包漂移安全自愈（HEAD ETag 零流量比对 + 六重空输入/零交互安全门禁）
+  // 2.1 缩放快捷键精简兜底（2.36+ 已原生覆盖 ASCII 与小键盘，此处仅补齐中文输入法与 Swarm 子帧转发）
   // ============================================================================
-  if (
-    !IS_SWARM_PLUGIN_FRAME &&
-    window.top === window &&
-    MODULES.deadlockHealer !== false &&
-    MODULES.coldBootHealer === true &&
-    /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(String(window.location.origin || ''))
-  ) {
-    const markUserDirty = () => {
-      window.__ag_user_interacted_dirty = true;
-      if (window.__ag_coldboot_timer) {
-        try {
-          clearTimeout(window.__ag_coldboot_timer);
-        } catch (e) {}
-        window.__ag_coldboot_timer = null;
-      }
-    };
-
-    if (!window.__ag_user_dirty_guard_installed) {
-      window.__ag_user_dirty_guard_installed = true;
-      const PURE_MOD_KEYS = new Set(['Meta', 'Control', 'Alt', 'Shift', 'CapsLock', 'NumLock', 'ScrollLock', 'Fn']);
-      document.addEventListener(
-        'keydown',
-        (e) => {
-          const k = String(e.key || '');
-          if (PURE_MOD_KEYS.has(k)) return;
-          if ((e.metaKey || e.ctrlKey) && !e.altKey && (k === '-' || k === '_' || k === '=' || k === '+' || k === '0')) {
-            return;
-          }
-          markUserDirty();
-        },
-        { capture: true, passive: true }
-      );
-      for (const evtName of ['paste', 'drop', 'compositionstart', 'input']) {
-        document.addEventListener(evtName, markUserDirty, { capture: true, passive: true });
-      }
-    }
-
-    const readSessionHealedFlag = () => {
-      try {
-        return window.sessionStorage.getItem('__ag_coldboot_bundle_healed') === '1';
-      } catch (e) {
-        return true;
-      }
-    };
-
-    const isWindowUntouchedAndIdleForColdHeal = () => {
-      if (!ENABLED || MODULES.deadlockHealer === false || MODULES.coldBootHealer !== true) return false;
-      if (window.__ag_coldboot_generation !== coldBootGeneration) return false;
-      if (window.__ag_user_interacted_dirty) return false;
-      // Never refresh a background window or a conversation with potentially unseen state.
-      if (document.hidden || !document.hasFocus() || window.location.pathname !== '/') return false;
-      if (document.activeElement?.matches?.('input, textarea, [contenteditable], [data-lexical-editor]')) return false;
-      if (typeof performance === 'undefined' || typeof performance.now !== 'function' || performance.now() >= 25000) {
-        return false;
-      }
-      if (readSessionHealedFlag()) return false;
-      // Empty text is not proof of an empty draft: attachments and queued sends count too.
-      if (document.querySelector('[data-testid*="attachment"], [data-testid*="queued-message"], [contenteditable] img, [contenteditable] video, [contenteditable] audio')) return false;
-      for (const fileInput of document.querySelectorAll('input[type="file"]')) {
-        if (fileInput.files && fileInput.files.length) return false;
-      }
-      if (
-        document.querySelector(
-          '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [data-state="open"], [data-testid="input-cancel-button"], [data-testid*="running-"], button[aria-label="Stop execution"], button[aria-label="停止执行"], button[aria-label*="Cancel ("], button[aria-label*="取消生成"]'
-        )
-      ) {
-        return false;
-      }
-      const editableList = document.querySelectorAll(
-        '[data-lexical-editor="true"], [contenteditable="true"], textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"])'
-      );
-      for (let i = 0; i < editableList.length; i++) {
-        const el = editableList[i];
-        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-          if (el.tagName === 'INPUT') {
-            const itype = String(el.type || '').toLowerCase();
-            if (
-              itype === 'hidden' ||
-              itype === 'checkbox' ||
-              itype === 'radio' ||
-              itype === 'range' ||
-              itype === 'color' ||
-              itype === 'button' ||
-              itype === 'submit' ||
-              itype === 'reset' ||
-              itype === 'file'
-            ) {
-              continue;
-            }
-          }
-          if (String(el.value || '').trim() !== '') return false;
-        } else {
-          const txt = String(el.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
-          if (txt !== '') return false;
-        }
-      }
-      return true;
-    };
-
-    const resolveInitialMainBundleSize = () => {
-      try {
-        if (typeof performance.getEntriesByType === 'function') {
-          const allMain = performance
-            .getEntriesByType('resource')
-            .filter((e) => /\/main\.js(?:\?|$)/.test(String(e.name || '')));
-          // 优先读取 <script src="/main.js"> 条目，排除本自愈器发起的 0 字节 HEAD fetch 条目防止二次复检自锁
-          const scriptEntries = allMain.filter(
-            (e) =>
-              e.initiatorType === 'script' &&
-              ((Number(e.decodedBodySize) || 0) > 0 || (Number(e.encodedBodySize) || 0) > 0)
-          );
-          const nonZeroEntries =
-            scriptEntries.length > 0
-              ? scriptEntries
-              : allMain.filter(
-                  (e) =>
-                    e.initiatorType !== 'fetch' &&
-                    ((Number(e.decodedBodySize) || 0) > 0 || (Number(e.encodedBodySize) || 0) > 0)
-                );
-          if (nonZeroEntries.length > 0) {
-            const picked = nonZeroEntries[nonZeroEntries.length - 1];
-            const sizeObj = {
-              decoded: Number(picked.decodedBodySize) || 0,
-              encoded: Number(picked.encodedBodySize) || 0
-            };
-            window.__ag_coldboot_initial_main_size = sizeObj;
-            return sizeObj;
-          }
-        }
-      } catch (e) {}
-      if (
-        window.__ag_coldboot_initial_main_size &&
-        (window.__ag_coldboot_initial_main_size.decoded > 0 || window.__ag_coldboot_initial_main_size.encoded > 0)
-      ) {
-        return window.__ag_coldboot_initial_main_size;
-      }
-      return { decoded: 0, encoded: 0 };
-    };
-
-    // 模块初始化时即捕获初始 script 体积快照，免疫后续 ResourceTiming 250 条环形缓冲淘汰与 HEAD 探测干扰
-    resolveInitialMainBundleSize();
-
-    const probeColdBootBundleDrift = async (attempt) => {
-      window.__ag_coldboot_timer = null;
-      if (!isWindowUntouchedAndIdleForColdHeal()) {
-        window.__ag_coldboot_probe_done = true;
-        window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'gate-blocked' };
-        return;
-      }
-      try {
-        const initSize = resolveInitialMainBundleSize();
-        const loadedDecoded = initSize.decoded;
-        const loadedEncoded = initSize.encoded;
-        if (loadedDecoded <= 0 && loadedEncoded <= 0) {
-          window.__ag_coldboot_probe_done = true;
-          window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'no-perf-entry' };
-          return;
-        }
-
-        const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-        const abortTimer = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
-        let res = null;
-        try {
-          res = await fetch('/main.js', {
-            method: 'HEAD',
-            cache: 'no-store',
-            signal: ctrl ? ctrl.signal : undefined
-          });
-        } finally {
-          if (abortTimer) clearTimeout(abortTimer);
-        }
-        if (!res || !res.ok) {
-          window.__ag_coldboot_probe_done = true;
-          window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'head-failed' };
-          return;
-        }
-
-        const etag = String(res.headers.get('etag') || '').trim();
-        const mEtag = etag.match(/^(?:W\/)?"([0-9a-f]+)-[0-9a-f]+"$/i);
-        const serverDecoded = mEtag ? parseInt(mEtag[1], 16) : 0;
-        const serverEncoded = Number(res.headers.get('content-length')) || 0;
-
-        let hasDrift = false;
-        if (serverDecoded > 0 && loadedDecoded > 0) {
-          hasDrift = Math.abs(serverDecoded - loadedDecoded) > 1024;
-        } else if (serverEncoded > 0 && loadedEncoded > 0) {
-          hasDrift = Math.abs(serverEncoded - loadedEncoded) > 1024;
-        }
-
-        if (!isWindowUntouchedAndIdleForColdHeal()) {
-          window.__ag_coldboot_probe_done = true;
-          window.__ag_coldboot_healer_state = {
-            probeDone: true,
-            loadedDecoded,
-            serverDecoded,
-            drifted: hasDrift,
-            skippedReason: 'dirty-after-head'
-          };
-          return;
-        }
-
-        if (hasDrift) {
-          window.__ag_coldboot_probe_done = true;
-          window.__ag_coldboot_healer_state = {
-            probeDone: true,
-            loadedDecoded,
-            serverDecoded,
-            drifted: true,
-            reloadRequested: true
-          };
-          // Daemon acknowledges in this same execution context. The final safety check
-          // and reload stay synchronous on the page, avoiding a CDP Page.reload race.
-          if (typeof window.__agRequestHardReload !== 'function' || !window.crypto?.randomUUID) return;
-          const token = window.crypto.randomUUID();
-          window.__ag_commit_coldboot_reload = (candidate) => {
-            if (candidate !== token || !isWindowUntouchedAndIdleForColdHeal()) return false;
-            try { window.sessionStorage.setItem('__ag_coldboot_bundle_healed', '1'); }
-            catch (e) { return false; }
-            window.__ag_commit_coldboot_reload = null;
-            window.location.reload();
-            return true;
-          };
-          window.__agRequestHardReload(JSON.stringify({ token }));
-          return;
-        }
-
-        const hasAppMountAnchor = !!document.querySelector(
-          '[data-testid="project-selector-trigger"], [data-testid="location-selector-trigger"], [data-testid="conversation-view"], [data-testid="home-greeting"], [data-testid="home-splash-content"]'
-        );
-        if (attempt === 1 && !hasAppMountAnchor && performance.now() < 16000) {
-          window.__ag_coldboot_healer_state = {
-            probeDone: false,
-            attempt: 1,
-            loadedDecoded,
-            serverDecoded,
-            drifted: false
-          };
-          window.__ag_coldboot_timer = setTimeout(() => {
-            probeColdBootBundleDrift(2);
-          }, 5500);
-          return;
-        }
-
-        window.__ag_coldboot_probe_done = true;
-        window.__ag_coldboot_healer_state = {
-          probeDone: true,
-          attempt,
-          loadedDecoded,
-          serverDecoded,
-          drifted: false
-        };
-      } catch (e) {
-        window.__ag_coldboot_probe_done = true;
-        window.__ag_coldboot_healer_state = { probeDone: true, drifted: false, skippedReason: 'exception' };
-      }
-    };
-
-    if (!window.__ag_coldboot_probe_done && isWindowUntouchedAndIdleForColdHeal() && performance.now() < 20000) {
-      const delayMs = Math.max(1500, Math.round(5800 - Math.min(4300, performance.now())));
-      window.__ag_coldboot_healer_state = { armed: true, delayMs, probeDone: false };
-      window.__ag_coldboot_timer = setTimeout(() => {
-        probeColdBootBundleDrift(1);
-      }, delayMs);
-    } else if (!window.__ag_coldboot_healer_state) {
-      window.__ag_coldboot_healer_state = {
-        armed: false,
-        probeDone: true,
-        skippedReason: performance.now() >= 20000 ? 'warm-window' : 'gate-blocked'
-      };
-    }
-  }
-
-  // ============================================================================
-  // 2.1 缩放快捷键修复与 2.31.2 macOS 原生菜单快捷键防双倍缩放保护（兼容 Numpad 与欧式键盘）
-  // ============================================================================
-  try {
-    const initZoom = window.electronNative?.getZoomLevel?.();
-    if (typeof initZoom === 'number' && typeof window.__ag_settled_zoom !== 'number') {
-      window.__ag_settled_zoom = initZoom;
-    }
-  } catch (e) {}
-
-  window.__ag_zoom_resize_fn = () => {
-    const native = window.electronNative;
-    if (!native || typeof native.getZoomLevel !== 'function') return;
-    try {
-      const cur = native.getZoomLevel();
-      if (typeof cur === 'number') {
-        if (window.__ag_self_zooming) {
-          window.__ag_settled_zoom = cur;
-          return;
-        }
-        if (typeof window.__ag_settled_zoom === 'number' && Math.abs(cur - window.__ag_settled_zoom) > 0.003) {
-          window.__ag_last_ext_zoom_ts = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        }
-        window.__ag_settled_zoom = cur;
-      }
-    } catch (e) {}
-  };
-
   window.__ag_zoom_keydown_fn = (e) => {
     if (MODULES.zoomShortcuts === false || MODULES.deadlockHealer === false) return;
     if (e.isComposing) return;
@@ -1277,7 +925,7 @@
     }
     if (!action) return;
 
-    // Swarm 子帧内：当 e.key 非宿主 sidecar-key-event 直接识别的 '+'/'='/'-'/'0'（如 Numpad0 'Insert'、'_'、中文输入法 'Process'/全角符号）时归一化转发
+    // Swarm 子帧内：当 e.key 非宿主 sidecar-key-event 直接识别的 '+'/'='/'-'/'0' 时归一化转发给主窗口
     if (IS_SWARM_PLUGIN_FRAME) {
       if (k !== '+' && k !== '=' && k !== '-' && k !== '0' && window.parent && window.parent !== window) {
         e.preventDefault();
@@ -1304,9 +952,11 @@
       return;
     }
 
+    // 主窗口：普通按键与小键盘交由 2.36+ 原生菜单/hubZoom 处理，仅在中文输入法触发 Process/全角符号时补发
+    if (!isCjkImeKey) return;
+
     const native = window.electronNative;
     if (!native) return;
-
     const actionFn =
       action === 'out'
         ? native.zoomOut
@@ -1317,118 +967,19 @@
         : native.zoomReset;
     if (typeof actionFn !== 'function') return;
 
-    if (window.__ag_zoom_timer != null) {
-      clearTimeout(window.__ag_zoom_timer);
-      window.__ag_zoom_timer = null;
-    }
-
-    const nowTs = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const curFactor = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-    const settledBefore = typeof window.__ag_settled_zoom === 'number' ? window.__ag_settled_zoom : curFactor;
-
     e.preventDefault();
     e.stopPropagation();
-
-    // 若原生菜单加速器已在 keydown 到达渲染进程前刚完成缩放（macOS NSMenu），直接同步状态并跳过补触发
-    if (
-      !window.__ag_self_zooming &&
-      ((typeof curFactor === 'number' && typeof settledBefore === 'number' && Math.abs(curFactor - settledBefore) > 0.003) ||
-        nowTs - (window.__ag_last_ext_zoom_ts || 0) < 80)
-    ) {
-      if (typeof curFactor === 'number') window.__ag_settled_zoom = curFactor;
-      return;
-    }
-
-    // preload.js 中 getZoomLevel() 底层为 webFrame.getZoomFactor()，100% 原始大小恒为 1.0
+    const curFactor = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
     if (action === 'reset' && typeof curFactor === 'number' && Math.abs(curFactor - 1) < 0.005) {
       return;
     }
-
-    const markSelfZoomWindow = (ms) => {
-      window.__ag_self_zooming = true;
-      if (window.__ag_self_zoom_timer) clearTimeout(window.__ag_self_zoom_timer);
-      window.__ag_self_zoom_timer = setTimeout(() => {
-        window.__ag_self_zoom_timer = null;
-        try {
-          const latest = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-          if (typeof latest === 'number') window.__ag_settled_zoom = latest;
-        } catch (err) {}
-        window.__ag_self_zooming = false;
-      }, ms);
-    };
-
-    const runZoomAction = () => {
-      markSelfZoomWindow(250);
-      try {
-        const ret = actionFn.call(native);
-        const syncNext = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-        if (
-          typeof syncNext === 'number' &&
-          (typeof curFactor !== 'number' || Math.abs(syncNext - curFactor) > 0.003)
-        ) {
-          window.__ag_settled_zoom = syncNext;
-        }
-        if (ret && typeof ret.then === 'function') {
-          ret.then(
-            () => {
-              try {
-                const asyncNext = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-                if (typeof asyncNext === 'number') window.__ag_settled_zoom = asyncNext;
-              } catch (err) {}
-              markSelfZoomWindow(80);
-            },
-            () => {
-              markSelfZoomWindow(40);
-            }
-          );
-        }
-      } catch (err) {
-        markSelfZoomWindow(40);
-      }
-    };
-
-    // macOS 原生菜单未绑定小键盘与 '_'：零延迟即时执行，确保长按连发 (e.repeat) 丝滑不吞键
-    if (String(e.code || '').startsWith('Numpad') || k === '_') {
-      runZoomAction();
-      return;
-    }
-
-    // macOS 保留 60ms NSMenu 防双倍缩放观察窗口
-    if (window.__ag_zoom_timer) {
-      clearTimeout(window.__ag_zoom_timer);
-      window.__ag_zoom_timer = null;
-    }
-
-    window.__ag_zoom_timer = setTimeout(() => {
-      window.__ag_zoom_timer = null;
-      try {
-        const afterFactor = typeof native.getZoomLevel === 'function' ? native.getZoomLevel() : null;
-        if (
-          !window.__ag_self_zooming &&
-          ((typeof curFactor === 'number' && typeof afterFactor === 'number' && Math.abs(afterFactor - curFactor) > 0.003) ||
-            (typeof performance !== 'undefined' ? performance.now() : Date.now()) - (window.__ag_last_ext_zoom_ts || 0) < 80)
-        ) {
-          if (typeof afterFactor === 'number') window.__ag_settled_zoom = afterFactor;
-          return;
-        }
-        runZoomAction();
-      } catch (err) {}
-    }, 60);
+    try {
+      actionFn.call(native);
+    } catch (err) {}
   };
 
   if (!window.__ag_zoom_guard_installed) {
     window.__ag_zoom_guard_installed = true;
-    if (!IS_SWARM_PLUGIN_FRAME) {
-      window.addEventListener(
-        'resize',
-        () => {
-          if (typeof window.__ag_zoom_resize_fn === 'function') {
-            window.__ag_zoom_resize_fn();
-          }
-        },
-        { passive: true }
-      );
-    }
     window.addEventListener(
       'keydown',
       (e) => {
@@ -1441,26 +992,16 @@
   }
 
   // ============================================================================
-  // 3. 专属色彩预设状态联动（支持 user/config.json 热重载切换）与防白屏崩溃保护
+  // 3. 昼夜主题模式同步与旧版 localStorage 残留安全清理
   // ============================================================================
-  const PRESETS = {
-    HIGH_CONTRAST: 'high-contrast',
-    CLAUDE_PUREWHITE: 'claude-desktop-purewhite',
-    VINTAGE_DEEP: 'vintage-deep',
-    LEGACY_WARM_WHITE: 'chuanban-warm-white',
-    LEGACY_OFFICIAL: 'claude-desktop-official',
-    LEGACY_CHUANBAN: 'absoulutely-chuanban'
-  };
-
-  const ALL_CUSTOM_PRESET_NAMES = new Set(Object.values(PRESETS));
-
-  // 当用户在 user/config.json 中修改了 preset 时，同步刷新 localStorage 中的 theme-color-flavor
-  if (DEFAULT_PRESET && window.__ag_last_boot_preset !== DEFAULT_PRESET) {
-    window.__ag_last_boot_preset = DEFAULT_PRESET;
-    try {
-      Storage.prototype.setItem.call(localStorage, 'theme-color-flavor', DEFAULT_PRESET);
-    } catch (e) {}
-  }
+  const LEGACY_PRESET_NAMES = new Set([
+    'high-contrast',
+    'claude-desktop-purewhite',
+    'vintage-deep',
+    'chuanban-warm-white',
+    'claude-desktop-official',
+    'absoulutely-chuanban'
+  ]);
 
   let lastSyncedHostMode = null;
   const darkColorSchemeMql =
@@ -1469,37 +1010,27 @@
   function syncChuanbanPreset() {
     try {
       const storedLight = Storage.prototype.getItem.call(localStorage, 'theme-preset-light');
-      if (ALL_CUSTOM_PRESET_NAMES.has(storedLight)) {
+      if (LEGACY_PRESET_NAMES.has(storedLight)) {
         try {
           Storage.prototype.setItem.call(localStorage, 'theme-preset-light', 'Default Light');
         } catch (e) {}
       }
       const storedDark = Storage.prototype.getItem.call(localStorage, 'theme-preset-dark');
-      if (ALL_CUSTOM_PRESET_NAMES.has(storedDark)) {
+      if (LEGACY_PRESET_NAMES.has(storedDark)) {
         try {
           Storage.prototype.setItem.call(localStorage, 'theme-preset-dark', 'Default Dark');
         } catch (e) {}
       }
 
-      const flavor =
-        Storage.prototype.getItem.call(localStorage, 'theme-color-flavor') || DEFAULT_PRESET || PRESETS.HIGH_CONTRAST;
-
-      let targetPreset = PRESETS.HIGH_CONTRAST;
-      if (flavor === PRESETS.HIGH_CONTRAST || flavor === PRESETS.LEGACY_WARM_WHITE || flavor === '高对比版') {
-        targetPreset = PRESETS.HIGH_CONTRAST;
-      } else if (
-        flavor === PRESETS.CLAUDE_PUREWHITE ||
-        flavor === PRESETS.LEGACY_OFFICIAL ||
-        flavor === 'ClaudeDesktop 净白'
-      ) {
-        targetPreset = PRESETS.CLAUDE_PUREWHITE;
-      } else if (flavor === PRESETS.VINTAGE_DEEP || flavor === PRESETS.LEGACY_CHUANBAN || flavor === '复古深色') {
-        targetPreset = PRESETS.VINTAGE_DEEP;
-      }
-
-      const prevPreset = document.documentElement.getAttribute('data-ag-preset');
-      if (prevPreset !== targetPreset) {
-        document.documentElement.setAttribute('data-ag-preset', targetPreset);
+      const themeActive = MODULES.theme !== false;
+      const targetPreset = themeActive ? 'high-contrast' : '';
+      const prevPreset = document.documentElement.getAttribute('data-ag-preset') || '';
+      if (themeActive) {
+        if (prevPreset !== targetPreset) {
+          document.documentElement.setAttribute('data-ag-preset', targetPreset);
+        }
+      } else if (prevPreset) {
+        document.documentElement.removeAttribute('data-ag-preset');
       }
 
       const htmlEl = document.documentElement;
@@ -1565,9 +1096,7 @@
         } catch (e) {}
         const hasColorSchemeDark = !!(htmlEl && htmlEl.style.colorScheme === 'dark');
         const hasColorSchemeLight = !!(htmlEl && htmlEl.style.colorScheme === 'light');
-        const bodyHydrated = !!(
-          bodyEl && (bodyEl.hasAttribute('data-agy-theme') || bodyEl.hasAttribute('data-newux-theme'))
-        );
+        const bodyHydrated = !!(bodyEl && bodyEl.hasAttribute('data-agy-theme'));
         if (bodyExplicitDark) {
           isDark = true;
         } else if (bodyExplicitLight) {
@@ -1615,17 +1144,15 @@
           lastSyncedHostMode = targetMode;
         } catch (e) {}
       }
-      const bodyStateFlag = bodyEl
-        ? bodyEl.hasAttribute('data-agy-theme') || bodyEl.hasAttribute('data-newux-theme')
-          ? 2
-          : 1
-        : 0;
-      const surfaceSyncKey = `${targetMode}|${targetPreset}|${bodyStateFlag}|${window.__ag_style_rev || 0}`;
-      if (window.__ag_last_surface_sync_key !== surfaceSyncKey) {
-        if (bodyEl) {
-          window.__ag_last_surface_sync_key = surfaceSyncKey;
+      if (themeActive) {
+        const bodyStateFlag = bodyEl ? (bodyEl.hasAttribute('data-agy-theme') ? 2 : 1) : 0;
+        const surfaceSyncKey = `${targetMode}|${targetPreset}|${bodyStateFlag}|${window.__ag_style_rev || 0}`;
+        if (window.__ag_last_surface_sync_key !== surfaceSyncKey) {
+          if (bodyEl) {
+            window.__ag_last_surface_sync_key = surfaceSyncKey;
+          }
+          syncCurtainSurfaceColor();
         }
-        syncCurtainSurfaceColor();
       }
     } catch (e) {}
   }
@@ -1657,44 +1184,6 @@
       }
     }
   };
-
-  if (!window.__ag_preset_hook_installed) {
-    window.__ag_preset_hook_installed = true;
-    try {
-      const origGetItem = localStorage.getItem.bind(localStorage);
-      localStorage.getItem = function (key) {
-        const val = origGetItem(key);
-        if (key === 'theme-preset-light' && ALL_CUSTOM_PRESET_NAMES.has(val)) {
-          return 'Default Light';
-        }
-        if (key === 'theme-preset-dark' && ALL_CUSTOM_PRESET_NAMES.has(val)) {
-          return 'Default Dark';
-        }
-        return val;
-      };
-
-      const origSetItem = localStorage.setItem.bind(localStorage);
-      localStorage.setItem = function (key, val) {
-        if (key === 'theme-preset-light' && ALL_CUSTOM_PRESET_NAMES.has(val)) {
-          val = 'Default Light';
-        }
-        if (key === 'theme-preset-dark' && ALL_CUSTOM_PRESET_NAMES.has(val)) {
-          val = 'Default Dark';
-        }
-        origSetItem(key, val);
-        if (
-          key === 'theme-preset-light' ||
-          key === 'theme-preset-dark' ||
-          key === 'theme-mode' ||
-          key === 'theme-color-flavor'
-        ) {
-          setTimeout(() => {
-            if (typeof window.__ag_sync_preset_fn === 'function') window.__ag_sync_preset_fn();
-          }, 50);
-        }
-      };
-    } catch (e) {}
-  }
 
   if (window.__ag_theme_mode_observer) {
     try {
@@ -2020,7 +1509,7 @@
     }
     if (HAS_LOCALE_PACK && typeof MutationObserver !== 'undefined') {
       const APPEARANCE_SKIP_SELECTOR =
-        '[data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .prose, .markdown, pre, code, .monaco-editor, .xterm, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], [data-testid="conversation-list-sidebar"], [data-testid="conversation-row-sidebar"], [data-testid="conversation-row-history"], [data-testid^="sidebar-agent-row-"]';
+        '[data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .prose, .markdown, pre, code, .monaco-editor, .monaco-diff-editor, .view-lines, .code-line, .xterm, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], [data-testid="conversation-list-sidebar"], [data-testid="conversation-row-sidebar"], [data-testid="conversation-row-history"], [data-testid^="sidebar-agent-row-"]';
       const scheduleAppearanceGroupScan = () => {
         if (document.hidden || typeof requestAnimationFrame !== 'function') {
           if (!window.__ag_appearance_scan_timer) {
@@ -2732,6 +2221,11 @@
         if (resolved && routeIds.length && !routeIds.includes(resolved)) return '';
         if (resolved) return resolved;
         return '';
+      }
+      const floatingComposer =
+        box.closest && box.closest('[data-testid="aux-pane-floating-composer"]');
+      if (floatingComposer) {
+        return window.location.pathname !== '/' ? extractFocusedOrPrimaryCascadeId() : '';
       }
       const convView =
         box.closest && box.closest('[data-testid="conversation-view"][data-cascade-id]');
@@ -3659,7 +3153,7 @@
   }
 
   const METRICS_DOM_SKIP_SEL =
-    '[data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .prose, .markdown, pre, code, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, [data-testid="conversation-list-sidebar"]';
+    '[data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .prose, .markdown, pre, code, .monaco-editor, .monaco-diff-editor, .view-lines, .code-line, .xterm, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, [data-testid="conversation-list-sidebar"]';
 
   function isMetricsRelevantNode(node, rawInputId, watchDescendantSel) {
     if (!node || node.nodeType !== 1) return 0;
@@ -3977,7 +3471,7 @@
     }
 
     const CONTAINER_IMMUTABLE_EXCLUDE_SELECTOR =
-      'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .xterm, [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], [data-testid="side-question-followup-user"], [data-testid="comment-card-text"], [data-testid="automation-name"], [data-testid="automation-instructions-text"], [data-testid="step-plan-item"], [data-testid="live-transcript"], [data-testid="voice-transcript-summary-lead"], [data-testid="voice-transcript-summary-point"], [data-testid="project-header"] span.truncate, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui], [data-ag-lang-row="1"], .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title';
+      'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .monaco-editor, .monaco-diff-editor, .view-lines, .xterm, .code-line .line-content, .code-line .token, [data-uri^="file:"], [data-uri^="vscode-"], a.inline-pill[href^="file:"], a.inline-pill[href^="vscode-"], [data-testid="side-question-followup-user"], [data-testid="comment-card-text"], [data-testid="automation-name"], [data-testid="automation-instructions-text"], [data-testid="step-plan-item"], [data-testid="live-transcript"], [data-testid="voice-transcript-summary-lead"], [data-testid="voice-transcript-summary-point"], [data-testid="project-header"] span.truncate, #ag-live-metrics-pill, .ag-live-metrics-pill, [data-ag-metrics-pill], #ag-live-metrics-tooltip, #ag-token-nav-section, #ag-token-analytics-panel, #ag-ta-tooltip, [data-ag-token-ui], [data-ag-lang-row="1"], .msg-body, #raw, [data-testid="swarm-raw"], #swarm-title';
     const TEXT_IMMUTABLE_EXCLUDE_SELECTOR =
       'textarea, input, [contenteditable="true"], [data-testid="conversation-navigator-turn"], ' +
       CONTAINER_IMMUTABLE_EXCLUDE_SELECTOR;
@@ -4067,9 +3561,14 @@
       dec: 12
     };
     // 客户端 main.js ($Q 权限编辑器) 在 onBlur 中硬编码判断 relatedTarget.getAttribute("aria-label") === "Cancel"
-    const SKIP_ARIA_LABEL_VALUES = new Set(['Cancel']);
+    const SKIP_ARIA_LABEL_VALUES = new Set([
+      'Cancel',
+      ...(typeof SELECTORS !== 'undefined' && Array.isArray(SELECTORS?.skipAriaLabels)
+        ? SELECTORS.skipAriaLabels.filter((x) => typeof x === 'string' && x)
+        : [])
+    ]);
 
-    const RE_PCT_LEFT = /^(\d+(?:\.\d+)?)%\s*left$/i;
+    const RE_PCT_LEFT = /^(<?\d+(?:\.\d+)?)%\s*left$/i;
     const RE_WINDOW_LIMIT_COMBINED = /^(\d+)\s*([smhd])\s+limit,\s*resets in\s+(.+)$/i;
     const RE_WINDOW_LIMIT = /^(\d+)\s*([smhd])\s+limit$/i;
     const RE_NAMED_LIMIT_RESETS = /^(Weekly|Daily|Monthly)\s+limit,\s*resets in\s+(.+)$/i;
@@ -4150,6 +3649,10 @@
     const RE_PLUS_ATTACHMENTS = /^\+(\d+)\s+attachments?$/i;
     const RE_PLUS_MORE = /^\+(\d+)\s+more(\s*\(Show all\))?$/i;
     const RE_SEE_ALL = /^See all\s*\((\d+)\)$/i;
+    const RE_SEE_N_MORE = /^See\s+(\d+)\s+more$/i;
+    const RE_SEE_MORE_IN = /^See\s+(more|less)\s+in\s+([^\r\n]{1,60})$/i;
+    const RE_ATTACHED_COUNT = /^(\d+)\s+Attached$/i;
+    const RE_RESTORE_SPLIT_VIEW = /^(.+?)\s+\u2014\s+restore split view$/i;
     const RE_SHOW_BREAKDOWNS = /^Show\s+(\d+)\s+breakdowns?$/i;
     const RE_SHOW_MORE_SUBAGENTS = /^Show\s+(\d+)\s+more\s+subagents?$/i;
     const RE_SWARM_WORKER_ROLE = /^Swarm\s+Worker\s*\(([^()\r\n]{1,100})\)(?:\s*\(([^()\r\n]{1,40})\))?$/i;
@@ -4463,7 +3966,10 @@
 
       // 3. 首字符 O(1) 分流动态正则匹配
       const c0 = trimmed.charCodeAt(0);
-      if (c0 >= 48 && c0 <= 57) {
+      if (c0 === 60) {
+        // 以 '<' 开头（如 '<1% left'）
+        if (RE_PCT_LEFT.test(trimmed)) return raw.replace(RE_PCT_LEFT, '$1% 剩余');
+      } else if (c0 >= 48 && c0 <= 57) {
         // 以数字 '0'-'9' 开头
         if (RE_PCT_LEFT.test(trimmed)) return raw.replace(RE_PCT_LEFT, '$1% 剩余');
         const mWinComb = trimmed.match(RE_WINDOW_LIMIT_COMBINED);
@@ -4520,6 +4026,7 @@
           return raw.replace(trimmed, () => mMediaAtt[1] + ' 个' + mediaZh + '附件');
         }
         if (RE_ATTACHMENTS_COUNT.test(trimmed)) return raw.replace(RE_ATTACHMENTS_COUNT, '$1 个附件');
+        if (RE_ATTACHED_COUNT.test(trimmed)) return raw.replace(RE_ATTACHED_COUNT, '$1 个附件');
         if (RE_IMAGES_COUNT.test(trimmed)) return raw.replace(RE_IMAGES_COUNT, '$1 张图片');
         if (RE_COMMENTS_COUNT.test(trimmed)) return raw.replace(RE_COMMENTS_COUNT, '$1 条评论');
         if (RE_SIDE_QUESTIONS_COUNT.test(trimmed)) return raw.replace(RE_SIDE_QUESTIONS_COUNT, '$1 个支线提问');
@@ -4642,6 +4149,14 @@
           );
         }
         if (RE_SEE_ALL.test(trimmed)) return raw.replace(RE_SEE_ALL, '查看全部 ($1)');
+        if (RE_SEE_N_MORE.test(trimmed)) return raw.replace(RE_SEE_N_MORE, '查看其余 $1 项');
+        const mSeeIn = trimmed.match(RE_SEE_MORE_IN);
+        if (mSeeIn) {
+          const verbZh = mSeeIn[1].toLowerCase() === 'more' ? '查看更多' : '收起更多';
+          const catRaw = mSeeIn[2].trim();
+          const catZh = dictLookup(catRaw) || catRaw;
+          return raw.replace(trimmed, () => verbZh + '（' + catZh + '）');
+        }
         if (RE_SHOW_BREAKDOWNS.test(trimmed)) return raw.replace(RE_SHOW_BREAKDOWNS, '展开明细 ($1 项)');
         if (RE_SHOW_MORE_SUBAGENTS.test(trimmed)) return raw.replace(RE_SHOW_MORE_SUBAGENTS, '显示另外 $1 个子 Agent');
         if (RE_SHOW_EARLIER_STEPS.test(trimmed)) return raw.replace(RE_SHOW_EARLIER_STEPS, '展开前 $1 个步骤');
@@ -4846,7 +4361,7 @@
         if (
           trimmed === 'Comment' &&
           contextEl?.closest?.(
-            'button, [role="button"], [role="menuitem"], .agy-selection-pill, .selection-popup, .inline-pill:not([data-uri^="file:"]):not([data-uri^="vscode-"])'
+            'button, [role="button"], [role="menuitem"], [data-testid="aux-pane-floating-composer-comment-badge"], .agy-selection-pill, .selection-popup, .inline-pill:not([data-uri^="file:"]):not([data-uri^="vscode-"])'
           )
         ) {
           return raw.replace(trimmed, () => '评论');
@@ -4885,10 +4400,11 @@
           const type = typeMap[mUsed[2].toLowerCase()] || mUsed[2];
           const timeStr = mUsed[3]
             .replace(/\.$/, '')
-            .replace(/(\d+)\s*days?/gi, '$1 天')
-            .replace(/(\d+)\s*hours?/gi, '$1 小时')
-            .replace(/(\d+)\s*minutes?/gi, '$1 分钟')
-            .replace(/(\d+)\s*seconds?/gi, '$1 秒')
+            .replace(/less than a minute/gi, '不到 1 分钟')
+            .replace(/(\d+)\s*(?:days?|d)\b/gi, '$1 天')
+            .replace(/(\d+)\s*(?:hours?|hrs?|h)\b/gi, '$1 小时')
+            .replace(/(\d+)\s*(?:minutes?|mins?|m)\b/gi, '$1 分钟')
+            .replace(/(\d+)\s*(?:seconds?|secs?|s)\b/gi, '$1 秒')
             .replace(/,\s*/g, ' ')
             .trim();
           return '您已消耗' + degree + type + '额度，将在 ' + timeStr + ' 后完全重置。';
@@ -4945,6 +4461,12 @@
           return raw.replace(trimmed, () => '很高兴见到你，' + mGood[1].trim() + '。接下来做什么？');
         }
       } else if (firstUpper === 'A') {
+        if (
+          trimmed === 'Attached' &&
+          contextEl?.closest?.('[data-testid="aux-pane-floating-composer-attachment-badge"]')
+        ) {
+          return raw.replace(trimmed, () => '个附件');
+        }
         const mAvailCred = trimmed.match(RE_AVAILABLE_AI_CREDITS);
         if (mAvailCred) {
           return raw.replace(trimmed, () => '可用 AI 点数：' + mAvailCred[1].trim());
@@ -5279,6 +4801,12 @@
       if (mEditSq) {
         return '编辑支线提问标题：' + mEditSq[1].trim();
       }
+      const mRestoreSplit = atrim.match(RE_RESTORE_SPLIT_VIEW);
+      if (mRestoreSplit) {
+        const stRaw = mRestoreSplit[1].trim();
+        const stZh = dictLookup(stRaw) || computeTextTranslation(stRaw, el) || stRaw;
+        return stZh + ' — 恢复分栏视图';
+      }
       if (IS_SWARM_PLUGIN_FRAME) {
         const mLiveTip = atrim.match(RE_SWARM_LIVE_TIP);
         if (mLiveTip) {
@@ -5572,6 +5100,7 @@
         for (let i = 0; i < htmlIds.length; i++) {
           const el = document.getElementById(htmlIds[i]);
           if (!el) continue;
+          const isSelectEl = el.tagName === 'SELECT';
           const st = { hasRaw: false, lastRaw: '', lastTranslated: '' };
           const initialOrig = el.getAttribute('data-ag-swarm-raw-html');
           const curHtml = htmlDesc.get.call(el);
@@ -5597,11 +5126,17 @@
               if (!isUiEnglish() && st.hasRaw && raw === st.lastRaw && htmlDesc.get.call(el) === st.lastTranslated) {
                 return;
               }
+              const prevSelectVal = isSelectEl ? el.value : null;
               htmlDesc.set.call(el, raw);
               el.setAttribute('data-ag-swarm-raw-html', raw);
               if (!isUiEnglish() && raw) {
                 try {
                   scanAndTranslate(el);
+                } catch (e) {}
+              }
+              if (prevSelectVal !== null && el.value !== prevSelectVal) {
+                try {
+                  el.value = prevSelectVal;
                 } catch (e) {}
               }
               st.lastRaw = raw;
@@ -5611,21 +5146,33 @@
           });
           swarmShieldRefreshers.push(() => {
             if (!st.hasRaw) return;
+            const prevSelectVal = isSelectEl ? el.value : null;
             htmlDesc.set.call(el, st.lastRaw);
             if (!isUiEnglish() && st.lastRaw) {
               try {
                 scanAndTranslate(el);
               } catch (e) {}
             }
+            if (prevSelectVal !== null && el.value !== prevSelectVal) {
+              try {
+                el.value = prevSelectVal;
+              } catch (e) {}
+            }
             st.lastTranslated = htmlDesc.get.call(el);
           });
           swarmShieldCleanups.push((restoreRaw) => {
+            const prevSelectVal = isSelectEl ? el.value : null;
             try {
               delete el.innerHTML;
             } catch (e) {}
             if (restoreRaw && st.hasRaw) {
               htmlDesc.set.call(el, st.lastRaw);
               el.removeAttribute('data-ag-swarm-raw-html');
+              if (prevSelectVal !== null && el.value !== prevSelectVal) {
+                try {
+                  el.value = prevSelectVal;
+                } catch (e) {}
+              }
             }
           });
         }
@@ -5889,7 +5436,7 @@
           if (m.target && m.target.nodeType === 1 && isExcludedElement(m.target, batchSafeSet)) {
             if (
               m.target.closest &&
-              !m.target.closest('pre, code, .monaco-editor, .monaco-diff-editor, .xterm') &&
+              !m.target.closest('pre, code, .monaco-editor, .monaco-diff-editor, .view-lines, .xterm, .code-line .line-content, .code-line .token') &&
               m.target.closest('[data-markdown-root]')
             ) {
               for (let j = 0; j < m.addedNodes.length; j++) {
@@ -6008,6 +5555,12 @@
         const c0 = norm.charCodeAt(0);
         return c0 >= 65 && c0 <= 90 && userOverrideCi.has(norm.toLowerCase());
       }
+      function lookupUserOverride(s) {
+        if (!hasUserOverrideKey(s)) return null;
+        const hit = dictLookup(s);
+        return typeof hit === 'string' ? hit : null;
+      }
+      window.__ag_lookup_user_override = lookupUserOverride;
 
       const CM_SCOPED_DICT = Object.assign(Object.create(null), {
         Back: '后退',
@@ -6015,6 +5568,7 @@
         Quote: '引用',
         Comment: '评论',
         Hide: '隐藏',
+        Standalone: '独立对话',
         'Open In': '打开方式',
         'Open in': '打开方式'
       });
@@ -6022,8 +5576,12 @@
       const FIXED_SUBMENU_ACTION_IDS = new Set([
         'group-new',
         'group-remove',
+        'group-outside',
+        'group-outside-of-group',
         'project-new',
-        'project-remove'
+        'project-remove',
+        'project-outside',
+        'project-outside-of-project'
       ]);
 
       const RE_CM_DEFAULT_SUFFIX = /^(.+?)\s*\(Default\)$/i;
@@ -6143,15 +5701,34 @@
       }
 
       const onTranslateContextMenuReq = (ev) => {
-        if (!ENABLED || MODULES.i18n === false || isUiEnglish()) return;
+        if (!ENABLED || isUiEnglish()) return;
         const rawReq = ev && typeof ev.detail === 'string' ? ev.detail : '';
         if (!rawReq) return;
         try {
           const parsed = JSON.parse(rawReq);
-          if (!Array.isArray(parsed) || parsed.length === 0) return;
-          const translated = translateContextMenuItems(parsed, '');
-          if (translated !== parsed) {
-            document.dispatchEvent(new CustomEvent('__ag_cm_res', { detail: JSON.stringify(translated) }));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const translated = translateContextMenuItems(parsed, '');
+            if (translated !== parsed) {
+              document.dispatchEvent(new CustomEvent('__ag_cm_res', { detail: JSON.stringify(translated) }));
+            }
+            return;
+          }
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            typeof parsed.reqId === 'string' &&
+            parsed.reqId &&
+            Array.isArray(parsed.items) &&
+            parsed.items.length > 0
+          ) {
+            const translated = translateContextMenuItems(parsed.items, '');
+            if (translated !== parsed.items) {
+              document.dispatchEvent(
+                new CustomEvent('__ag_cm_res', {
+                  detail: JSON.stringify({ reqId: parsed.reqId, items: translated })
+                })
+              );
+            }
           }
         } catch (e) {}
       };
@@ -6169,12 +5746,28 @@
         if (window.__ag_translate_context_menu_items === translateContextMenuItems) {
           window.__ag_translate_context_menu_items = null;
         }
+        if (window.__ag_lookup_user_override === lookupUserOverride) {
+          window.__ag_lookup_user_override = null;
+        }
       });
     }
 
     installNativeContextMenuTranslator();
 
     if (document.body) {
+      if (!isUiEnglish()) {
+        try {
+          const restoredRootSelector = '.code-line .line-content, .code-line .token, .view-lines';
+          const excludedCodeNodes = document.body.querySelectorAll(restoredRootSelector);
+          for (let i = 0; i < excludedCodeNodes.length; i++) {
+            const codeNode = excludedCodeNodes[i];
+            if (codeNode.parentElement && codeNode.parentElement.closest(restoredRootSelector)) {
+              continue;
+            }
+            restoreAllTranslations(codeNode);
+          }
+        } catch (e) {}
+      }
       applyI18nDomState();
     }
   } else {
@@ -6185,6 +5778,7 @@
       window.__ag_cm_translate_listener = null;
     }
     window.__ag_translate_context_menu_items = null;
+    window.__ag_lookup_user_override = null;
     if (IS_SWARM_PLUGIN_FRAME && typeof window.__ag_cleanup_swarm_dom_shields === 'function') {
       try {
         window.__ag_cleanup_swarm_dom_shields(true);
@@ -6277,12 +5871,56 @@
       const REQUEST_TIMEOUT_MS = 25000;
 
       const TA_SCENARIO_META = {
-        tools: { label: '工具执行轮次', desc: '触发读/写/终端/检索工具的推理轮次', color: 'var(--ag-ta-c1)' },
-        subagent: { label: '子 Agent', desc: 'research / self / browser 等独立子轨迹', color: 'var(--ag-ta-c2)' },
-        chat: { label: '纯对话与回复', desc: '无工具调用的直接问答与总结输出', color: 'var(--ag-ta-c3)' },
-        planning: { label: '规划与编排', desc: 'Orchestrator / Plan 架构规划轮次', color: 'var(--ag-ta-c4)' },
-        memory: { label: '记忆与上下文压缩', desc: 'MEMORY.md 读写与上下文压缩检查点', color: 'var(--ag-ta-c5)' },
-        internal: { label: 'CLI / 重试与内部', desc: 'CLI 会话与无步关联重试/中止调用', color: 'var(--ag-ta-c6)' }
+        tools: {
+          label: '工具执行轮次',
+          labelEn: 'Tool Execution',
+          desc: '触发读/写/终端/检索工具的推理轮次',
+          descEn: 'Turns invoking read/write/terminal/search tools',
+          color: 'var(--ag-ta-c1)'
+        },
+        subagent: {
+          label: '子 Agent',
+          labelEn: 'Subagents',
+          desc: 'research / self / browser 等独立子轨迹',
+          descEn: 'Isolated trajectories (research / self / browser, etc.)',
+          color: 'var(--ag-ta-c2)'
+        },
+        chat: {
+          label: '纯对话与回复',
+          labelEn: 'Direct Chat',
+          desc: '无工具调用的直接问答与总结输出',
+          descEn: 'Direct Q&A and synthesis without tool calls',
+          color: 'var(--ag-ta-c3)'
+        },
+        planning: {
+          label: '规划与编排',
+          labelEn: 'Planning & Orchestration',
+          desc: 'Orchestrator / Plan 架构规划轮次',
+          descEn: 'Orchestrator & step-by-step architecture planning',
+          color: 'var(--ag-ta-c4)'
+        },
+        memory: {
+          label: '记忆与上下文压缩',
+          labelEn: 'Memory & Compaction',
+          desc: 'MEMORY.md 读写与上下文压缩检查点',
+          descEn: 'MEMORY.md operations and context compaction checkpoints',
+          color: 'var(--ag-ta-c5)'
+        },
+        internal: {
+          label: 'CLI / 重试与内部',
+          labelEn: 'CLI / Retries & Internal',
+          desc: 'CLI 会话与无步关联重试/中止调用',
+          descEn: 'Headless CLI sessions and unlinked retries/aborts',
+          color: 'var(--ag-ta-c6)'
+        }
+      };
+      const taGetScenarioLabel = (key) => {
+        const m = TA_SCENARIO_META[key];
+        return m ? (isUiEnglish() ? m.labelEn : m.label) : key;
+      };
+      const taGetScenarioDesc = (key) => {
+        const m = TA_SCENARIO_META[key];
+        return m ? (isUiEnglish() ? m.descEn : m.desc) : '';
       };
 
       const esc = (s) =>
@@ -6309,8 +5947,11 @@
         return obj.weighted ?? Math.round((obj.inTok || 0) + 0.1 * (obj.cacheRead || 0) + 6 * (obj.outTok || 0));
       };
 
-      const taFormatMetricVal = (obj, metric = 'weighted') =>
-        metric === 'calls' ? `${taGetMetricVal(obj, metric).toLocaleString('en-US')} 次` : taFormatCompact(taGetMetricVal(obj, metric));
+      const taFormatMetricVal = (obj, metric = 'weighted') => {
+        const val = taGetMetricVal(obj, metric);
+        if (metric === 'calls') return isUiEnglish() ? val.toLocaleString('en-US') : `${val.toLocaleString('en-US')} 次`;
+        return taFormatCompact(val);
+      };
 
       const taCalcCacheRate = (obj) => {
         const inp = (obj?.inTok || 0) + (obj?.cacheRead || 0);
@@ -6731,12 +6372,13 @@
 
       const fmtLastActive = (tsSec) => {
         if (!tsSec) return '--';
+        const en = isUiEnglish();
         const d = new Date(tsSec * 1000);
         const now = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
         const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-        if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
-        if (d.toDateString() === new Date(now.getTime() - 86400000).toDateString()) return `昨天 ${hm}`;
+        if (d.toDateString() === now.toDateString()) return en ? `Today ${hm}` : `今天 ${hm}`;
+        if (d.toDateString() === new Date(now.getTime() - 86400000).toDateString()) return en ? `Yesterday ${hm}` : `昨天 ${hm}`;
         return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hm}`;
       };
 
@@ -6746,7 +6388,7 @@
         pendingRequests.delete(String(reqId || ''));
         clearTimeout(entry.timer);
         if (res && res.ok && res.data) entry.resolve(res.data);
-        else entry.reject(new Error(res?.error || '本地 Token 统计数据获取失败'));
+        else entry.reject(new Error(res?.error || (isUiEnglish() ? 'Failed to fetch local Token Analytics' : '本地 Token 统计数据获取失败')));
       };
 
       async function fetchTokenAnalytics(force = false) {
@@ -6757,7 +6399,9 @@
         const reopenedStale = Boolean(dataState.modalClosedSinceFetch && now - dataState.fetchedAt > 3000);
         if (!force && !sigChanged && !reopenedStale && dataState.payload && now - dataState.fetchedAt < CACHE_TTL_MS) return;
         if (typeof window.__agRequestTokenAnalytics !== 'function') {
-          dataState.error = '当前环境未启用本地 SQLite Token 统计（需 Node.js >= 22.13 且启用 modules.tokenAnalytics）';
+          dataState.error = isUiEnglish()
+            ? 'Local SQLite Token Analytics is disabled (requires Node.js >= 22.13 and modules.tokenAnalytics)'
+            : '当前环境未启用本地 SQLite Token 统计（需 Node.js >= 22.13 且启用 modules.tokenAnalytics）';
           dataState.loading = false;
           renderPanel();
           return;
@@ -6768,7 +6412,7 @@
         if (dataState.payload) {
           const refreshBtn = document.getElementById(PANEL_ID)?.querySelector('#ag-ta-refresh-btn');
           if (refreshBtn) {
-            refreshBtn.textContent = '刷新中…';
+            refreshBtn.textContent = isUiEnglish() ? 'Refreshing…' : '刷新中…';
             refreshBtn.disabled = true;
           }
         } else {
@@ -6779,7 +6423,7 @@
           const data = await new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
               pendingRequests.delete(reqId);
-              reject(new Error('读取本地 SQLite 统计超时 (25s)'));
+              reject(new Error(isUiEnglish() ? 'Timed out reading local SQLite stats (25s)' : '读取本地 SQLite 统计超时 (25s)'));
             }, REQUEST_TIMEOUT_MS);
             pendingRequests.set(reqId, { resolve, reject, timer });
             try {
@@ -6797,7 +6441,7 @@
           dataState.lastMetricsSig = String(window.__ag_last_metrics?.sig || '');
           dataState.modalClosedSinceFetch = false;
         } catch (err) {
-          if (!disposed) dataState.error = String(err?.message || err || '获取 Token 统计失败');
+          if (!disposed) dataState.error = String(err?.message || err || (isUiEnglish() ? 'Failed to fetch Token Analytics' : '获取 Token 统计失败'));
         } finally {
           if (!disposed) {
             dataState.loading = false;
@@ -6888,19 +6532,20 @@
         const d = hmDayByDate.get(cell.getAttribute('data-hm-date') || '');
         const tip = d ? ensureHmTooltip() : null;
         if (!d || !tip) return;
+        const en = isUiEnglish();
         const cRate = taCalcCacheRate(d);
         const cRateStr = cRate !== null ? `${(cRate * 100).toFixed(1)}%` : '--';
         tip.innerHTML =
           `<div class="ag-ta-tt-hdr ag-ta-num-font"><span>${esc(d.date)}</span><span style="color:var(--ag-ta-primary);">${esc(taFormatMetricVal(d, uiState.metric))}</span></div>` +
           (d.calls > 0
-            ? `<div class="ag-ta-tt-row"><span>加权等效</span><strong class="ag-ta-num-font">${taFormatCompact(d.weighted)}</strong></div>` +
-              `<div class="ag-ta-tt-row"><span>总 Tokens</span><strong class="ag-ta-num-font">${taFormatCompact(d.total)}</strong></div>` +
-              `<div class="ag-ta-tt-row"><span>新入 / 缓读 / 出</span><strong class="ag-ta-num-font">${taFormatCompact(d.inTok)} / ${taFormatCompact(d.cacheRead)} / ${taFormatCompact(d.outTok)}</strong></div>` +
-              `<div class="ag-ta-tt-row"><span>调用 / 缓存命中</span><strong class="ag-ta-num-font">${d.calls} 次 · ${cRateStr}</strong></div>` +
+            ? `<div class="ag-ta-tt-row"><span>${en ? 'Weighted Eq.' : '加权等效'}</span><strong class="ag-ta-num-font">${taFormatCompact(d.weighted)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>${en ? 'Total Tokens' : '总 Tokens'}</span><strong class="ag-ta-num-font">${taFormatCompact(d.total)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>${en ? 'In / Cache / Out' : '新入 / 缓读 / 出'}</span><strong class="ag-ta-num-font">${taFormatCompact(d.inTok)} / ${taFormatCompact(d.cacheRead)} / ${taFormatCompact(d.outTok)}</strong></div>` +
+              `<div class="ag-ta-tt-row"><span>${en ? 'Calls / Cache Hit' : '调用 / 缓存命中'}</span><strong class="ag-ta-num-font">${en ? `${d.calls} calls` : `${d.calls} 次`} · ${cRateStr}</strong></div>` +
               (d.topProject
-                ? `<div class="ag-ta-tt-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--ag-ta-border);"><span>主力项目</span><strong>${esc(d.topProject)}</strong></div>`
+                ? `<div class="ag-ta-tt-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--ag-ta-border);"><span>${en ? 'Top Project' : '主力项目'}</span><strong>${esc(d.topProject)}</strong></div>`
                 : '')
-            : `<div style="color:var(--ag-ta-muted);">当日无本地调用记录</div>`);
+            : `<div style="color:var(--ag-ta-muted);">${en ? 'No local calls recorded on this date' : '当日无本地调用记录'}</div>`);
         activeHmCell = cell;
         hmTooltipVisible = true;
         bindHmGlobalListeners();
@@ -6909,57 +6554,70 @@
       }
 
       function ensurePanelSkeleton(panel) {
-        if (panel.dataset.agSkeletonReady === '1') return;
+        const en = isUiEnglish();
+        const wantLang = en ? 'en' : 'zh';
+        if (panel.dataset.agSkeletonReady === '1' && panel.dataset.agSkeletonLang === wantLang) return;
         panel.dataset.agSkeletonReady = '1';
+        panel.dataset.agSkeletonLang = wantLang;
         panel.innerHTML = `
       <div class="ag-ta-wrap">
         <div class="ag-ta-hdr">
           <div>
             <div class="ag-ta-title-row">
-              <h1 class="ag-ta-h1">Token 消耗分析</h1>
-              <span id="ag-ta-header-badge" class="ag-ta-pill-meta ag-ta-num-font">待同步</span>
+              <h1 class="ag-ta-h1">${en ? 'Token Analytics' : 'Token 消耗分析'}</h1>
+              <span id="ag-ta-header-badge" class="ag-ta-pill-meta ag-ta-num-font">${en ? 'Pending' : '待同步'}</span>
             </div>
-            <p class="ag-ta-sub">基于本机 <span class="ag-ta-mono">conversations/*.db</span> 与 <span class="ag-ta-mono">conversation_summaries.db</span> 只读增量归因</p>
+            <p class="ag-ta-sub">${
+              en
+                ? 'Read-only incremental attribution from local <span class="ag-ta-mono">conversations/*.db</span> &amp; <span class="ag-ta-mono">conversation_summaries.db</span>'
+                : '基于本机 <span class="ag-ta-mono">conversations/*.db</span> 与 <span class="ag-ta-mono">conversation_summaries.db</span> 只读增量归因'
+            }</p>
           </div>
           <div class="ag-ta-controls">
             <div class="ag-ta-seg" id="ag-ta-metric-sw">
-              <button type="button" class="ag-ta-seg-btn active" data-metric="weighted">加权等效</button>
-              <button type="button" class="ag-ta-seg-btn" data-metric="total">总 Tokens</button>
-              <button type="button" class="ag-ta-seg-btn" data-metric="billable">净新消耗</button>
-              <button type="button" class="ag-ta-seg-btn" data-metric="calls">调用次数</button>
+              <button type="button" class="ag-ta-seg-btn active" data-metric="weighted">${en ? 'Weighted' : '加权等效'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="total">${en ? 'Total' : '总 Tokens'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="billable">${en ? 'Net New' : '净新消耗'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-metric="calls">${en ? 'Calls' : '调用次数'}</button>
             </div>
             <div class="ag-ta-seg" id="ag-ta-range-sw">
-              <button type="button" class="ag-ta-seg-btn" data-range="1">今日</button>
-              <button type="button" class="ag-ta-seg-btn" data-range="7">7天</button>
-              <button type="button" class="ag-ta-seg-btn active" data-range="30">30天</button>
-              <button type="button" class="ag-ta-seg-btn" data-range="90">90天</button>
-              <button type="button" class="ag-ta-seg-btn" data-range="365">全部</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="1">${en ? 'Today' : '今日'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="7">${en ? '7d' : '7天'}</button>
+              <button type="button" class="ag-ta-seg-btn active" data-range="30">${en ? '30d' : '30天'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="90">${en ? '90d' : '90天'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-range="365">${en ? 'All' : '全部'}</button>
             </div>
-            <button type="button" id="ag-ta-refresh-btn" class="ag-ta-refresh" title="点击增量刷新；按住 Shift 点击强制忽略磁盘缓存全量重算">刷新</button>
+            <button type="button" id="ag-ta-refresh-btn" class="ag-ta-refresh" title="${
+              en ? 'Click for incremental refresh; Shift+Click to bypass disk cache and recompute' : '点击增量刷新；按住 Shift 点击强制忽略磁盘缓存全量重算'
+            }">${en ? 'Refresh' : '刷新'}</button>
           </div>
         </div>
         <div id="ag-ta-filters-bar" class="ag-ta-filters-bar" data-active="0">
-          <span class="ag-ta-filters-lbl">当前联动筛选：</span>
+          <span class="ag-ta-filters-lbl">${en ? 'Active Filters:' : '当前联动筛选：'}</span>
           <div id="ag-ta-filter-pills" class="ag-ta-filter-pills">
-            <span class="ag-ta-filter-placeholder">暂无筛选条件（点击下方日期、模型、场景或项目即可联动过滤）</span>
+            <span class="ag-ta-filter-placeholder">${
+              en ? 'No active filters (click any date, model, scenario, or project below to cross-filter)' : '暂无筛选条件（点击下方日期、模型、场景或项目即可联动过滤）'
+            }</span>
           </div>
-          <button type="button" id="ag-ta-clear-filters" class="ag-ta-clear-btn" disabled tabindex="-1">清除全部</button>
+          <button type="button" id="ag-ta-clear-filters" class="ag-ta-clear-btn" disabled tabindex="-1">${en ? 'Clear All' : '清除全部'}</button>
         </div>
         <div id="ag-ta-status-banner" class="ag-ta-banner" hidden></div>
         <div id="ag-ta-kpi-grid" class="ag-ta-kpis"></div>
         <section class="ag-ta-card">
           <div class="ag-ta-card-head">
             <div>
-              <h2 class="ag-ta-card-h2">按日消耗记录</h2>
-              <p class="ag-ta-card-desc">悬停查看单日详情，点击任意日期格子可联动筛选下方模型、场景与会话</p>
+              <h2 class="ag-ta-card-h2">${en ? 'Daily Activity' : '按日消耗记录'}</h2>
+              <p class="ag-ta-card-desc">${
+                en ? 'Hover to inspect daily breakdown; click any day to cross-filter models, scenarios, and sessions' : '悬停查看单日详情，点击任意日期格子可联动筛选下方模型、场景与会话'
+              }</p>
             </div>
             <div class="ag-ta-controls">
               <div class="ag-ta-seg" id="ag-ta-daily-sw">
-                <button type="button" class="ag-ta-seg-btn active" data-dmode="heatmap">贡献网格</button>
-                <button type="button" class="ag-ta-seg-btn" data-dmode="bars">近14日趋势</button>
+                <button type="button" class="ag-ta-seg-btn active" data-dmode="heatmap">${en ? 'Heatmap' : '贡献网格'}</button>
+                <button type="button" class="ag-ta-seg-btn" data-dmode="bars">${en ? '14d Trend' : '近14日趋势'}</button>
               </div>
               <div id="ag-ta-hm-legend" class="ag-ta-hm-legend" data-hidden="0">
-                <span>少</span><span class="ag-ta-hm-sw" data-lvl="0"></span><span class="ag-ta-hm-sw" data-lvl="1"></span><span class="ag-ta-hm-sw" data-lvl="2"></span><span class="ag-ta-hm-sw" data-lvl="3"></span><span class="ag-ta-hm-sw" data-lvl="4"></span><span>多</span>
+                <span>${en ? 'Less' : '少'}</span><span class="ag-ta-hm-sw" data-lvl="0"></span><span class="ag-ta-hm-sw" data-lvl="1"></span><span class="ag-ta-hm-sw" data-lvl="2"></span><span class="ag-ta-hm-sw" data-lvl="3"></span><span class="ag-ta-hm-sw" data-lvl="4"></span><span>${en ? 'More' : '多'}</span>
               </div>
             </div>
           </div>
@@ -6968,7 +6626,7 @@
               <div class="ag-ta-hm-inner">
                 <div id="ag-ta-hm-months" class="ag-ta-hm-months"></div>
                 <div class="ag-ta-hm-body">
-                  <div class="ag-ta-hm-days"><span>一</span><span>三</span><span>五</span><span>日</span></div>
+                  <div class="ag-ta-hm-days">${en ? '<span>Mon</span><span>Wed</span><span>Fri</span><span>Sun</span>' : '<span>一</span><span>三</span><span>五</span><span>日</span>'}</div>
                   <div id="ag-ta-hm-grid" class="ag-ta-hm-grid"></div>
                 </div>
               </div>
@@ -6976,9 +6634,9 @@
             <div id="ag-ta-bars-wrap" hidden>
               <div id="ag-ta-bars-chart" class="ag-ta-bars-chart"></div>
               <div class="ag-ta-legend" style="justify-content:flex-end;border-top:none;margin-top:4px;padding-top:4px;">
-                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>新输入</span>
-                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>缓存读取</span>
-                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>输出（含思考）</span>
+                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>${en ? 'Uncached In' : '新输入'}</span>
+                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>${en ? 'Cache Read' : '缓存读取'}</span>
+                <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>${en ? 'Output (incl. Think)' : '输出（含思考）'}</span>
               </div>
             </div>
           </div>
@@ -6987,58 +6645,70 @@
         <section class="ag-ta-split">
           <div class="ag-ta-card ag-ta-card-col">
             <div class="ag-ta-card-head">
-              <div><h2 class="ag-ta-card-h2">按模型统计</h2><p id="ag-ta-model-desc" class="ag-ta-card-desc">调用次数/缓存命中/消耗量/占比/配额池</p></div>
+              <div><h2 class="ag-ta-card-h2">${en ? 'By Model' : '按模型统计'}</h2><p id="ag-ta-model-desc" class="ag-ta-card-desc">${
+                en ? 'Calls / Cache Hit / Usage / Share / Pool' : '调用次数/缓存命中/消耗量/占比/配额池'
+              }</p></div>
               <div class="ag-ta-seg" id="ag-ta-model-sw">
-                <button type="button" class="ag-ta-seg-btn active" data-mg="model">具体模型</button>
-                <button type="button" class="ag-ta-seg-btn" data-mg="pool">配额池</button>
+                <button type="button" class="ag-ta-seg-btn active" data-mg="model">${en ? 'Models' : '具体模型'}</button>
+                <button type="button" class="ag-ta-seg-btn" data-mg="pool">${en ? 'Quota Pool' : '配额池'}</button>
               </div>
             </div>
             <div id="ag-ta-model-list" class="ag-ta-list ag-ta-list--model"></div>
             <div class="ag-ta-legend">
-              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>新输入</span>
-              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>缓存命中</span>
-              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-think"></span>思考</span>
-              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>正文回复</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-in"></span>${en ? 'Uncached In' : '新输入'}</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-cache"></span>${en ? 'Cache Hit' : '缓存命中'}</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-think"></span>${en ? 'Thinking' : '思考'}</span>
+              <span class="ag-ta-legend-item"><span class="ag-ta-swatch ag-ta-seg-out"></span>${en ? 'Response' : '正文回复'}</span>
             </div>
           </div>
           <div class="ag-ta-card ag-ta-card-col">
             <div class="ag-ta-card-head">
-              <div><h2 class="ag-ta-card-h2">按场景统计</h2><p class="ag-ta-card-desc">工具执行/子 Agent/对话/规划/压缩</p></div>
-              <span class="ag-ta-seg ag-ta-seg--static" title="所有数字来自本机已落盘的 conversations/*.db，不含未落盘的云端后台任务"><span class="ag-ta-seg-chip">本地轨迹口径</span></span>
+              <div><h2 class="ag-ta-card-h2">${en ? 'By Scenario' : '按场景统计'}</h2><p class="ag-ta-card-desc">${
+                en ? 'Tools / Subagents / Chat / Planning / Compaction' : '工具执行/子 Agent/对话/规划/压缩'
+              }</p></div>
+              <span class="ag-ta-seg ag-ta-seg--static" title="${
+                en ? 'Derived from local persisted conversations/*.db; excludes unpersisted cloud background jobs' : '所有数字来自本机已落盘的 conversations/*.db，不含未落盘的云端后台任务'
+              }"><span class="ag-ta-seg-chip">${en ? 'Local Trajectories' : '本地轨迹口径'}</span></span>
             </div>
             <div id="ag-ta-scenario-list" class="ag-ta-list ag-ta-list--scen"></div>
-            <div class="ag-ta-foot"><span>仅统计本地已落盘对话轨迹；点击场景行可联动筛选</span></div>
+            <div class="ag-ta-foot"><span>${en ? 'Local persisted trajectories only; click any row to cross-filter' : '仅统计本地已落盘对话轨迹；点击场景行可联动筛选'}</span></div>
           </div>
         </section>
         <section class="ag-ta-card">
           <div class="ag-ta-card-head">
-            <div><h2 class="ag-ta-card-h2">按会话与项目统计</h2><p class="ag-ta-card-desc">同名项目已合并大小写并折叠 <span class="ag-ta-mono">/tmp</span>，支持父会话展开子 Agent 轨迹</p></div>
+            <div><h2 class="ag-ta-card-h2">${en ? 'Sessions &amp; Projects' : '按会话与项目统计'}</h2><p class="ag-ta-card-desc">${
+              en
+                ? 'Case-merged projects with <span class="ag-ta-mono">/tmp</span> folding and expandable subagent trajectories'
+                : '同名项目已合并大小写并折叠 <span class="ag-ta-mono">/tmp</span>，支持父会话展开子 Agent 轨迹'
+            }</p></div>
             <div class="ag-ta-seg" id="ag-ta-explorer-sw">
-              <button type="button" class="ag-ta-seg-btn active" data-emode="sessions">会话明细</button>
-              <button type="button" class="ag-ta-seg-btn" data-emode="projects">项目汇总</button>
+              <button type="button" class="ag-ta-seg-btn active" data-emode="sessions">${en ? 'Sessions' : '会话明细'}</button>
+              <button type="button" class="ag-ta-seg-btn" data-emode="projects">${en ? 'Projects' : '项目汇总'}</button>
             </div>
           </div>
           <div id="ag-ta-project-chips" class="ag-ta-chips"></div>
           <div class="ag-ta-toolbar">
             <div class="ag-ta-search-wrap">
               <svg class="ag-ta-search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input id="ag-ta-search-input" class="ag-ta-input" type="text" placeholder="搜索会话标题、项目名或 ID…" />
+              <input id="ag-ta-search-input" class="ag-ta-input" type="text" placeholder="${
+                en ? 'Search session title, project, or ID…' : '搜索会话标题、项目名或 ID…'
+              }" />
             </div>
             <select id="ag-ta-sort-select" class="ag-ta-select">
-              <option value="metric">排序：按当前指标</option>
-              <option value="weighted">排序：加权等效</option>
-              <option value="total">排序：总 Tokens</option>
-              <option value="inTok">排序：未缓存输入</option>
-              <option value="outTok">排序：输出 Tokens</option>
-              <option value="calls">排序：调用次数</option>
-              <option value="lowCache">排序：低缓存命中优先</option>
-              <option value="recent">排序：最近活跃</option>
+              <option value="metric">${en ? 'Sort: Active Metric' : '排序：按当前指标'}</option>
+              <option value="weighted">${en ? 'Sort: Weighted Eq.' : '排序：加权等效'}</option>
+              <option value="total">${en ? 'Sort: Total Tokens' : '排序：总 Tokens'}</option>
+              <option value="inTok">${en ? 'Sort: Uncached In' : '排序：未缓存输入'}</option>
+              <option value="outTok">${en ? 'Sort: Output Tokens' : '排序：输出 Tokens'}</option>
+              <option value="calls">${en ? 'Sort: Calls' : '排序：调用次数'}</option>
+              <option value="lowCache">${en ? 'Sort: Lowest Cache Hit' : '排序：低缓存命中优先'}</option>
+              <option value="recent">${en ? 'Sort: Most Recent' : '排序：最近活跃'}</option>
             </select>
-            <label class="ag-ta-check-lbl"><input id="ag-ta-lowcache-cb" type="checkbox" /><span>仅低缓存预警 (&lt;80%)</span></label>
+            <label class="ag-ta-check-lbl"><input id="ag-ta-lowcache-cb" type="checkbox" /><span>${en ? 'Low Cache Only (&lt;80%)' : '仅低缓存预警 (&lt;80%)'}</span></label>
           </div>
           <div id="ag-ta-sessions-wrap" class="ag-ta-table-wrap">
             <table class="ag-ta-table">
-              <thead><tr><th>会话 / 项目</th><th>主力模型 &amp; 场景</th><th class="ag-ta-num">调用</th><th class="ag-ta-num">消耗与构成</th><th class="ag-ta-num">缓存命中</th><th class="ag-ta-num">最近活跃</th></tr></thead>
+              <thead><tr><th>${en ? 'Session / Project' : '会话 / 项目'}</th><th>${en ? 'Top Model &amp; Scenario' : '主力模型 &amp; 场景'}</th><th class="ag-ta-num">${en ? 'Calls' : '调用'}</th><th class="ag-ta-num">${en ? 'Usage &amp; Mix' : '消耗与构成'}</th><th class="ag-ta-num">${en ? 'Cache Hit' : '缓存命中'}</th><th class="ag-ta-num">${en ? 'Last Active' : '最近活跃'}</th></tr></thead>
               <tbody id="ag-ta-sessions-tbody"></tbody>
             </table>
           </div>
@@ -7046,67 +6716,76 @@
         </section>
       </div>`;
 
-        panel.addEventListener('click', (e) => {
-          const el = e.target instanceof Element ? e.target : null;
-          if (!el) return;
-          const btn = el.closest('[data-metric], [data-range], [data-dmode], [data-mg], [data-emode], [data-hm-date], [data-bar-date], [data-model-key], [data-scen-key], [data-proj-key], [data-proj-card], [data-toggle-sub], [data-clear-filter], #ag-ta-refresh-btn, #ag-ta-clear-filters');
-          if (!btn) return;
-          if (btn.id === 'ag-ta-refresh-btn') return void fetchTokenAnalytics(e.shiftKey ? 'hard' : true);
-          if (btn.id === 'ag-ta-clear-filters') {
-            uiState.selectedDate = null;
-            uiState.selectedProject = 'ALL';
-            uiState.selectedModel = null;
-            uiState.selectedScenario = null;
-            return renderPanel();
-          }
-          const clr = btn.getAttribute('data-clear-filter');
-          if (clr) {
-            if (clr === 'date') uiState.selectedDate = null;
-            else if (clr === 'project') uiState.selectedProject = 'ALL';
-            else if (clr === 'model') uiState.selectedModel = null;
-            else if (clr === 'scenario') uiState.selectedScenario = null;
-            return renderPanel();
-          }
-          const subId = btn.getAttribute('data-toggle-sub');
-          if (subId) {
-            if (uiState.expandedIds.has(subId)) uiState.expandedIds.delete(subId);
-            else uiState.expandedIds.add(subId);
-            return renderExplorerOnly();
-          }
-          if (btn.hasAttribute('data-metric')) uiState.metric = btn.getAttribute('data-metric') || 'weighted';
-          else if (btn.hasAttribute('data-range')) {
-            const nextRange = Number(btn.getAttribute('data-range') || 30);
-            uiState.rangeDays = nextRange;
-            if (uiState.selectedDate && !taIsDateInRange(uiState.selectedDate, nextRange, dataState.payload?.nowSec)) {
+        if (panel.dataset.agPanelBound !== '1') {
+          panel.dataset.agPanelBound = '1';
+          panel.addEventListener('click', (e) => {
+            const el = e.target instanceof Element ? e.target : null;
+            if (!el) return;
+            const btn = el.closest('[data-metric], [data-range], [data-dmode], [data-mg], [data-emode], [data-hm-date], [data-bar-date], [data-model-key], [data-scen-key], [data-proj-key], [data-proj-card], [data-toggle-sub], [data-clear-filter], #ag-ta-refresh-btn, #ag-ta-clear-filters');
+            if (!btn) return;
+            if (btn.id === 'ag-ta-refresh-btn') return void fetchTokenAnalytics(e.shiftKey ? 'hard' : true);
+            if (btn.id === 'ag-ta-clear-filters') {
               uiState.selectedDate = null;
+              uiState.selectedProject = 'ALL';
+              uiState.selectedModel = null;
+              uiState.selectedScenario = null;
+              return renderPanel();
             }
-          }
-          else if (btn.hasAttribute('data-dmode')) uiState.dailyMode = btn.getAttribute('data-dmode') || 'heatmap';
-          else if (btn.hasAttribute('data-mg')) {
-            uiState.modelGroup = btn.getAttribute('data-mg') || 'model';
-            uiState.selectedModel = null;
-          } else if (btn.hasAttribute('data-emode')) uiState.explorerMode = btn.getAttribute('data-emode') || 'sessions';
-          else if (btn.hasAttribute('data-hm-date') || btn.hasAttribute('data-bar-date')) {
-            hideHmTooltip();
-            const dt = btn.getAttribute('data-hm-date') || btn.getAttribute('data-bar-date');
-            uiState.selectedDate = uiState.selectedDate === dt ? null : dt;
-          } else if (btn.hasAttribute('data-model-key')) {
-            const k = btn.getAttribute('data-model-key');
-            uiState.selectedModel = uiState.selectedModel === k ? null : k;
-          } else if (btn.hasAttribute('data-scen-key')) {
-            const k = btn.getAttribute('data-scen-key');
-            uiState.selectedScenario = uiState.selectedScenario === k ? null : k;
-          } else if (btn.hasAttribute('data-proj-key')) {
-            uiState.selectedProject = btn.getAttribute('data-proj-key') || 'ALL';
-          } else if (btn.hasAttribute('data-proj-card')) {
-            uiState.selectedProject = btn.getAttribute('data-proj-card') || 'ALL';
-            uiState.explorerMode = 'sessions';
-          }
-          renderPanel();
-        });
+            const clr = btn.getAttribute('data-clear-filter');
+            if (clr) {
+              if (clr === 'date') uiState.selectedDate = null;
+              else if (clr === 'project') uiState.selectedProject = 'ALL';
+              else if (clr === 'model') uiState.selectedModel = null;
+              else if (clr === 'scenario') uiState.selectedScenario = null;
+              return renderPanel();
+            }
+            const subId = btn.getAttribute('data-toggle-sub');
+            if (subId) {
+              if (uiState.expandedIds.has(subId)) uiState.expandedIds.delete(subId);
+              else uiState.expandedIds.add(subId);
+              return renderExplorerOnly();
+            }
+            if (btn.hasAttribute('data-metric')) uiState.metric = btn.getAttribute('data-metric') || 'weighted';
+            else if (btn.hasAttribute('data-range')) {
+              const nextRange = Number(btn.getAttribute('data-range') || 30);
+              uiState.rangeDays = nextRange;
+              if (uiState.selectedDate && !taIsDateInRange(uiState.selectedDate, nextRange, dataState.payload?.nowSec)) {
+                uiState.selectedDate = null;
+              }
+            }
+            else if (btn.hasAttribute('data-dmode')) uiState.dailyMode = btn.getAttribute('data-dmode') || 'heatmap';
+            else if (btn.hasAttribute('data-mg')) {
+              uiState.modelGroup = btn.getAttribute('data-mg') || 'model';
+              uiState.selectedModel = null;
+            } else if (btn.hasAttribute('data-emode')) uiState.explorerMode = btn.getAttribute('data-emode') || 'sessions';
+            else if (btn.hasAttribute('data-hm-date') || btn.hasAttribute('data-bar-date')) {
+              hideHmTooltip();
+              const dt = btn.getAttribute('data-hm-date') || btn.getAttribute('data-bar-date');
+              uiState.selectedDate = uiState.selectedDate === dt ? null : dt;
+            } else if (btn.hasAttribute('data-model-key')) {
+              const k = btn.getAttribute('data-model-key');
+              uiState.selectedModel = uiState.selectedModel === k ? null : k;
+            } else if (btn.hasAttribute('data-scen-key')) {
+              const k = btn.getAttribute('data-scen-key');
+              uiState.selectedScenario = uiState.selectedScenario === k ? null : k;
+            } else if (btn.hasAttribute('data-proj-key')) {
+              uiState.selectedProject = btn.getAttribute('data-proj-key') || 'ALL';
+            } else if (btn.hasAttribute('data-proj-card')) {
+              uiState.selectedProject = btn.getAttribute('data-proj-card') || 'ALL';
+              uiState.explorerMode = 'sessions';
+            }
+            renderPanel();
+          });
 
-        panel.addEventListener('scroll', hideHmTooltip, { passive: true });
-        panel.addEventListener('wheel', hideHmTooltip, { passive: true });
+          panel.addEventListener('scroll', hideHmTooltip, { passive: true });
+          panel.addEventListener('wheel', hideHmTooltip, { passive: true });
+          if (typeof ResizeObserver === 'function' && !panel._agTaResizeObs) {
+            const ro = new ResizeObserver(() => scheduleTaFadeSync(panel));
+            ro.observe(panel);
+            panel._agTaResizeObs = ro;
+          }
+        }
+
         panel.querySelector('#ag-ta-hm-wrap')?.addEventListener('scroll', hideHmTooltip, { passive: true });
         const hmGrid = panel.querySelector('#ag-ta-hm-grid');
         if (hmGrid) {
@@ -7134,11 +6813,6 @@
           uiState.onlyLowCache = Boolean(e.target.checked);
           renderExplorerOnly();
         });
-        if (typeof ResizeObserver === 'function' && !panel._agTaResizeObs) {
-          const ro = new ResizeObserver(() => scheduleTaFadeSync(panel));
-          ro.observe(panel);
-          panel._agTaResizeObs = ro;
-        }
       }
 
       let fadeSyncRaf = null;
@@ -7175,12 +6849,17 @@
             b.classList.toggle('active', b.getAttribute(attr) === val);
           });
         }
+        const en = isUiEnglish();
         const modelDescEl = panel.querySelector('#ag-ta-model-desc');
         if (modelDescEl) {
           modelDescEl.textContent =
             uiState.modelGroup === 'pool'
-              ? '调用次数/缓存命中/消耗量/占比'
-              : '调用次数/缓存命中/消耗量/占比/配额池';
+              ? en
+                ? 'Calls / Cache Hit / Usage / Share'
+                : '调用次数/缓存命中/消耗量/占比'
+              : en
+                ? 'Calls / Cache Hit / Usage / Share / Pool'
+                : '调用次数/缓存命中/消耗量/占比/配额池';
         }
         panel.querySelector('#ag-ta-hm-wrap').hidden = uiState.dailyMode !== 'heatmap';
         panel.querySelector('#ag-ta-hm-legend')?.setAttribute('data-hidden', uiState.dailyMode !== 'heatmap' ? '1' : '0');
@@ -7196,16 +6875,25 @@
       }
 
       function renderExplorerSections(panel, vm) {
+        const en = isUiEnglish();
         const chipsEl = panel.querySelector('#ag-ta-project-chips');
         if (chipsEl) {
-          chipsEl.innerHTML = [{ key: 'ALL', name: '全部项目' }, ...(dataState.payload?.projects || [])]
+          chipsEl.innerHTML = [{ key: 'ALL', name: en ? 'All Projects' : '全部项目' }, ...(dataState.payload?.projects || [])]
             .map((p) => `<button type="button" class="ag-ta-chip ${uiState.selectedProject === p.key ? 'active' : ''}" data-proj-key="${esc(p.key)}">${esc(p.name)}</button>`)
             .join('');
         }
         const tbody = panel.querySelector('#ag-ta-sessions-tbody');
         if (tbody) {
           if (!vm || vm.sessions.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="ag-ta-empty">${dataState.loading ? '正在扫描本地会话数据库…' : '当前筛选条件下没有匹配的会话记录'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="ag-ta-empty">${
+              dataState.loading
+                ? en
+                  ? 'Scanning local conversation databases…'
+                  : '正在扫描本地会话数据库…'
+                : en
+                  ? 'No matching sessions for current filters'
+                  : '当前筛选条件下没有匹配的会话记录'
+            }</td></tr>`;
           } else {
             const rowsHtml = [];
             for (const s of vm.sessions.slice(0, 80)) {
@@ -7222,12 +6910,12 @@
                   `<div style="min-width:0;flex:1 1 auto;"><div class="ag-ta-sess-title" title="${esc(s.title)}">${esc(s.title)}</div><div class="ag-ta-sess-tags">` +
                   `<span class="ag-ta-badge ag-ta-mono" title="${esc(s.projectName)}">${esc(s.projectName)}</span>` +
                   (s.source === 'cli' ? `<span class="ag-ta-badge ag-ta-mono">CLI</span>` : '') +
-                  (hasKids ? `<span class="ag-ta-sub-badge">含 ${s.children.length} 个子 Agent</span>` : '') +
+                  (hasKids ? `<span class="ag-ta-sub-badge">${en ? `+${s.children.length} subagent${s.children.length > 1 ? 's' : ''}` : `含 ${s.children.length} 个子 Agent`}</span>` : '') +
                   `<span class="ag-ta-mono" style="color:var(--ag-ta-muted);font-size:11px;">${esc(s.id.slice(0, 8))}</span></div></div></div></td>` +
-                  `<td class="ag-ta-model-td"><div class="ag-ta-model-cell" title="${esc(s.primaryModel || '--')}">${esc(s.primaryModel || '--')}</div><div style="color:var(--ag-ta-muted);font-size:11px;margin-top:2px;">${esc(TA_SCENARIO_META[s.primaryScenario]?.label || s.primaryScenario)}</div></td>` +
+                  `<td class="ag-ta-model-td"><div class="ag-ta-model-cell" title="${esc(s.primaryModel || '--')}">${esc(s.primaryModel || '--')}</div><div style="color:var(--ag-ta-muted);font-size:11px;margin-top:2px;">${esc(taGetScenarioLabel(s.primaryScenario))}</div></td>` +
                   `<td class="ag-ta-num ag-ta-num-font">${s.calls}</td>` +
                   `<td class="ag-ta-num"><div class="ag-ta-num-font" style="font-weight:600;">${esc(taFormatMetricVal(s, uiState.metric))}</div>` +
-                  `<div class="ag-ta-mini-bar" title="新入 ${taFormatCompact(s.inTok)} · 缓读 ${taFormatCompact(s.cacheRead)} · 出 ${taFormatCompact(s.outTok)}"><div class="ag-ta-seg-in" style="width:${inP}%"></div><div class="ag-ta-seg-cache" style="width:${cP}%"></div><div class="ag-ta-seg-out" style="width:${oP}%"></div></div></td>` +
+                  `<div class="ag-ta-mini-bar" title="${en ? `In ${taFormatCompact(s.inTok)} · Cache ${taFormatCompact(s.cacheRead)} · Out ${taFormatCompact(s.outTok)}` : `新入 ${taFormatCompact(s.inTok)} · 缓读 ${taFormatCompact(s.cacheRead)} · 出 ${taFormatCompact(s.outTok)}`}"><div class="ag-ta-seg-in" style="width:${inP}%"></div><div class="ag-ta-seg-cache" style="width:${cP}%"></div><div class="ag-ta-seg-out" style="width:${oP}%"></div></div></td>` +
                   `<td class="ag-ta-num ag-ta-num-font"><span class="${s.lowCacheWarning ? 'ag-ta-lowcache' : ''}">${rateText}</span></td>` +
                   `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${esc(fmtLastActive(s.lastTs))}</td></tr>`
               );
@@ -7239,7 +6927,7 @@
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.calls}</td>` +
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${esc(taFormatMetricVal(c, uiState.metric))}</td>` +
                       `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${c.cacheRate !== null ? `${(c.cacheRate * 100).toFixed(1)}%` : '--'}</td>` +
-                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">子轨迹</td></tr>`
+                      `<td class="ag-ta-num ag-ta-num-font" style="color:var(--ag-ta-muted);">${en ? 'Subagent' : '子轨迹'}</td></tr>`
                   );
                 }
               }
@@ -7250,7 +6938,7 @@
         const projWrap = panel.querySelector('#ag-ta-projects-wrap');
         if (projWrap) {
           if (!vm || vm.projectsSummary.length === 0) {
-            projWrap.innerHTML = `<div class="ag-ta-empty" style="grid-column:1/-1;">当前筛选条件下无项目数据</div>`;
+            projWrap.innerHTML = `<div class="ag-ta-empty" style="grid-column:1/-1;">${en ? 'No project data for current filters' : '当前筛选条件下无项目数据'}</div>`;
           } else {
             const projSum = Math.max(1, vm.projectsSummary.reduce((acc, p) => acc + taGetMetricVal(p, uiState.metric), 0));
             projWrap.innerHTML = vm.projectsSummary
@@ -7261,8 +6949,12 @@
                   `<div class="ag-ta-proj-card" data-proj-card="${esc(p.key)}">` +
                   `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><span class="ag-ta-mono" style="font-weight:600;font-size:13px;">${esc(p.name)}</span><span class="ag-ta-num-font" style="font-weight:600;color:var(--ag-ta-primary);">${esc(taFormatMetricVal(p, uiState.metric))}</span></div>` +
                   `<div class="ag-ta-track" style="margin:7px 0;"><div class="ag-ta-track-inner" style="width:${Math.max(4, share)}%;background-color:var(--ag-ta-primary);"></div></div>` +
-                  `<div class="ag-ta-num-font" style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--ag-ta-muted);"><span>${p.sessionsCount} 会话 · ${p.subagentCount} 个子 Agent · ${p.calls} 次</span><span>缓存 ${rate} · 占 ${share.toFixed(1)}%</span></div>` +
-                  `<div style="margin-top:5px;font-size:11.5px;color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">主力模型：${esc(p.topModel || '--')}</div></div>`
+                  `<div class="ag-ta-num-font" style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--ag-ta-muted);"><span>${
+                    en
+                      ? `${p.sessionsCount} sess · ${p.subagentCount} sub · ${p.calls} calls`
+                      : `${p.sessionsCount} 会话 · ${p.subagentCount} 个子 Agent · ${p.calls} 次`
+                  }</span><span>${en ? `Cache ${rate} · ${share.toFixed(1)}%` : `缓存 ${rate} · 占 ${share.toFixed(1)}%`}</span></div>` +
+                  `<div style="margin-top:5px;font-size:11.5px;color:var(--ag-ta-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${en ? 'Top model: ' : '主力模型：'}${esc(p.topModel || '--')}</div></div>`
                 );
               })
               .join('');
@@ -7282,12 +6974,13 @@
       function renderPanel() {
         const panel = document.getElementById(PANEL_ID);
         if (!panel || panel.hidden) return;
+        const en = isUiEnglish();
         ensurePanelSkeleton(panel);
         syncPanelSwitchers(panel);
 
         const refreshBtn = panel.querySelector('#ag-ta-refresh-btn');
         if (refreshBtn) {
-          refreshBtn.textContent = dataState.loading ? '刷新中…' : '刷新';
+          refreshBtn.textContent = dataState.loading ? (en ? 'Refreshing…' : '刷新中…') : en ? 'Refresh' : '刷新';
           refreshBtn.disabled = Boolean(dataState.loading);
         }
 
@@ -7300,7 +6993,9 @@
           } else if (dataState.loading && !dataState.payload) {
             banner.hidden = false;
             banner.removeAttribute('data-kind');
-            banner.textContent = '正在从本地 SQLite 增量统计全部会话消耗…';
+            banner.textContent = en
+              ? 'Scanning all local SQLite conversation trajectories…'
+              : '正在从本地 SQLite 增量统计全部会话消耗…';
           } else {
             banner.hidden = true;
           }
@@ -7309,18 +7004,23 @@
         const badge = panel.querySelector('#ag-ta-header-badge');
         const st = dataState.payload?.stats;
         if (badge && st) {
-          badge.textContent = `${st.scannedDbs}/${st.dbCount} 会话库 · ${st.totalCalls} 次调用 · ${dataState.payload.elapsedMs}ms`;
+          badge.textContent = en
+            ? `${st.scannedDbs}/${st.dbCount} DBs · ${st.totalCalls} calls · ${dataState.payload.elapsedMs}ms`
+            : `${st.scannedDbs}/${st.dbCount} 会话库 · ${st.totalCalls} 次调用 · ${dataState.payload.elapsedMs}ms`;
         }
 
         const filterPills = [];
-        if (uiState.selectedDate) filterPills.push(['date', `日期: ${uiState.selectedDate}`]);
+        if (uiState.selectedDate) filterPills.push(['date', `${en ? 'Date' : '日期'}: ${uiState.selectedDate}`]);
         if (uiState.selectedProject !== 'ALL') {
           const pName = dataState.payload?.projects?.find((p) => p.key === uiState.selectedProject)?.name || uiState.selectedProject;
-          filterPills.push(['project', `项目: ${pName}`]);
+          filterPills.push(['project', `${en ? 'Project' : '项目'}: ${pName}`]);
         }
-        if (uiState.selectedModel) filterPills.push(['model', `模型: ${uiState.selectedModel}`]);
+        if (uiState.selectedModel) {
+          const dispModel = uiState.modelGroup === 'pool' && uiState.selectedModel === 'Claude' ? 'Claude & GPT' : uiState.selectedModel;
+          filterPills.push(['model', `${en ? 'Model' : '模型'}: ${dispModel}`]);
+        }
         if (uiState.selectedScenario) {
-          filterPills.push(['scenario', `场景: ${TA_SCENARIO_META[uiState.selectedScenario]?.label || uiState.selectedScenario}`]);
+          filterPills.push(['scenario', `${en ? 'Scenario' : '场景'}: ${taGetScenarioLabel(uiState.selectedScenario)}`]);
         }
         const fBar = panel.querySelector('#ag-ta-filters-bar');
         const fWrap = panel.querySelector('#ag-ta-filter-pills');
@@ -7337,36 +7037,62 @@
             ? filterPills
                 .map(([k, lbl]) => `<button type="button" class="ag-ta-filter-pill" data-clear-filter="${k}"><span>${esc(lbl)}</span><span style="opacity:0.65;">×</span></button>`)
                 .join('')
-            : '<span class="ag-ta-filter-placeholder">暂无筛选条件（点击下方日期、模型、场景或项目即可联动过滤）</span>';
+            : `<span class="ag-ta-filter-placeholder">${
+                en ? 'No active filters (click any date, model, scenario, or project below to cross-filter)' : '暂无筛选条件（点击下方日期、模型、场景或项目即可联动过滤）'
+              }</span>`;
         }
 
         const vm = getOrComputeViewModel();
         if (!vm) return;
         const { kpi } = vm;
-        const metricLabels = {
-          weighted: '加权等效消耗（主指标）',
-          total: '总消耗 Tokens',
-          billable: '净新消耗（非缓存）',
-          calls: 'LLM 总调用次数'
-        };
+        const metricLabels = en
+          ? {
+              weighted: 'Weighted Equivalent (Primary)',
+              total: 'Total Tokens',
+              billable: 'Net New (Uncached)',
+              calls: 'Total LLM Calls'
+            }
+          : {
+              weighted: '加权等效消耗（主指标）',
+              total: '总消耗 Tokens',
+              billable: '净新消耗（非缓存）',
+              calls: 'LLM 总调用次数'
+            };
         const ratePct = kpi.cacheRate !== null ? (kpi.cacheRate * 100).toFixed(1) : '--';
         const rateTone = kpi.cacheRate !== null ? (kpi.cacheRate >= 0.8 ? 'ok' : 'warn') : '';
         const peakText = kpi.peakDay ? `${kpi.peakDay.date.slice(5)} (${taFormatMetricVal(kpi.peakDay, uiState.metric)})` : '--';
 
         panel.querySelector('#ag-ta-kpi-grid').innerHTML =
-          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${esc(metricLabels[uiState.metric])}</div><div class="ag-ta-kpi-val ag-ta-num-font">${esc(taFormatMetricVal(kpi, uiState.metric))}</div><div class="ag-ta-kpi-sub ag-ta-num-font">新入 ${taFormatCompact(kpi.inTok)} · 缓读 ${taFormatCompact(kpi.cacheRead)} · 出 ${taFormatCompact(kpi.outTok)}</div></div>` +
-          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">平均缓存命中率</div><div class="ag-ta-kpi-val ag-ta-num-font" data-tone="${rateTone}">${ratePct === '--' ? '--' : `${ratePct}%`}</div><div class="ag-ta-kpi-sub">总输入 <span class="ag-ta-num-font">${taFormatCompact(kpi.inTok + kpi.cacheRead)}</span> · 思考 <span class="ag-ta-num-font">${taFormatCompact(kpi.thinkTok)}</span></div></div>` +
-          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">活跃天数 &amp; 单日峰值</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.activeDays} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">/ ${kpi.windowDays} 天</span></div><div class="ag-ta-kpi-sub ag-ta-num-font">峰值 ${esc(peakText)}</div></div>` +
-          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">归因覆盖范围</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.mainSessions} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">主会话</span></div><div class="ag-ta-kpi-sub">覆盖 <span class="ag-ta-num-font">${kpi.projectCount}</span> 个项目 · 含 <span class="ag-ta-num-font">${kpi.subagentCount}</span> 个子 Agent</div></div>`;
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${esc(metricLabels[uiState.metric])}</div><div class="ag-ta-kpi-val ag-ta-num-font">${esc(taFormatMetricVal(kpi, uiState.metric))}</div><div class="ag-ta-kpi-sub ag-ta-num-font">${
+            en
+              ? `In ${taFormatCompact(kpi.inTok)} · Cache ${taFormatCompact(kpi.cacheRead)} · Out ${taFormatCompact(kpi.outTok)}`
+              : `新入 ${taFormatCompact(kpi.inTok)} · 缓读 ${taFormatCompact(kpi.cacheRead)} · 出 ${taFormatCompact(kpi.outTok)}`
+          }</div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${en ? 'Avg Cache Hit Rate' : '平均缓存命中率'}</div><div class="ag-ta-kpi-val ag-ta-num-font" data-tone="${rateTone}">${ratePct === '--' ? '--' : `${ratePct}%`}</div><div class="ag-ta-kpi-sub">${
+            en
+              ? `Total In <span class="ag-ta-num-font">${taFormatCompact(kpi.inTok + kpi.cacheRead)}</span> · Think <span class="ag-ta-num-font">${taFormatCompact(kpi.thinkTok)}</span>`
+              : `总输入 <span class="ag-ta-num-font">${taFormatCompact(kpi.inTok + kpi.cacheRead)}</span> · 思考 <span class="ag-ta-num-font">${taFormatCompact(kpi.thinkTok)}</span>`
+          }</div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${en ? 'Active Days &amp; Peak' : '活跃天数 &amp; 单日峰值'}</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.activeDays} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">/ ${kpi.windowDays}${en ? 'd' : ' 天'}</span></div><div class="ag-ta-kpi-sub ag-ta-num-font">${en ? 'Peak ' : '峰值 '}${esc(peakText)}</div></div>` +
+          `<div class="ag-ta-card"><div class="ag-ta-kpi-lbl">${en ? 'Coverage Scope' : '归因覆盖范围'}</div><div class="ag-ta-kpi-val ag-ta-num-font">${kpi.mainSessions} <span style="font-size:12px;font-weight:400;color:var(--ag-ta-muted);">${en ? 'sessions' : '主会话'}</span></div><div class="ag-ta-kpi-sub">${
+            en
+              ? `<span class="ag-ta-num-font">${kpi.projectCount}</span> projects · <span class="ag-ta-num-font">${kpi.subagentCount}</span> subagents`
+              : `覆盖 <span class="ag-ta-num-font">${kpi.projectCount}</span> 个项目 · 含 <span class="ag-ta-num-font">${kpi.subagentCount}</span> 个子 Agent`
+          }</div></div>`;
 
         hideHmTooltip();
         hmDayByDate.clear();
         const monthsHtml = [];
         const colsHtml = [];
+        const enMonthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         let lastMonth = -1;
         for (const wk of vm.heatmap.weeks) {
           const firstDay = wk.find(Boolean);
-          const mTxt = firstDay && firstDay.month !== lastMonth ? `${(lastMonth = firstDay.month)}月` : '';
+          let mTxt = '';
+          if (firstDay && firstDay.month !== lastMonth) {
+            lastMonth = firstDay.month;
+            mTxt = en ? enMonthShort[(firstDay.month - 1) % 12] || `M${firstDay.month}` : `${firstDay.month}月`;
+          }
           monthsHtml.push(`<div class="ag-ta-hm-mlbl">${mTxt}</div>`);
           const cells = wk.map((d) => {
             if (!d) return '<div class="ag-ta-hm-pad"></div>';
@@ -7393,21 +7119,35 @@
           })
           .join('');
 
-        const avgStr = uiState.metric === 'calls' ? `${Math.round(vm.avgDaily)} 次/日` : `${taFormatCompact(vm.avgDaily)}/日`;
+        const avgStr =
+          uiState.metric === 'calls'
+            ? en
+              ? `${Math.round(vm.avgDaily)} calls/d`
+              : `${Math.round(vm.avgDaily)} 次/日`
+            : `${taFormatCompact(vm.avgDaily)}${en ? '/d' : '/日'}`;
         panel.querySelector('#ag-ta-daily-footer').innerHTML =
-          `<div style="display:flex;flex-wrap:wrap;gap:14px;"><span>当前连续活跃：<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${vm.heatmap.streak} 天</strong></span><span>窗口内活跃日均：<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${avgStr}</strong></span></div>` +
-          `<span>${uiState.selectedDate ? `已锁定单日：${esc(uiState.selectedDate)}（再次点击取消）` : '展示近 26 周（高亮当前时间窗）'}</span>`;
+          `<div style="display:flex;flex-wrap:wrap;gap:14px;"><span>${en ? 'Current streak: ' : '当前连续活跃：'}<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${vm.heatmap.streak}${en ? 'd' : ' 天'}</strong></span><span>${en ? 'Active daily avg: ' : '窗口内活跃日均：'}<strong class="ag-ta-num-font" style="color:var(--ag-ta-fg);">${avgStr}</strong></span></div>` +
+          `<span>${
+            uiState.selectedDate
+              ? en
+                ? `Filtered date: ${esc(uiState.selectedDate)} (click again to clear)`
+                : `已锁定单日：${esc(uiState.selectedDate)}（再次点击取消）`
+              : en
+                ? 'Last 26 weeks (active window highlighted)'
+                : '展示近 26 周（高亮当前时间窗）'
+          }</span>`;
 
         const modelListEl = panel.querySelector('#ag-ta-model-list');
         if (modelListEl) {
           modelListEl.classList.toggle('ag-ta-list--model', uiState.modelGroup === 'model');
           modelListEl.classList.toggle('ag-ta-list--pool', uiState.modelGroup !== 'model');
           if (vm.models.length === 0) {
-            modelListEl.innerHTML = '<div class="ag-ta-empty">当前筛选下无模型记录</div>';
+            modelListEl.innerHTML = `<div class="ag-ta-empty">${en ? 'No model records for current filters' : '当前筛选下无模型记录'}</div>`;
           } else {
             const mSum = Math.max(1, vm.models.reduce((acc, m) => acc + taGetMetricVal(m, uiState.metric), 0));
             const mMax = Math.max(1, ...vm.models.map((m) => taGetMetricVal(m, uiState.metric)));
             const isModelGroup = uiState.modelGroup === 'model';
+            const claudePoolTip = getSelfUiStrings().claudePoolTitle || 'Claude & GPT';
             modelListEl.innerHTML = vm.models
               .map((m) => {
                 const val = taGetMetricVal(m, uiState.metric);
@@ -7417,16 +7157,19 @@
                 const thinkW = (m.thinkTok / tot) * 100;
                 const respW = Math.max(0, 100 - inW - cacheW - thinkW);
                 const rateStr = m.cacheRate !== null ? `${Math.round(m.cacheRate * 100)}%` : '--';
-                const poolTip = m.pool === 'Claude' ? getSelfUiStrings().claudePoolTitle || m.pool : m.pool;
+                const rowTitleText = !isModelGroup && m.key === 'Claude' ? 'Claude & GPT' : m.key;
+                const rowHoverTip = !isModelGroup && m.key === 'Claude' ? claudePoolTip : rowTitleText;
+                const poolBadgeLabel = m.pool === 'Claude' ? 'Claude & GPT' : m.pool;
+                const poolBadgeTip = m.pool === 'Claude' ? claudePoolTip : m.pool;
                 return (
                   `<div class="ag-ta-row-btn ${uiState.selectedModel === m.key ? 'active' : ''}" data-model-key="${esc(m.key)}">` +
                   `<div class="ag-ta-row-top">` +
-                  `<div class="ag-ta-row-lead"><div class="ag-ta-row-name"><span title="${esc(m.key)}">${esc(m.key)}</span></div><span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted ag-ta-row-calls">${m.calls}次</span></div>` +
+                  `<div class="ag-ta-row-lead"><div class="ag-ta-row-name"><span title="${esc(rowHoverTip)}">${esc(rowTitleText)}</span></div><span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted ag-ta-row-calls">${en ? m.calls : `${m.calls}次`}</span></div>` +
                   `<div class="ag-ta-row-nums ${isModelGroup ? 'ag-ta-row-nums--model' : 'ag-ta-row-nums--pool'}">` +
                   `<span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted">${rateStr}</span>` +
                   `<span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-strong">${esc(taFormatMetricVal(m, uiState.metric))}</span>` +
                   `<span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted">${((val / mSum) * 100).toFixed(1)}%</span>` +
-                  (isModelGroup ? `<span class="ag-ta-badge ag-ta-pool-badge" title="${esc(poolTip)}">${esc(m.pool)}</span>` : '') +
+                  (isModelGroup ? `<span class="ag-ta-badge ag-ta-pool-badge" title="${esc(poolBadgeTip)}">${esc(poolBadgeLabel)}</span>` : '') +
                   `</div></div>` +
                   `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / mMax) * 100)}%;"><div class="ag-ta-seg-in" style="width:${inW}%;"></div><div class="ag-ta-seg-cache" style="width:${cacheW}%;"></div><div class="ag-ta-seg-think" style="width:${thinkW}%;"></div><div class="ag-ta-seg-out" style="width:${respW}%;"></div></div></div></div>`
                 );
@@ -7438,25 +7181,27 @@
         const scenListEl = panel.querySelector('#ag-ta-scenario-list');
         if (scenListEl) {
           if (vm.scenarios.length === 0) {
-            scenListEl.innerHTML = '<div class="ag-ta-empty">当前筛选下无场景记录</div>';
+            scenListEl.innerHTML = `<div class="ag-ta-empty">${en ? 'No scenario records for current filters' : '当前筛选下无场景记录'}</div>`;
           } else {
             const sSum = Math.max(1, vm.scenarios.reduce((acc, s) => acc + taGetMetricVal(s, uiState.metric), 0));
             const sMax = Math.max(1, ...vm.scenarios.map((s) => taGetMetricVal(s, uiState.metric)));
             scenListEl.innerHTML = vm.scenarios
               .map((s) => {
-                const meta = TA_SCENARIO_META[s.key] || { label: s.key, desc: '', color: 'var(--ag-ta-c6)' };
+                const meta = TA_SCENARIO_META[s.key] || { color: 'var(--ag-ta-c6)' };
+                const scenLabel = taGetScenarioLabel(s.key);
+                const scenDesc = taGetScenarioDesc(s.key);
                 const val = taGetMetricVal(s, uiState.metric);
                 const extra = s.subAgents.length > 0 ? ` (${s.subAgents.join(', ')})` : '';
                 return (
                   `<div class="ag-ta-row-btn ${uiState.selectedScenario === s.key ? 'active' : ''}" data-scen-key="${esc(s.key)}">` +
                   `<div class="ag-ta-row-top">` +
-                  `<div class="ag-ta-row-lead"><div class="ag-ta-row-name"><span class="ag-ta-swatch" style="background-color:${meta.color};"></span><span class="ag-ta-row-label" title="${esc(meta.label + extra)}">${esc(meta.label + extra)}</span></div><span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted ag-ta-row-calls">${s.calls}次</span></div>` +
+                  `<div class="ag-ta-row-lead"><div class="ag-ta-row-name"><span class="ag-ta-swatch" style="background-color:${meta.color};"></span><span class="ag-ta-row-label" title="${esc(scenLabel + extra)}">${esc(scenLabel + extra)}</span></div><span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted ag-ta-row-calls">${en ? s.calls : `${s.calls}次`}</span></div>` +
                   `<div class="ag-ta-row-nums ag-ta-row-nums--scen">` +
                   `<span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-strong">${esc(taFormatMetricVal(s, uiState.metric))}</span>` +
                   `<span class="ag-ta-num-cell ag-ta-num-font ag-ta-num-muted">${((val / sSum) * 100).toFixed(1)}%</span>` +
                   `</div></div>` +
                   `<div class="ag-ta-track"><div class="ag-ta-track-inner" style="width:${Math.max(4, (val / sMax) * 100)}%;background-color:${meta.color};"></div></div>` +
-                  `<div class="ag-ta-row-desc">${esc(meta.desc)}</div></div>`
+                  `<div class="ag-ta-row-desc">${esc(scenDesc)}</div></div>`
                 );
               })
               .join('');
@@ -7564,12 +7309,24 @@
         }
         window.__ag_rerender_token_analytics_lang = () => {
           const sec = document.getElementById(NAV_SECTION_ID);
-          if (!sec) return;
-          const uiStr = getSelfUiStrings();
-          const hEl = sec.querySelector('[data-ag-ta-nav-heading="1"], .ag-ta-nav-heading');
-          const bEl = sec.querySelector('[data-ag-ta-nav-btn-label="1"], #ag-token-nav-btn span');
-          if (hEl && hEl.textContent !== uiStr.extHeading) hEl.textContent = uiStr.extHeading;
-          if (bEl && bEl.textContent !== uiStr.tokenTab) bEl.textContent = uiStr.tokenTab;
+          if (sec) {
+            const uiStr = getSelfUiStrings();
+            const hEl = sec.querySelector('[data-ag-ta-nav-heading="1"], .ag-ta-nav-heading');
+            const bEl = sec.querySelector('[data-ag-ta-nav-btn-label="1"], #ag-token-nav-btn span');
+            if (hEl && hEl.textContent !== uiStr.extHeading) hEl.textContent = uiStr.extHeading;
+            if (bEl && bEl.textContent !== uiStr.tokenTab) bEl.textContent = uiStr.tokenTab;
+          }
+          const curPanel = document.getElementById(PANEL_ID);
+          if (curPanel && curPanel.dataset.agSkeletonReady === '1') {
+            const wantLang = isUiEnglish() ? 'en' : 'zh';
+            if (curPanel.dataset.agSkeletonLang !== wantLang) {
+              if (!curPanel.hidden) {
+                renderPanel();
+              } else {
+                delete curPanel.dataset.agSkeletonReady;
+              }
+            }
+          }
         };
         if (navSection.parentElement !== navContainer) navContainer.appendChild(navSection);
 
@@ -7645,7 +7402,7 @@
       };
 
       const MODAL_FAST_SKIP_SEL =
-        '[data-markdown-root], [data-testid="conversation-view"], [id="antigravity.agentSidePanelInputBox"], .monaco-editor, .monaco-diff-editor, .xterm, [data-ag-token-ui], [data-ag-metrics-pill], #ag-live-metrics-pill, #ag-live-metrics-tooltip';
+        '[data-markdown-root], [data-testid="conversation-view"], [id="antigravity.agentSidePanelInputBox"], .monaco-editor, .monaco-diff-editor, .view-lines, .code-line, .xterm, [data-ag-token-ui], [data-ag-metrics-pill], #ag-live-metrics-pill, #ag-live-metrics-tooltip';
       const MODAL_RELEVANT_SEL =
         '.settings-modal-container, .settings-modal-backdrop, [data-testid="settings-sidebar"], [role="dialog"]';
 
@@ -7987,28 +7744,33 @@
 
       function contextStrings() {
         const en = isUiEnglish();
+        const tr = (enStr, zhStr) => {
+          if (en) return enStr;
+          const ov = typeof window.__ag_lookup_user_override === 'function' ? window.__ag_lookup_user_override(enStr) : null;
+          return typeof ov === 'string' && ov ? ov : zhStr;
+        };
         return {
-          openInEditor: en ? 'Open in Editor' : '在编辑器中打开',
-          openPreview: en ? 'Open Preview' : '在预览面板中打开',
-          openIn: en ? 'Open In' : '打开方式',
+          openInEditor: tr('Open in Editor', '在编辑器中打开'),
+          openPreview: tr('Open Preview', '在预览面板中打开'),
+          openIn: tr('Open In', '打开方式'),
           openInSingle: (label) => (en ? `Open in ${label}` : `在 ${label} 中打开`),
-          revealInOs: en ? 'Reveal in Finder' : '在访达中显示',
-          copyPath: en ? 'Copy Path' : '复制路径',
-          copyFileName: en ? 'Copy File Name' : '复制文件名',
-          copyBrowserUrl: en ? 'Copy Browser URL' : '复制浏览器地址',
-          openInBrowser: en ? 'Open in Browser' : '在浏览器中打开',
-          copyLink: en ? 'Copy Link' : '复制链接',
-          copySelection: en ? 'Copy Selection' : '复制选中文本',
-          copyLinkText: en ? 'Copy Link Text' : '复制链接文字',
-          copy: en ? 'Copy' : '复制',
-          copyCodeBlock: en ? 'Copy Code Block' : '复制代码块',
-          copyImage: en ? 'Copy Image' : '复制图片',
-          saveImage: en ? 'Save Image' : '另存图片',
-          openImageInBrowser: en ? 'Open Image in Browser' : '在浏览器中打开图片',
-          copyImageUrl: en ? 'Copy Image Address' : '复制图片地址',
-          cut: en ? 'Cut' : '剪切',
-          paste: en ? 'Paste' : '粘贴',
-          selectAll: en ? 'Select All' : '全选'
+          revealInOs: tr('Reveal in Finder', '在访达中显示'),
+          copyPath: tr('Copy Path', '复制路径'),
+          copyFileName: tr('Copy File Name', '复制文件名'),
+          copyBrowserUrl: tr('Copy Browser URL', '复制浏览器地址'),
+          openInBrowser: tr('Open in Browser', '在浏览器中打开'),
+          copyLink: tr('Copy Link', '复制链接'),
+          copySelection: tr('Copy Selection', '复制选中文本'),
+          copyLinkText: tr('Copy Link Text', '复制链接文字'),
+          copy: tr('Copy', '复制'),
+          copyCodeBlock: tr('Copy Code Block', '复制代码块'),
+          copyImage: tr('Copy Image', '复制图片'),
+          saveImage: tr('Save Image', '另存图片'),
+          openImageInBrowser: tr('Open Image in Browser', '在浏览器中打开图片'),
+          copyImageUrl: tr('Copy Image Address', '复制图片地址'),
+          cut: tr('Cut', '剪切'),
+          paste: tr('Paste', '粘贴'),
+          selectAll: tr('Select All', '全选')
         };
       }
 

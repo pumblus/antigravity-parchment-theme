@@ -2,7 +2,7 @@
 /**
  * antigravity-parchment-theme · CDP Theme & Live Metrics Daemon (core/daemon.mjs)
  *
- * 架构特性（融合版 v6.0.4-eric.1 · macOS 专用）：
+ * 架构特性（融合版 v6.0.6-eric.1 · macOS 专用）：
  * 1. 动态 Node 分级：
  *    - Node >= 22.0：完整启用昼夜双模式独立主题（暖纸浅色 + 暖墨深色）、Anthropic 三族字体、单层扁平输入框、扩展汉化（含 Electron 原生右键菜单跨隔离世界免 GC 汉化）、仿 Claude 右键浮窗卡片与 macOS 外部 IDE / 本地浏览器白名单安全桥接、宿主隔离、Browser 级 CDP 事件发现与在线快路径、死锁修复与实验性冷启动普通重载（默认关闭）及 curtainView/Swarm 适配。
  *    - Node >= 22.13：动态 `await import('node:sqlite')` 解锁底部实时会话指标胶囊（O(1) 增量尾行解析）与设置弹窗「Token 统计」增量归因分析；低版本优雅降级绝不崩溃。
@@ -157,7 +157,7 @@ function resolveActiveChannelEndpoints(channelMode = 'auto', userCfg = {}) {
 // ============================================================================
 // 2. 动态构建注入载荷（支持 core/ + user/ 实时合并与热更新签名）
 // ============================================================================
-const BASE_VERSION = '20261126-v6.0.4-eric.1';
+const BASE_VERSION = '20261128-v6.0.6-eric.1';
 let cachedBundleSig = '';
 let cachedInjectScript = '';
 let cachedIframeInjectScript = '';
@@ -173,6 +173,8 @@ const tokenAnalyticsCacheState = {
   persistTimer: null,
   flushInFlight: false,
   flushPending: false,
+  coldDirty: false,
+  hotDirty: false,
   lastJsonDataRef: null,
   lastJsonStr: ''
 };
@@ -211,13 +213,14 @@ let activeConfig = {
   contextLimit: 256000,
   contextLimitOverride: 0,
   modules: {
+    theme: true,
     i18n: true,
     metrics: true,
     quota: true,
     tokenAnalytics: true,
+    contextMenu: true,
     composerWaxSeal: true,
     deadlockHealer: true,
-    coldBootHealer: false,
     zoomShortcuts: true,
     cdpEventDiscovery: true,
     customCss: true,
@@ -719,6 +722,7 @@ function rebuildBundleIfNeeded(opts = {}) {
   }
   const modules = Object.assign(
     {
+      theme: true,
       i18n: true,
       metrics: true,
       quota: true,
@@ -726,7 +730,6 @@ function rebuildBundleIfNeeded(opts = {}) {
       contextMenu: true,
       composerWaxSeal: true,
       deadlockHealer: true,
-      coldBootHealer: false,
       zoomShortcuts: true,
       cdpEventDiscovery: true,
       customCss: true,
@@ -842,8 +845,16 @@ function rebuildBundleIfNeeded(opts = {}) {
   const RE_STRIP_TA_JS = /\/\* __AG_TOKEN_ANALYTICS_JS_START__ \*\/[\s\S]*?\/\* __AG_TOKEN_ANALYTICS_JS_END__ \*\//g;
   const RE_STRIP_CM_CSS = /\/\* __AG_CONTEXT_MENU_CSS_START__ \*\/[\s\S]*?\/\* __AG_CONTEXT_MENU_CSS_END__ \*\//g;
   const RE_STRIP_CM_JS = /\/\* __AG_CONTEXT_MENU_JS_START__ \*\/[\s\S]*?\/\* __AG_CONTEXT_MENU_JS_END__ \*\//g;
+  const WIDGETS_CSS_MARKER = '/* __AG_WIDGETS_CSS_START__ */';
 
-  let pageCss = modules.tokenAnalytics ? baseCss : baseCss.replace(RE_STRIP_TA_CSS, '');
+  const stripThemeCssIfDisabled = (rawCss) => {
+    if (modules.theme !== false) return rawCss;
+    const wIdx = rawCss.indexOf(WIDGETS_CSS_MARKER);
+    return wIdx >= 0 ? rawCss.slice(wIdx) : '';
+  };
+
+  let pageCss = stripThemeCssIfDisabled(baseCss);
+  if (!modules.tokenAnalytics) pageCss = pageCss.replace(RE_STRIP_TA_CSS, '');
   let pageRuntime = modules.tokenAnalytics
     ? runtimeTemplate
     : runtimeTemplate.replace(RE_STRIP_TA_JS, '  cleanupTokenAnalyticsDom();');
@@ -886,7 +897,7 @@ function rebuildBundleIfNeeded(opts = {}) {
   // Swarm 子 iframe 不承载设置弹窗与自定义右键浮窗，固定裁剪对应 CSS+JS 且保持同一 version 哈希
   const iframeModules = Object.assign({}, modules, { tokenAnalytics: false, quota: false, contextMenu: false });
   const iframePayload = Object.assign({}, bootPayload, {
-    cssText: baseCss.replace(RE_STRIP_TA_CSS, '').replace(RE_STRIP_CM_CSS, ''),
+    cssText: stripThemeCssIfDisabled(baseCss).replace(RE_STRIP_TA_CSS, '').replace(RE_STRIP_CM_CSS, ''),
     modules: iframeModules,
     installedEditors: [],
     config: Object.assign({}, bootPayload.config, { modules: iframeModules })
@@ -1332,9 +1343,12 @@ function refreshLineageIndex(conversationsDir, budget = null) {
     if (dirState.nodes.size > 0 && nowMs - dirState.lastPendingScanAt >= NO_META_RESCAN_LOCAL_MS) {
       dirState.lastPendingScanAt = nowMs;
       const newlyChanged = [];
-      // Rotate over ALL known nodes, not only the bounded pending cache. Metadata
-      // can arrive late or correct an existing relationship without directory mtime changes.
-      const known = Array.from(dirState.nodes.entries());
+      const LINEAGE_COLD_AGE_MS = 7 * 86400 * 1000;
+      // Rotate over active/unconfirmed nodes so unlimited history (>7d confirmed DBs)
+      // does not burn stat() syscalls every scan tick; dirChanged still catches additions/deletions.
+      const known = Array.from(dirState.nodes.entries()).filter(
+        ([, node]) => !node.hasMeta || !node.mtimeMs || nowMs - node.mtimeMs < LINEAGE_COLD_AGE_MS
+      );
       const count = Math.min(MAX_NO_META_PENDING_IDS, known.length);
       for (let scan = 0; scan < count; scan++) {
         const [uuid, node] = known[dirState.recheckCursor++ % known.length];
@@ -1389,14 +1403,16 @@ function refreshLineageIndex(conversationsDir, budget = null) {
           hasMeta: true,
           parentId: res.parentId,
           rootId: res.rootId,
-          statSig: item.statSig
+          statSig: item.statSig,
+          mtimeMs: item.mtimeMs || 0
         });
       } else {
         setNodeLineage(dirState, item.uuid, {
           hasMeta: false,
           parentId: '',
           rootId: '',
-          statSig: item.statSig
+          statSig: item.statSig,
+          mtimeMs: item.mtimeMs || 0
         });
         if (!res.permanentInvalid && Date.now() - item.mtimeMs < 300000) {
           rememberNoMetaPending(dirState, item.uuid, item.statSig);
@@ -1621,7 +1637,9 @@ function parseGenMetadataRow(r) {
   const slugRaw = chat.get(19);
   const slug = slugRaw instanceof Uint8Array ? textDecoder.decode(slugRaw) : '';
   const thinkUnreported =
-    !usage.has(9) && thinkTok === 0 && (apiProvider === 26 || /^claude-/i.test(slug));
+    !usage.has(9) &&
+    thinkTok === 0 &&
+    (apiProvider === 26 || apiProvider === 31 || apiProvider === 32 || /^(?:claude|gpt)-/i.test(slug));
   const ttft = (ttftMap.get(1) || 0) + (ttftMap.get(2) || 0) / 1e9;
   const stream = (streamMap.get(1) || 0) + (streamMap.get(2) || 0) / 1e9;
 
@@ -2213,8 +2231,12 @@ const TA_SLUG_LABELS = {
   'gpt-oss-20b-maas': 'GPT-OSS 20B'
 };
 
-const TA_CACHE_SCHEMA_REV = 5;
-const TA_CACHE_FILE = path.join(CACHE_DIR, 'token-analytics-index.json');
+const TA_CACHE_SCHEMA_REV = 6;
+const TA_HOT_WINDOW_MS = 7 * 86400 * 1000;
+const TA_CACHE_HOT_FILE = path.join(CACHE_DIR, 'token-analytics-hot.json');
+const TA_CACHE_COLD_FILE = path.join(CACHE_DIR, 'token-analytics-cold.json');
+const TA_CACHE_LEGACY_FILE = path.join(CACHE_DIR, 'token-analytics-index.json');
+const TA_CACHE_FILE = TA_CACHE_HOT_FILE;
 const TA_CACHE_SALT = crypto
   .createHash('sha1')
   .update(
@@ -2925,32 +2947,75 @@ function taParseConversationDetailDb(dbPath, statInfo, prevCacheEntry = null) {
 
 const yieldEventLoop = () => new Promise((resolve) => setImmediate(resolve));
 
+async function loadTokenAnalyticsCacheTier(filePath) {
+  try {
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    const obj = JSON.parse(raw);
+    if (!obj || obj.salt !== TA_CACHE_SALT || !obj.entries || typeof obj.entries !== 'object') {
+      await fs.promises.unlink(filePath).catch(() => {});
+      return { loaded: false, invalid: true };
+    }
+    let count = 0;
+    for (const [dbPath, item] of Object.entries(obj.entries)) {
+      if (item && typeof item.sig === 'string' && item.parsed?.ok && Array.isArray(item.parsed.calls)) {
+        tokenAnalyticsDbCache.set(dbPath, {
+          sig: item.sig,
+          mtimeMs: Number(item.mtimeMs) || 0,
+          parsed: item.parsed,
+          _inc: null
+        });
+        count += 1;
+      }
+    }
+    return { loaded: true, count, invalid: false };
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      await fs.promises.unlink(filePath).catch(() => {});
+      return { loaded: false, invalid: true };
+    }
+    return { loaded: false, invalid: false };
+  }
+}
+
 async function loadTokenAnalyticsDiskCacheIfNeeded(force) {
   if (SAFE_MODE) return;
   if (force === 'hard') {
     tokenAnalyticsDbCache.clear();
     tokenAnalyticsSummariesCache.clear();
     tokenAnalyticsCacheState.diskLoaded = true;
+    tokenAnalyticsCacheState.coldDirty = true;
+    tokenAnalyticsCacheState.hotDirty = true;
     return;
   }
   if (tokenAnalyticsCacheState.diskLoaded || tokenAnalyticsDbCache.size > 0) return;
   tokenAnalyticsCacheState.diskLoaded = true;
+  const coldRes = await loadTokenAnalyticsCacheTier(TA_CACHE_COLD_FILE);
+  const hotRes = await loadTokenAnalyticsCacheTier(TA_CACHE_HOT_FILE);
+  if (!coldRes.loaded && !hotRes.loaded && !coldRes.invalid && !hotRes.invalid) {
+    const legacyRes = await loadTokenAnalyticsCacheTier(TA_CACHE_LEGACY_FILE);
+    if (legacyRes.loaded) {
+      tokenAnalyticsCacheState.coldDirty = true;
+      tokenAnalyticsCacheState.hotDirty = true;
+    }
+  }
+  if (coldRes.invalid) tokenAnalyticsCacheState.coldDirty = true;
+  if (hotRes.invalid) tokenAnalyticsCacheState.hotDirty = true;
+}
+
+async function writeTokenAnalyticsTierAtomic(targetFile, entriesObj) {
+  const tmpFile = `${targetFile}.${process.pid}.${Date.now()}.tmp`;
   try {
-    const raw = await fs.promises.readFile(TA_CACHE_FILE, 'utf8');
-    const obj = JSON.parse(raw);
-    if (!obj || obj.salt !== TA_CACHE_SALT || !obj.entries || typeof obj.entries !== 'object') {
-      await fs.promises.unlink(TA_CACHE_FILE).catch(() => {});
-      return;
-    }
-    for (const [dbPath, item] of Object.entries(obj.entries)) {
-      if (item && typeof item.sig === 'string' && item.parsed?.ok && Array.isArray(item.parsed.calls)) {
-        tokenAnalyticsDbCache.set(dbPath, { sig: item.sig, parsed: item.parsed, _inc: null });
-      }
-    }
-  } catch (err) {
-    if (err && err.code !== 'ENOENT') {
-      await fs.promises.unlink(TA_CACHE_FILE).catch(() => {});
-    }
+    await fs.promises.mkdir(CACHE_DIR, { recursive: true });
+    await fs.promises.writeFile(
+      tmpFile,
+      JSON.stringify({ salt: TA_CACHE_SALT, updatedAt: Date.now(), entries: entriesObj }),
+      'utf8'
+    );
+    await fs.promises.rename(tmpFile, targetFile);
+    return true;
+  } catch {
+    await fs.promises.unlink(tmpFile).catch(() => {});
+    return false;
   }
 }
 
@@ -2965,23 +3030,47 @@ async function flushTokenAnalyticsDiskCacheAsync() {
     do {
       tokenAnalyticsCacheState.flushPending = false;
       if (SAFE_MODE || RUN_ONCE || daemonExiting || tokenAnalyticsDbCache.size === 0) break;
-      const entries = Object.create(null);
+      const hotCutoffMs = Date.now() - TA_HOT_WINDOW_MS;
+      const hotEntries = Object.create(null);
+      const coldEntries = Object.create(null);
+      let coldCount = 0;
       for (const [dbPath, item] of tokenAnalyticsDbCache.entries()) {
         if (item && item.sig && item.parsed?.ok) {
-          entries[dbPath] = { sig: item.sig, parsed: item.parsed };
+          const mtimeMs = Number(item.mtimeMs) || 0;
+          const record = { sig: item.sig, mtimeMs, parsed: item.parsed };
+          if (mtimeMs > 0 && mtimeMs < hotCutoffMs) {
+            coldEntries[dbPath] = record;
+            coldCount += 1;
+          } else {
+            hotEntries[dbPath] = record;
+          }
         }
       }
-      const tmpFile = `${TA_CACHE_FILE}.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await fs.promises.mkdir(CACHE_DIR, { recursive: true });
-        await fs.promises.writeFile(
-          tmpFile,
-          JSON.stringify({ salt: TA_CACHE_SALT, updatedAt: Date.now(), entries }),
-          'utf8'
-        );
-        await fs.promises.rename(tmpFile, TA_CACHE_FILE);
-      } catch {
-        await fs.promises.unlink(tmpFile).catch(() => {});
+      const needColdWrite =
+        Boolean(tokenAnalyticsCacheState.coldDirty) ||
+        (coldCount > 0 && !fs.existsSync(TA_CACHE_COLD_FILE));
+      const needHotWrite =
+        Boolean(tokenAnalyticsCacheState.hotDirty) ||
+        needColdWrite ||
+        !fs.existsSync(TA_CACHE_HOT_FILE);
+
+      let hotOk = true;
+      let coldOk = true;
+      if (needHotWrite) {
+        hotOk = await writeTokenAnalyticsTierAtomic(TA_CACHE_HOT_FILE, hotEntries);
+        if (hotOk) tokenAnalyticsCacheState.hotDirty = false;
+      }
+      if (needColdWrite) {
+        if (coldCount > 0) {
+          coldOk = await writeTokenAnalyticsTierAtomic(TA_CACHE_COLD_FILE, coldEntries);
+        } else {
+          await fs.promises.unlink(TA_CACHE_COLD_FILE).catch(() => {});
+          coldOk = true;
+        }
+        if (coldOk) tokenAnalyticsCacheState.coldDirty = false;
+      }
+      if (hotOk && coldOk && fs.existsSync(TA_CACHE_LEGACY_FILE)) {
+        await fs.promises.unlink(TA_CACHE_LEGACY_FILE).catch(() => {});
       }
     } while (tokenAnalyticsCacheState.flushPending);
   } finally {
@@ -3020,7 +3109,12 @@ async function queryTokenAnalytics(
   if (fs.existsSync(convDir)) {
     let entries = [];
     try {
-      entries = fs.readdirSync(convDir).filter((name) => name.endsWith('.db')).sort();
+      entries = fs.readdirSync(convDir).filter((name) => name.endsWith('.db'));
+      entries.sort((a, b) => {
+        const sa = summaries.get(a.slice(0, -3))?.lastModifiedSec || 0;
+        const sb = summaries.get(b.slice(0, -3))?.lastModifiedSec || 0;
+        return sb - sa || a.localeCompare(b);
+      });
     } catch {}
 
     let statIter = 0;
@@ -3044,6 +3138,7 @@ async function queryTokenAnalytics(
   let cacheHits = 0;
   let cacheMisses = 0;
   let missesSinceYield = 0;
+  const hotCutoffMs = Date.now() - TA_HOT_WINDOW_MS;
 
   const dbEntries = [...dbCandidateById.values()].sort(
     (a, b) => (b.sigInfo.mtimeMs || 0) - (a.sigInfo.mtimeMs || 0) || a.dbPath.localeCompare(b.dbPath)
@@ -3052,6 +3147,9 @@ async function queryTokenAnalytics(
     activePaths.add(dbPath);
     const cached = force !== 'hard' ? tokenAnalyticsDbCache.get(dbPath) : null;
     if (cached && cached.sig === sigInfo.sig) {
+      if (!cached.mtimeMs && sigInfo.mtimeMs) {
+        cached.mtimeMs = sigInfo.mtimeMs;
+      }
       cacheHits += 1;
       parsedDbs.push(cached.parsed);
       continue;
@@ -3062,8 +3160,16 @@ async function queryTokenAnalytics(
     const rawResult = taParseConversationDetailDb(dbPath, sigInfo, force !== 'hard' ? cached : null);
     if (rawResult.ok) {
       const { _inc, ...compactParsed } = rawResult;
-      const keepInc = _inc && Date.now() - (sigInfo.mtimeMs || 0) < 86400000 ? _inc : null;
-      tokenAnalyticsDbCache.set(dbPath, { sig: sigInfo.sig, parsed: compactParsed, _inc: keepInc });
+      const mtimeMs = sigInfo.mtimeMs || 0;
+      const keepInc = _inc && Date.now() - mtimeMs < 86400000 ? _inc : null;
+      const wasCold = Boolean(cached && cached.mtimeMs > 0 && cached.mtimeMs < hotCutoffMs);
+      tokenAnalyticsDbCache.set(dbPath, { sig: sigInfo.sig, mtimeMs, parsed: compactParsed, _inc: keepInc });
+      if (mtimeMs > 0 && mtimeMs < hotCutoffMs) {
+        tokenAnalyticsCacheState.coldDirty = true;
+      } else {
+        tokenAnalyticsCacheState.hotDirty = true;
+        if (wasCold) tokenAnalyticsCacheState.coldDirty = true;
+      }
       parsedDbs.push(compactParsed);
     } else if (cached?.parsed) {
       parsedDbs.push(cached.parsed);
@@ -3079,13 +3185,18 @@ async function queryTokenAnalytics(
   }
 
   let prunedCount = 0;
-  for (const oldPath of tokenAnalyticsDbCache.keys()) {
+  for (const [oldPath, oldItem] of Array.from(tokenAnalyticsDbCache.entries())) {
     if (!activePaths.has(oldPath)) {
+      if (oldItem && oldItem.mtimeMs > 0 && oldItem.mtimeMs < hotCutoffMs) {
+        tokenAnalyticsCacheState.coldDirty = true;
+      } else {
+        tokenAnalyticsCacheState.hotDirty = true;
+      }
       tokenAnalyticsDbCache.delete(oldPath);
       prunedCount += 1;
     }
   }
-  if (cacheMisses > 0 || prunedCount > 0 || force === 'hard') {
+  if (cacheMisses > 0 || prunedCount > 0 || force === 'hard' || tokenAnalyticsCacheState.coldDirty || tokenAnalyticsCacheState.hotDirty) {
     scheduleTokenAnalyticsDiskPersist();
   }
 
@@ -3999,10 +4110,19 @@ function launchSafeFileInDetectedEditor(rawPayload) {
   return { ok: true, editorId, realPath, line };
 }
 
-const PRELOAD_CM_HOOK_REV = 2;
-const cmHookUnsupportedEndpoints = new Set(); // key: `${channel}:${port}`
+const PRELOAD_CM_HOOK_REV = 3;
+const CM_HOOK_CIRCUIT_BREAKER_TTL_MS = 10 * 60 * 1000;
+const cmHookUnsupportedEndpoints = new Map(); // key: `${channel}:${port}` -> { zeroHits, blockedUntil }
 
-// Runs inside Electron Isolated Context: unwraps ipcRenderer or owner along prototype chain, installs REV=2 CustomEvent wrapper + mergeLabelsOnly + clean unhook
+function isCmEndpointCircuitOpen(endpointKey) {
+  const rec = cmHookUnsupportedEndpoints.get(endpointKey);
+  if (!rec) return false;
+  if (rec.blockedUntil > 0 && Date.now() < rec.blockedUntil) return true;
+  if (rec.blockedUntil > 0) cmHookUnsupportedEndpoints.delete(endpointKey);
+  return false;
+}
+
+// Runs inside Electron Isolated Context: unwraps ipcRenderer or owner along prototype chain, installs REV=3 CustomEvent wrapper (with reqId nonce) + mergeLabelsOnly + clean unhook
 const PRELOAD_CM_INSTALLER_EXPR = `(function(cand) {
   const ipc = cand && typeof cand === 'object'
     ? (typeof cand.invoke === 'function' && typeof cand.send === 'function' && typeof cand.on === 'function'
@@ -4058,6 +4178,7 @@ const PRELOAD_CM_INSTALLER_EXPR = `(function(cand) {
     }
     return changed ? out : origArr;
   }
+  let cmReqSeq = 0;
   const wrapper = function(channel, ...args) {
     if (
       channel === 'window:show-context-menu' &&
@@ -4068,20 +4189,22 @@ const PRELOAD_CM_INSTALLER_EXPR = `(function(cand) {
     ) {
       const uiLang = document.documentElement.getAttribute('data-ag-lang');
       if (uiLang && uiLang !== 'en') {
-        let resStr = null;
+        const reqId = 'cm-' + Date.now() + '-' + (++cmReqSeq) + '-' + Math.random().toString(36).slice(2, 8);
+        let resItems = null;
         const onRes = (ev) => {
-          if (resStr === null && ev && typeof ev.detail === 'string') {
-            resStr = ev.detail;
-          }
+          if (resItems !== null || !ev || typeof ev.detail !== 'string') return;
+          try {
+            const parsedRes = JSON.parse(ev.detail);
+            if (parsedRes && parsedRes.reqId === reqId && Array.isArray(parsedRes.items)) {
+              resItems = parsedRes.items;
+            }
+          } catch (e0) {}
         };
         document.addEventListener('__ag_cm_res', onRes);
         try {
-          document.dispatchEvent(new CustomEvent('__ag_cm_req', { detail: JSON.stringify(args[0]) }));
-          if (resStr) {
-            const parsed = JSON.parse(resStr);
-            if (Array.isArray(parsed)) {
-              args[0] = mergeLabelsOnly(args[0], parsed);
-            }
+          document.dispatchEvent(new CustomEvent('__ag_cm_req', { detail: JSON.stringify({ reqId, items: args[0] }) }));
+          if (resItems) {
+            args[0] = mergeLabelsOnly(args[0], resItems);
           }
         } catch (e) {
         } finally {
@@ -4209,7 +4332,6 @@ function attachTarget(target, endpoint) {
       let bindingsAdded = false;
       let initialAttachDone = false;
       let navDebounceTimer = null;
-      let lastHardReloadAt = 0;
       let preloadIsolatedContextId = null;
       let preloadCmHookedContextId = null;
       let preloadCmHookInFlight = null;
@@ -4259,7 +4381,7 @@ function attachTarget(target, endpoint) {
           activeConfig.installedLocale === 'none' ||
           preloadIsolatedContextId === null ||
           ws.readyState !== WebSocket.OPEN ||
-          cmHookUnsupportedEndpoints.has(endpointKey)
+          isCmEndpointCircuitOpen(endpointKey)
         ) {
           return Promise.resolve(false);
         }
@@ -4271,7 +4393,7 @@ function attachTarget(target, endpoint) {
         }
         const ctxId = preloadIsolatedContextId;
         const attemptRec = cmHookAttemptsByCtx.get(ctxId) || { count: 0, nextAllowedAt: 0 };
-        if (attemptRec.count >= 3 || Date.now() < attemptRec.nextAllowedAt) {
+        if (Date.now() < attemptRec.nextAllowedAt) {
           return Promise.resolve(false);
         }
 
@@ -4292,6 +4414,7 @@ function attachTarget(target, endpoint) {
             if (fastVal > 0) {
               preloadCmHookedContextId = ctxId;
               cmHookAttemptsByCtx.delete(ctxId);
+              cmHookUnsupportedEndpoints.delete(endpointKey);
               return true;
             }
             if (ws.readyState !== WebSocket.OPEN || preloadIsolatedContextId !== ctxId) {
@@ -4335,6 +4458,7 @@ function attachTarget(target, endpoint) {
                     if (Number(installRes?.result?.result?.value) > 0) {
                       preloadCmHookedContextId = ctxId;
                       cmHookAttemptsByCtx.delete(ctxId);
+                      cmHookUnsupportedEndpoints.delete(endpointKey);
                       return true;
                     }
                   }
@@ -4390,10 +4514,20 @@ function attachTarget(target, endpoint) {
             if ((Number(hookRes?.result?.result?.value) || 0) > 0) {
               preloadCmHookedContextId = ctxId;
               cmHookAttemptsByCtx.delete(ctxId);
+              cmHookUnsupportedEndpoints.delete(endpointKey);
               return true;
             }
-            cmHookUnsupportedEndpoints.add(endpointKey);
-            console.warn(`[Daemon] Preload IpcRenderer not found on ${endpointKey}; native context menu i18n circuit-breaker tripped for this session.`);
+            const idx = Math.min(attemptRec.count, 2);
+            attemptRec.count += 1;
+            attemptRec.nextAllowedAt = Date.now() + [5000, 30000, 300000][idx];
+            cmHookAttemptsByCtx.set(ctxId, attemptRec);
+            const epRec = cmHookUnsupportedEndpoints.get(endpointKey) || { zeroHits: 0, blockedUntil: 0 };
+            epRec.zeroHits += 1;
+            if (epRec.zeroHits >= 2) {
+              epRec.blockedUntil = Date.now() + CM_HOOK_CIRCUIT_BREAKER_TTL_MS;
+              console.warn(`[Daemon] Preload IpcRenderer not found on ${endpointKey} (${epRec.zeroHits}x); native context menu i18n paused for 10m.`);
+            }
+            cmHookUnsupportedEndpoints.set(endpointKey, epRec);
             return false;
           } catch {
             const idx = Math.min(attemptRec.count, 2);
@@ -4892,7 +5026,6 @@ function attachTarget(target, endpoint) {
           bindingsAdded = true;
           if (target.type === 'page') {
             await send('Runtime.addBinding', { name: '__agRequestMetrics' });
-            await send('Runtime.addBinding', { name: '__agRequestHardReload' });
             await send('Runtime.addBinding', { name: '__agSetUiLang' });
             await send('Runtime.addBinding', { name: '__agSyncHostThemeMode' });
             await send('Runtime.addBinding', { name: '__agRequestTokenAnalytics' });
@@ -5180,34 +5313,6 @@ function attachTarget(target, endpoint) {
                 syncThemeToChildIframes();
               }).catch(() => {});
             }
-            return;
-          }
-          if (msg.method === 'Runtime.bindingCalled' && msg.params?.name === '__agRequestHardReload') {
-            if (
-              !hostConfirmed ||
-              target.type !== 'page' ||
-              !activeConfig.enabled ||
-              activeConfig.modules.deadlockHealer === false ||
-              activeConfig.modules.coldBootHealer !== true
-            ) {
-              return;
-            }
-            const now = Date.now();
-            if (now - lastHardReloadAt < 60000) return;
-            lastHardReloadAt = now;
-            // Never reload a target just because a child execution context called a binding.
-            // The page-owned callback checks generation, token, focus, drafts and activity
-            // synchronously with location.reload; no unchecked Page.reload fallback exists.
-            let request;
-            try { request = JSON.parse(msg.params.payload || '{}'); } catch { return; }
-            const contextId = msg.params.executionContextId;
-            if (!Number.isInteger(contextId) || contextId <= 0 ||
-                typeof request.token !== 'string' || !/^[0-9a-f-]{36}$/i.test(request.token)) return;
-            send('Runtime.evaluate', {
-              contextId,
-              expression: `window.top === window && /^https?:\\/\\/(?:127\\.0\\.0\\.1|localhost)(?::\\d+)?$/i.test(window.location.origin) && typeof window.__ag_commit_coldboot_reload === 'function' && window.__ag_commit_coldboot_reload(${JSON.stringify(request.token)})`,
-              returnByValue: true
-            });
             return;
           }
           if (

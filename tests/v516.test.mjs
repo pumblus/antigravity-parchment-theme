@@ -43,26 +43,60 @@ test('curtain serializes disable restoration across reinjection and keeps latest
 test('curtain never calls native writer in Swarm', async () => {
   const c=curtain(true); c.ctx.sync(true); await tick(); assert.equal(c.calls.length,0);
 });
-function zoom() {
-  let factor=1, count=0, now=1000, id=0; const timers=new Map();
-  const window={electronNative:{getZoomLevel:()=>factor, zoomIn:()=>{count++;factor+=0.2;},zoomOut:()=>{count++;factor-=0.2;}, resetZoom:()=>{count++;factor=1;}}, addEventListener(){}};
-  const ctx=vm.createContext({window,IS_SWARM_PLUGIN_FRAME:false,MODULES:{},detectedOs:'darwin',performance:{now:()=>now},setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:key=>timers.delete(key)});
-  const init=section(runtime,'  // Cancel callbacks captured','  // 执行上一轮');
-  const code=section(runtime,'  try {\n    const initZoom','  if (!window.__ag_zoom_guard_installed)');
-  const inject=()=>vm.runInContext('(() => {'+init+code+'})()',ctx); inject();
-  return {window,ctx,inject,timers,count:()=>count,setFactor:x=>{factor=x;},press:key=>window.__ag_zoom_keydown_fn({key,code:key==='0'?'Digit0':'Equal',metaKey:true,preventDefault(){},stopPropagation(){}}), flush:()=>{now+=100;for(const fn of [...timers.values()])fn();timers.clear();}};
+function zoom(swarm = false) {
+  let factor = 1.2, count = 0;
+  const posted = [];
+  const window = {
+    electronNative: {
+      getZoomLevel: () => factor,
+      zoomIn: () => { count++; factor += 0.2; },
+      zoomOut: () => { count++; factor -= 0.2; },
+      resetZoom: () => { count++; factor = 1; }
+    },
+    parent: swarm ? { postMessage: (msg) => posted.push(msg) } : null,
+    addEventListener() {}
+  };
+  if (!swarm) window.parent = window;
+  const ctx = vm.createContext({ window, IS_SWARM_PLUGIN_FRAME: swarm, MODULES: {} });
+  const code = section(runtime, '  window.__ag_zoom_keydown_fn = (e) => {', '  if (!window.__ag_zoom_guard_installed)');
+  vm.runInContext('(() => {' + code + '})()', ctx);
+  const press = (key, codeStr = 'Equal', extra = {}) =>
+    window.__ag_zoom_keydown_fn({ key, code: codeStr, metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...extra });
+  return { window, ctx, posted, count: () => count, setFactor: (x) => { factor = x; }, press };
 }
-test('zoom reset at factor one cancels pending zoom', () => {
-  const z=zoom(); z.press('+'); assert.equal(z.timers.size,1); z.press('0'); z.flush(); assert.equal(z.count(),0);
+test('zoom delegates ASCII/Numpad to 2.36+ native macOS menu and handles CJK IME fallback immediately', () => {
+  const z = zoom();
+  // Standard ASCII & Numpad are handled natively by 2.36+ menu.js / hubZoom.js — no double zoom
+  z.press('+', 'Equal');
+  z.press('-', 'Minus');
+  z.press('0', 'Digit0');
+  z.press('+', 'NumpadAdd');
+  assert.equal(z.count(), 0);
+  // CJK IME Process/fullwidth triggers native zoom immediately
+  z.press('Process', 'Equal');
+  assert.equal(z.count(), 1);
+  z.press('－', 'Minus');
+  assert.equal(z.count(), 2);
+  z.press('Process', 'Digit0');
+  assert.equal(z.count(), 3);
+  // Reset at factor 1.0 is a no-op
+  z.setFactor(1);
+  z.press('Process', 'Digit0');
+  assert.equal(z.count(), 3);
 });
-test('zoom native short circuit cancels pending callback even if factor later returns', () => {
-  const z=zoom(); z.press('+'); z.setFactor(1.2); z.press('+'); z.setFactor(1); z.flush(); assert.equal(z.count(),0);
-});
-test('zoom reinjection cancels previous callback when module is disabled', () => {
-  const z=zoom(); z.press('+'); z.ctx.MODULES.zoomShortcuts=false; z.inject(); z.flush(); assert.equal(z.count(),0);
-});
-test('zoom ordinary key still applies exactly once', () => {
-  const z=zoom(); z.press('+'); z.flush(); assert.equal(z.count(),1);
+test('zoom module flag disables CJK fallback and Swarm sub-frame forwards non-ASCII zoom keys', () => {
+  const z = zoom();
+  z.ctx.MODULES.zoomShortcuts = false;
+  z.press('Process', 'Equal');
+  assert.equal(z.count(), 0);
+
+  const zs = zoom(true);
+  zs.press('Process', 'Equal');
+  zs.press('Insert', 'Numpad0');
+  assert.equal(zs.posted.length, 2);
+  assert.equal(zs.posted[0].type, 'sidecar-key-event');
+  assert.equal(zs.posted[0].payload.key, '=');
+  assert.equal(zs.posted[1].payload.key, '0');
 });
 test('frame guard admits top and Swarm but excludes preview frames', () => {
   const guard=section(runtime,'  const IS_SWARM_PLUGIN_FRAME','  const PATCH_VERSION');

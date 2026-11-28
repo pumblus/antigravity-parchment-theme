@@ -1,9 +1,9 @@
 # Antigravity 暖纸主题与增强补丁（macOS）
 
-`antigravity-parchment-theme` · `6.0.4-eric.1`
+`antigravity-parchment-theme` · `6.0.6-eric.1`
 
-[![Version](https://img.shields.io/badge/version-6.0.4--eric.1-7A1F1A.svg)](https://github.com/pumblus/antigravity-parchment-theme)
-[![Antigravity](https://img.shields.io/badge/Antigravity-2.35.2%2B-D97757.svg)](https://github.com/pumblus/antigravity-parchment-theme)
+[![Version](https://img.shields.io/badge/version-6.0.6--eric.1-7A1F1A.svg)](https://github.com/pumblus/antigravity-parchment-theme)
+[![Antigravity](https://img.shields.io/badge/Antigravity-2.36.0%2B-D97757.svg)](https://github.com/pumblus/antigravity-parchment-theme)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0%20(22.13%2B%20Full)-339933.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://github.com/pumblus/antigravity-parchment-theme)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -14,7 +14,7 @@
 >
 > **如果你使用 Windows / WSL / Linux、偏爱上游的莫兰迪色与五段式主题切换器，或希望严格停留在「纯表层视觉 + 只读本地 SQLite」边界，请直接使用上游原版仓库：[`Anarcadia/chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)。**
 
-面向 **macOS 版 Google Antigravity（`2.35.2+`）** 的轻量暖纸/暖墨视觉重构、中文汉化、右键浮窗与 IDE 桥接、实时指标与底部模型配额增强补丁。供 AI Agent 读取的完整部署与改装规范见 **[`SKILL.md`](SKILL.md)**，与上游的逐版差异及审计记录见 **[`FORK.md`](FORK.md)**。
+面向 **macOS 版 Google Antigravity（`2.36.0+`）** 的轻量暖纸/暖墨视觉重构、中文汉化、右键浮窗与 IDE 桥接、实时指标与底部模型配额增强补丁。供 AI Agent 读取的完整部署与改装规范见 **[`SKILL.md`](SKILL.md)**，与上游的逐版差异及审计记录见 **[`FORK.md`](FORK.md)**。
 
 ---
 
@@ -45,18 +45,19 @@
 
 ---
 
-## 主要特性（`6.0.4-eric.1`）
+## 主要特性（`6.0.6-eric.1`）
 
-- **昼夜暖调双模式（扁平层叠、零纯白、零投影）**：
-  - **白天模式**：内置三套暖纸预设——默认 `high-contrast`（侧栏 `#F0EEE6` / 阅读区 `#FAF9F5` / 选中 `#E3DACC` / 暖墨字 `#141413` / `1px` 石色细边 `#CCCBC8`）、轻浅象牙纸（`claude-desktop-purewhite`）与深暖燕麦纸（`vintage-deep`）。
+- **昼夜暖调双模式（扁平层叠、零纯白、零投影，支持 `modules.theme: false` 独立关闭）**：
+  - **白天模式**：单一精调 Anthropic 官方标准暖羊皮纸配色（侧栏 `#F0EEE6` / 阅读区 `#FAF9F5` / 选中 `#E3DACC` / 暖墨字 `#141413` / `1px` 石色细边 `#CCCBC8`），并支持通过 `themeVars` 与 `user/custom.css` 微调。
   - **黑夜模式**：随客户端深色模式切换为暖墨黑反色配色（主背景 `#141413` / 侧栏 `#191917` / 卡片 `#1F1E1C` / 细边 `#3D3D3A` / 文字 `#FAF9F5`）。
+  - **原生主题兼容模式**：在 `user/config.json` 将 `"modules": { "theme": false }` 即可彻底关闭视觉与字体覆盖，保留客户端自带的 Everforest / Nord / 默认主题，同时继续享用中文汉化、底部配额、实时指标、Token 统计与右键浮窗（控件自动继承原生主题配色）。
 - **三段式样式隔离与三族字体排版**：拆分 `#ag-font-faces`、`#ag-custom-fonts` 与 `#ag-ui-widgets` 避免切主题或流式输出闪烁；正文采用 `Anthropic Serif`（首页欢迎语 `Anthropic Serif Display`），UI/输入框/指标采用 `Anthropic Sans`（配 `tabular-nums` 等宽数字），代码/路径/终端采用 `Anthropic Mono`；中文优先回退 `PingFang SC`。
-- **2,244 条静态汉化 + 原生菜单汉化 + 外观 `[EN | 中文]` 免刷新切换**：保留上游词库基线与 `WeakMap` 正文/代码隔离保护，覆盖 Antigravity `2.35.2`、Electron 原生右键菜单跨隔离世界汉化、Swarm 协作子帧与子 Agent 面板；可在「系统设置 → 外观」一键中英切换并写回 `user/config.json`。
+- **2,258 条静态汉化 + 原生菜单汉化 + 外观 `[EN | 中文]` 免刷新切换**：保留上游词库基线与 `WeakMap` 正文/代码/Diff 隔离保护，覆盖 Antigravity `2.36.0`（含最大化侧栏浮动输入框状态条、跳过步骤、插件与组织策略提示）、Electron 原生右键菜单 `REV=3` 跨隔离世界汉化、Swarm 协作子帧与子 Agent 面板；可在「系统设置 → 外观」一键中英切换并写回 `user/config.json`。
 - **仿 Claude 扁平右键浮窗卡片与 macOS 外部 IDE 桥接（`modules.contextMenu` 可关）**：接管对话正文、代码块（一键复制代码块）、外链、对话内图片（复制/另存）、文件胶囊与输入框右键菜单（`Shift + 右键` 随时透传原生菜单）；自动探测 `/Applications` 已安装主流 IDE（VS Code / Cursor / Windsurf / Zed / JetBrains / Sublime），支持文件胶囊一键跳行打开与本地 `.html/.pdf/.svg` 浏览器直开。
-- **底部圆环指标胶囊 + 实时模型配额 + Token 统计**：
-  - 输入框底栏常驻紧凑圆环胶囊（支持 `metricsMode: "compact" | "full"`），展示生成速度（`tok/s` / `Hold`）、首字耗时（`TTFT`）、上下文水位与子 Agent 汇总；
+- **底部圆环指标胶囊 + 实时模型配额 + 冷热分层 Token 统计**：
+  - 输入框底栏（含 `2.36.0` 浮动展开输入框）常驻紧凑圆环胶囊（支持 `metricsMode: "compact" | "full"`），展示生成速度（`tok/s` / `Hold`）、首字耗时（`TTFT`）、上下文水位与子 Agent 汇总；
   - 胶囊右侧常驻 **Gemini 剩余额度**（中文 `5h X% / 周 Y%`，英文 `5h X% / 7d Y%`；`≤25%` 琥珀预警、`≤10%` 砖红告警），解决 Agent 运行期间原生模型选择器锁死无法查看用量的问题；悬停展开详情卡可同时查看 **Gemini** 与 **Claude & GPT** 双列 5h/周余量、进度条与重置倒计时；
-  - 「系统设置 → Token 统计」提供本机只读 SQLite 多维消耗归因、热力图与会话明细（带增量磁盘索引缓存）。
+  - 「系统设置 → Token 统计」提供本机只读 SQLite 多维消耗归因、热力图与会话明细（支持 `[EN | 中文]` 双语，并采用冷/热分层磁盘索引缓存适配无限对话历史）。
 - **内核与个人配置物理分离**：`core/` 只读升级，`user/` 永久保留且修改后约 `2.5s` 热重载生效；支持 `--safe-mode` 排查冲突、`rollback` 一键回滚与 `uninstall` 彻底卸载还原。
 
 ---
@@ -106,12 +107,14 @@ node install.mjs uninstall
   "preset": "high-contrast",
   "metricsMode": "compact",
   "modules": {
+    "theme": true,
     "i18n": true,
     "metrics": true,
     "quota": true,
+    "tokenAnalytics": true,
+    "contextMenu": true,
     "composerWaxSeal": true,
     "deadlockHealer": true,
-    "coldBootHealer": false,
     "zoomShortcuts": true,
     "cdpEventDiscovery": true,
     "customCss": true,
@@ -123,6 +126,7 @@ node install.mjs uninstall
 }
 ```
 
+- **只用增强功能、保留官方原生主题**：将 `"modules": { "theme": false }` 写入 `user/config.json`，约 2.5 秒即可热切回原生皮肤（如 Everforest / Nord / 默认主题），同时保留汉化、配额、指标、Token 统计与右键浮窗。
 - **关闭底部模型配额显示**：将 `"modules": { "quota": false }` 写入 `user/config.json` 即可在 2.5 秒内无损移除。
 - **切换旧版长条指标胶囊**：将 `"metricsMode": "full"` 即可从圆环切回完整速率文字。
 - **自定义样式 / 词条 / 脚本**：分别编辑 `user/custom.css`、`user/i18n.override.json`、`user/custom.js`（详见 [`SKILL.md`](SKILL.md)）。

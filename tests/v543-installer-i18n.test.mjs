@@ -8,12 +8,12 @@ const raw = fs.readFileSync(new URL('../core/i18n.json', import.meta.url), 'utf8
 const dict = JSON.parse(raw);
 const addedKeys = ["Your plan", "You are subscribed to the best Google AI plan.", "Authenticated via Enterprise Gateway", "Managed by Enterprise Gateway", "Invite a Friend", "Select your license", "Your quota for this model is running low.", "Validation timed out.", "Pin / Unpin Conversation", "No conversations found", "Toggle Word Wrap", "Enter always submits. This adds a second shortcut.", "Ask a quick question without interrupting the main conversation.", "Install or enable the Google Drive plugin in Customizations to search files with @drive: or paste Drive links", "Enter the configuration values this MCP server needs. Saving restarts the server with them.", "Set up authentication", "Go to Accounts", "View MCP servers", "Search Google Drive", "Upload Files", "Last 7 days", "Show Details", "Remove from Recent", "Open on phone", "Pick up this remote conversation on your phone or in any browser. Scan the QR code or open the link below.", "Runs remotely", "Current workspace", "Run in your current workspace", "Resume it to open a new terminal. Anything that was running in this one has stopped.", "Resume it to load this file.", "See more results", "Loading apps...", "Getting scripts...", "Switch Roles", "Main Agent", "Complete verification", "Log back in", "Why are you opting out of auto-triggered Best-of-N?", "Too many surveys", "The current trigger rate is too high.", "Prompt too simple", "This prompt is straightforward and does not need alternative comparisons.", "In a rush", "I prefer an immediate single response to prioritize productivity right now.", "(Optional) Tell us more or type your reason...", "Don't show this for 2 days", "Please list the steps to reproduce the issue", "Send feedback as", "Type absolute path or navigate folders...", "What should the agent do on each run? For example: summarize new bugs assigned to me and anything that changed overnight."];
 test('v543 dictionary retains all 50 UI labels (migrated to 2.35.1 Sentence case)', () => {
-  assert.equal(Object.keys(dict).length,2244);
+  assert.equal(Object.keys(dict).length,2258);
   for(const key of addedKeys) assert.equal(typeof dict[key],'string',key);
 });
 test('v543 dictionary has no duplicate keys or case/curly-apostrophe aliases', () => {
   const keys = [...raw.matchAll(/^  ("(?:[^"\\]|\\.)*"):/gm)].map(m=>JSON.parse(m[1]));
-  assert.equal(keys.length,2244);
+  assert.equal(keys.length,2258);
   assert.equal(new Set(keys).size,keys.length);
   assert.equal(new Set(keys.map(k=>k.toLowerCase().replace(/[‘’]/g,"'"))).size,keys.length);
 });
@@ -49,6 +49,6 @@ test('v543 diagnostics report absent pills and retain nonhost classification', (
   assert.equal(result.pillCount,0); assert.equal(result.pillMounted,false); assert.equal(result.pillText,null); assert.equal(result.__isHost,false);
 });
 test('v543 installer records fusion version and never restores sync-user', () => {
-  assert.match(source,/version: '6\.0\.4-eric\.1'/);
+  assert.match(source,/version: '6\.0\.6-eric\.1'/);
   assert.doesNotMatch(source,/hasFlag\(['"]--sync-user/);
 });

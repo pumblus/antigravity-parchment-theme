@@ -2242,5 +2242,19 @@
   "Applies to /btw and messages sent after this turn": "对支线提问 (/btw) 及本轮之后发送的消息生效",
   "Customizations views": "自定义视图",
   "Leaving Soon": "即将下线",
-  "Use Hydrogen for better quality with lower quota usage.": "建议改用 Hydrogen，效果更好且配额消耗更低。"
+  "Use Hydrogen for better quality with lower quota usage.": "建议改用 Hydrogen，效果更好且配额消耗更低。",
+  "Subagent needs approval": "子 Agent 需要审批",
+  "Question waiting": "有待回答的问题",
+  "Compacting": "正在压缩上下文",
+  "Unread message": "未读消息",
+  "Conversation input": "对话输入",
+  "Skipped": "已跳过",
+  "See more": "查看更多",
+  "See more in Plugins": "查看更多插件",
+  "See less in Plugins": "收起更多插件",
+  "Plugins are disabled by your organization.": "您的组织已禁用插件。",
+  "The plugin marketplace is disabled by your organization.": "您的组织已禁用插件市场。",
+  "Disabled by your organization": "已被您的组织禁用",
+  "Organization prepaid wallet is empty": "组织预付钱包余额已耗尽",
+  "Your organization has run out of Antigravity funds. Prompt generation is paused until your administrator adds funds.": "您的组织已用尽 Antigravity 资金。在管理员充值前，提示词生成已暂停。"
 }

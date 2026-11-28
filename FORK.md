@@ -3,8 +3,8 @@
 ## 来源与版本
 
 - 项目名：`antigravity-parchment-theme`（Antigravity 暖纸主题与增强补丁，macOS 专用）。
-- 版本：`6.0.4-eric.1`（macOS 专用）。
-- 上游基线：基于 [忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)（MIT License）；早期基线 `v5.3.0`（`6a263b50cb575b22059f4429a9ba9625c0c540df`），本轮选择性精简移植至 `v6.0.4` / `73dc3e9`，不是完整合并。
+- 版本：`6.0.6-eric.1`（macOS 专用）。
+- 上游基线：基于 [忒修斯的船板（@Anarcadia）的 `chuanban-antigravity-theme-patch`](https://github.com/Anarcadia/chuanban-antigravity-theme-patch)（MIT License）；早期基线 `v5.3.0`（`6a263b50cb575b22059f4429a9ba9625c0c540df`），本轮选择性精简移植至 `v6.0.6` / `b318277`，不是完整合并。
 - 选择性移植：Eric 的 PR #2，提交 `3de258fd58ccb048f9fc804ee17dce5db1348d0a`。
 - 公开规范对齐：仓库与包元数据统一为 `antigravity-parchment-theme`（`install.mjs` 回滚校验同时兼容新名与旧 `chuanban-antigravity-theme-patch` 备份，保留 `~/.gemini/antigravity/theme-patch/` 路径与 `com.antigravity.theme` 服务兼容），[LICENSE](LICENSE) 完整保留上游版权并追加本分支版权声明。
 
@@ -17,6 +17,30 @@
    - **UI 色彩、表面层级与扁平同心几何**：白天模式全面对齐官方暖羊皮纸色阶（`#F0EEE6` Ivory Medium 侧栏与托盘、`#FAF9F5` Ivory Light 主阅读区与卡片、`#E3DACC` Oat Warm 选中态、`#141413` Slate Dark 主文字、`1px solid #CCCBC8` Stone 细线分割，严守零 `#FFFFFF` 纯冷白）；移除输入框 `1.5px` 暗红蜡封外框与全部悬浮 `box-shadow` 投影，改用扁平纸张层叠与 `1px` 石色/暖墨细边三态过渡；收敛 `#D97757`（悬停 `#C6613F`）陶土色仅作用于发送主按钮，移除工具栏悬停与搜索框聚焦的陶土色装饰；Markdown 正文链接补齐常驻 `1px` 细下划线；圆角体系对齐 macOS HIG 同心梯度与超椭圆连续曲率（`corner-shape: superellipse(1.5)`：主画布/弹窗 `12px`、输入框外框 `12px` → 内卡片 `11px`、气泡/代码块/菜单外框 `10px` → 菜单高亮项 `6px`、侧栏行与搜索框 `6px`、行内代码 `4px`，同时保留底栏 `rounded-full` 胶囊与圆形主按钮纯正弧度）；黑夜模式由冷调碳黑+谷歌蓝重构为 Anthropic/Claude 暖墨黑反色体系（`#141413` Slate Dark 背景、`#191917` 侧栏、`#1F1E1C` 卡片、`1px solid #3D3D3A` 暖墨细边、`#FAF9F5` 暖象牙文字与 `#D97757` 陶土主按钮）。
 4. 保留上游全部 1740 个词条，词典扩至 1756 条（忽略大小写及弯直单引号也无重复）。选择性合入 PR 的自然文案与常用操作，保留 `Thinking → 正在思考`、更自然的反馈按钮以及新版本“取消生成”标签。`Turbo` / `Turbo mode` 统一为“完全模式（Turbo）”，避免被理解为单纯加速；工作区外访问警告明确保留凭证、密钥与提示注入风险。 `New` 使用上游新增的上下文规则：操作按钮为“新建”，模型徽标为“新”；不再用静态词条抢先覆盖。
 5. 不移植 `--sync-user`。保留已有 `user/` 文件；没有显式配置变更时，`config.json` 的内容与格式均不重写。不再因默认 `inputBoxId` 而删除整组自定义 selectors；上游运行时兼容处理仍在内存中进行。
+
+## 6.0.6-eric.1 选择性融合上游 `v6.0.5` + `v6.0.6`（2026-11-28）
+
+- 选择性移植上游 `v6.0.5`（`e52ca77`）与 `v6.0.6`（`b318277`）中适用于 macOS 专版的核心修复与双语增强（PR #47 `Leaving Soon` 已于 `6.0.4-eric.1` 合入，本轮零重复）：
+  1. **Review / Diff 虚拟化代码行防误译、祖先去重热恢复与全局观察器提速（Issue #50 / PR #51，`core/runtime.js`）**：
+     - 将 `.view-lines, .code-line .line-content, .code-line .token` 纳入 `DEFAULT_EXCLUDE_I18N`、`CONTAINER_IMMUTABLE_EXCLUDE_SELECTOR` 与 Markdown 内嵌属性守卫（利用本分支 `runtime.js` 自动合并机制覆盖自定义 `selectors.excludeI18n`，不污染配置来源区分）；
+     - 升级重注入且处于中文态时，对已打开 Diff 视图的 `.code-line .line-content, .code-line .token, .view-lines` 做祖先去重 `restoreAllTranslations` 原位还原英文代码标识符；
+     - 将 `.monaco-diff-editor, .view-lines, .code-line` 同步补入 `APPEARANCE_SKIP_SELECTOR`、`METRICS_DOM_SKIP_SEL` 与 `MODAL_FAST_SKIP_SEL` 三处全局 `MutationObserver` 快速短路列表。
+  2. **Electron 原生右键菜单 IPC 钩子 `REV=3` 与自绘右键用户词典覆盖穿透（`core/daemon.mjs` / `core/runtime.js`）**：
+     - `PRELOAD_CM_HOOK_REV` 升级至 `3`：引入 `reqId` nonce 握手防并发串包（主世界监听兼容旧数组与 `{ reqId, items }` 双协议，并移除冗余 `MODULES.i18n === false` 门禁，修复初始英文切中文后右键未译问题）；`cmHookUnsupportedEndpoints` 由永久 `Set` 升级为「连续 2 次零命中才暂停 10 分钟」的 TTL `Map`；
+     - 暴露 `window.__ag_lookup_user_override` 让自绘右键浮窗 `contextStrings()` 同样遵守 `user/i18n.override.json` 最高优先级；`CM_SCOPED_DICT` 补 `Standalone: '独立对话'`，`FIXED_SUBMENU_ACTION_IDS` 补齐 4 项 `group-outside*` / `project-outside*`。
+  3. **5 项动态用户内容隔离、Swarm `<select>` 防重置与动态正则细节（`core/runtime.js`）**：
+     - `DEFAULT_EXCLUDE_I18N` 补入 `[data-testid="coordinator-card-title"]`、`[data-testid="coordinator-card-latest-line"]`、`[data-testid="context-provider-hover-card-title"]`、`[data-testid="ask-question-header-text"]`、`[data-testid="ask-question-option-text"]`；
+     - `installSwarmDomShields()` 对 `SELECT`（`#f-channel`）在重写/刷新/清理 `innerHTML` 前后保存并恢复 `.value`；
+     - `RE_PCT_LEFT` 兼容 `<1% left`（`c0 === 60` 分流），`RE_USED_LIMIT` 兼容 `less than a minute` 与 `d/h/m/s` 简写，`SKIP_ARIA_LABEL_VALUES` 支持通过 `selectors.skipAriaLabels` 扩展。
+  4. **Token 统计面板全界面 `[EN | 中文]` 双语化、`Claude & GPT` 标注与 `gpt-` 思考 Token 识别（`core/runtime.js` / `core/daemon.mjs`）**：
+     - 补齐 Token 消耗分析面板全部骨架、指标卡、热力图浮层、模型/场景行、会话表与项目卡的中英双语渲染与切换即重绘（面板级事件监听加 `dataset.agPanelBound` 一次性防重绑保护），配额池统一标注 `Claude & GPT`；
+     - `core/daemon.mjs` `parseGenMetadataRow()` 补入 `apiProvider === 31 || apiProvider === 32 || /^(?:claude|gpt)-/i.test(slug)`。
+  5. **Antigravity `2.36.0` 实机适配、历史代码瘦身与冷热分层优化（融合版专属）**：
+     - **浮动输入框圆角与指标绑定修复（`core/theme.css` / `core/runtime.js`）**：定位并修复 `2.36.0` 最大化侧栏展开态浮动输入框（`.agy-floating-composer-expanded`）因闭合态状态抽屉外层占位 `<div>` 误触发托盘规则而导致 `.surface-composer-card` 顶部圆角被削为 `0px` 与画出多余底线的问题；为 `[data-open="true"]` 抽屉提供独立暖纸托盘样式；在 `resolveBoxCascadeId()` 中显式识别 `[data-testid="aux-pane-floating-composer"]`，使浮动展开框同步显示 `tok/s · TTFT` 与配额；
+     - **`2.36.0` 词典扩充至 `2,258` 条与 RTL 逻辑边框（`core/i18n.json` / `core/runtime.js` / `core/theme.css`）**：补齐浮动状态条、`Skipped`、插件 `See more`、组织策略禁用与预付钱包耗尽等 14 条静态词条及 4 条动态规则（零重复与大小写碰撞），`blockquote` 改用 `border-inline-start` 适配 `2.35.0` RTL 标签页；
+     - **冗余兼容清理**：移除 `coldBootHealer`（及 `__agRequestHardReload`）、`data-newux-theme` 选择器、`claude-desktop-purewhite` / `vintage-deep` 多余白天预设及 `localStorage` 劫持钩子（仅保留一次性旧值安全清理）；将缩放快捷键兜底精简为中文输入法 + Swarm 子帧转发（移除 60ms 竞态定时器和 `resize` 监听）；精简 `syncCurtainSurfaceColor()` 移除离屏 Canvas 与临时 `<span>` 探针（`runtime.js` 净减 482 行，`theme.css` 净减 72 行）；
+     - **无限对话历史冷热分层缓存与独立主题开关（`core/daemon.mjs` / `core/runtime.js` / `core/theme.css`）**：Token 统计磁盘索引拆分为 `token-analytics-cold.json`（`>7d`，热态更新零重写）与 `token-analytics-hot.json`（近 7 天），自动迁移并清理旧 `token-analytics-index.json`，血缘空闲轮询跳过 `>7d` 已确认冷库；新增 `modules.theme`（默认 `true`），设为 `false` 时守护进程与运行时完整剥离主题/字体样式并停止覆盖幕布底色，同时 `#ag-ui-widgets` 控件自动继承原生主题 CSS 变量，可无痛搭配官方 Everforest / Nord 等原生主题使用。
+- 未带入上游 `v6.0.5` PR #49 的 Windows + WSL2 9P UNC 退避 / `wslSqliteStagingCache` / 后台预热轮询、Issue #48 的 5 槽配色/跟随系统状态机及 `install.mjs` 字体镜像/跨仓迁移逻辑。
 
 ## 6.0.4-eric.1 源码选择性融合与 Anthropic 规范代码轻量化审计（2026-11-26）
 
